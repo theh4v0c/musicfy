@@ -1316,6 +1316,14 @@ async function renderSettings() {
         <label>Timezone<input id="set-tz" value="${esc(s.timezone || '')}" placeholder="America/Sao_Paulo"></label>
       </section>
       <section class="set-card">
+        <h2>Taste</h2>
+        <p class="set-note">Optional. Used to shape recommendations; the app learns from what you play anyway.</p>
+        <label>Genres you love<input id="set-taste-genres" value="${esc(s.taste_genres || '')}" placeholder="techno, dub techno, ambient, jazz"></label>
+        <label>Artists you love<input id="set-taste-artists" value="${esc(s.taste_artists || '')}" placeholder="Burial, Overmono, Floating Points"></label>
+        <label>Usually listening<input id="set-taste-context" value="${esc(s.taste_context || '')}" placeholder="long drives, focus work, evening sets"></label>
+        <label>Keep out of picks<input id="set-taste-avoid" value="${esc(s.taste_avoid || '')}" placeholder="christmas music, metalcore"></label>
+      </section>
+      <section class="set-card">
         <h2>Model endpoint</h2>
         <p class="set-note">Used by the Ask view. ${l.configured ? 'Currently configured.' : 'Not configured.'}</p>
         <label>Base URL<input id="set-llm-url" value="${esc(s.llm_base_url || l.base_url || '')}" placeholder="https://host/v1"></label>
@@ -1377,6 +1385,10 @@ async function renderSettings() {
       normalize_loudness: document.getElementById('set-normalize').checked,
       target_loudness: Number(document.getElementById('set-target').value),
       fade_on_play_ms: Number(document.getElementById('set-fadems').value),
+      taste_genres: document.getElementById('set-taste-genres').value.trim(),
+      taste_artists: document.getElementById('set-taste-artists').value.trim(),
+      taste_context: document.getElementById('set-taste-context').value.trim(),
+      taste_avoid: document.getElementById('set-taste-avoid').value.trim(),
     };
     const key = document.getElementById('set-llm-key').value.trim();
     if (key) body.llm_api_key = key;
