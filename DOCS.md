@@ -383,13 +383,22 @@ Source archive `backups/musicfy-src-<stamp>.tar.gz` on the Mac and in the Pi bac
 
 ## Known issues, next steps
 
-1. Search page does not look like Spotify: no top result, no artist or album sections. This is the biggest open UX gap.
-2. SoundCloud downloads are capped at source quality (96k/160k AAC, occasionally 128k mp3) unless the artist enabled downloads and a free session token is configured.
-3. First play of an uncached SoundCloud track is slow because the whole file is fetched to disk first. Prewarming on selection would hide it.
-5. ISRC coverage is partial: MusicBrainz omits ISRC in search responses and rate limits the per recording lookup.
-6. Lyrics, scrobbling, Essentia BPM/key analysis, queue drag reorder and offline pins are not built.
-7. Listening history stops at 2023-12-07 until a new Spotify export is dropped into `/opt/musicfy/data/history`.
-8. Duplicate merge is conservative: near duplicates with different artist spellings stay separate by design.
+1. Search page still reads poorly: four sections (artists, albums, songs, web sources) with no
+   clear statement of what each does. Ranking is unchanged underneath the new layout.
+2. Two monoliths: `core/core.js` about 2,700 lines and `web/app.js` about 3,000. Duplicate
+   route paths and duplicated markup exist, and have caused real bugs. Module split is the
+   highest value refactor.
+3. Import is Spotify-only and single track. Playlist import with platform auto-detection is
+   not built.
+4. The Ask view understands five intents and cannot chain them. Custom system prompt is not
+   editable in Settings.
+5. Streaming: SoundCloud previews are detected and swapped for the full YouTube track, but a
+   true crossfade and gapless playback are not implemented.
+6. Analysis is automated but basic: no downbeat, no beat grid, no ReplayGain tags written into
+   files, so other players will not match the levels set here.
+7. ISRC coverage is partial; MusicBrainz rate limits the per recording lookup.
+8. Lyrics, scrobbling, queue drag reorder and offline pins are not built.
+9. Library has a small number of tracks without audio; `GET /api/downloads` reports the count.
 
 ## Rules that must not be broken
 
