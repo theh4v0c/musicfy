@@ -2324,7 +2324,9 @@ async function renderArtist(name, push = true) {
         <div class="plhead-kicker">ARTIST</div>
         <h1 class="plhead-name">${esc(name)}</h1>
         <div class="plhead-meta"><b id="g-n">...</b> tracks in your library</div>
-        <div class="plhead-actions"><button class="btn btn-primary" id="g-play">${IC.play}&nbsp; Play</button></div>
+        <div class="plhead-actions">
+          <button class="btn btn-primary" id="g-play">${IC.play}&nbsp; Play</button>
+        </div>
       </div></div>
     <div id="g-list"></div>`;
   let list = [];
@@ -2353,7 +2355,11 @@ async function renderAlbum(name, push = true) {
         <div class="plhead-kicker">ALBUM</div>
         <h1 class="plhead-name">${esc(name)}</h1>
         <div class="plhead-meta"><b id="g-n">...</b> tracks &middot; ${esc(first?.artist || '')}</div>
-        <div class="plhead-actions"><button class="btn btn-primary" id="g-play">${IC.play}&nbsp; Play</button></div>
+        <div class="plhead-actions">
+          <button class="btn btn-primary" id="g-play">${IC.play}&nbsp; Play</button>
+          <button class="btn btn-ghost" id="g-dl">Download album</button>
+          <button class="btn btn-ghost" id="g-pick">Choose tracks</button>
+        </div>
       </div></div>
     <div id="g-list"></div>`;
   let list = [];
@@ -2364,6 +2370,41 @@ async function renderAlbum(name, push = true) {
   if (!list.length) { el.innerHTML = `<div class="empty">No owned tracks for this album.</div>`; return; }
   list.forEach((t, i) => { registerRow(t); el.appendChild(trow(t, i, list)); });
   $('g-play').onclick = () => playList(list, 0, false, name);
+  $('g-dl').onclick = async () => {
+    const btn = $('g-dl');
+    btn.disabled = true;
+    try {
+      const r = await api('/api/albums/download', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
+      toast(r.queued ? `Downloading ${r.queued} of ${r.total} tracks` : 'Everything on this album is already here', 6000);
+      if (r.queued) openDownloads();
+    } catch { toast('Could not queue the album', 4000); }
+    btn.disabled = false;
+  };
+  $('g-pick').onclick = async () => {
+    state.albumPick = !state.albumPick;
+    document.querySelectorAll('.trow').forEach((row) => {
+      const on = state.albumPick;
+      row.classList.toggle('picking', on);
+      let box = row.querySelector('.pick-box');
+      if (on && !box) {
+        box = document.createElement('input');
+        box.type = 'checkbox';
+        box.className = 'pick-box';
+        box.onclick = (e) => e.stopPropagation();
+        row.insertBefore(box, row.firstChild);
+      } else if (!on && box) { box.remove(); }
+    });
+    $('g-pick').textContent = state.albumPick ? 'Download chosen' : 'Choose tracks';
+    if (!state.albumPick) {
+      const ids = [...document.querySelectorAll('.pick-box')].filter((b) => b.checked).map((b) => Number(b.closest('.trow').dataset.tid));
+      const chosen = list.filter((t) => ids.includes(t.id));
+      if (!chosen.length) { toast('Nothing selected', 3000); return; }
+      let n = 0;
+      for (const t of chosen) { try { await api(`/api/tracks/${t.id}/download`, { method: 'POST' }); n += 1; } catch {} }
+      toast(`Downloading ${n} tracks`, 5000);
+      if (n) openDownloads();
+    }
+  };
 }
 
 /* re-render whatever view is active, after data changes */

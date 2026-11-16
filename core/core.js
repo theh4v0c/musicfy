@@ -2167,6 +2167,24 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    // queue a whole album, or only the tracks that are missing audio
+    if (u.pathname === '/api/albums/download' && req.method === 'POST') {
+      let body = ''; req.on('data', c => body += c);
+      req.on('end', () => {
+        let b = {};
+        try { b = JSON.parse(body || '{}'); } catch {}
+        const name = String(b.name || '').trim();
+        if (!name) return json(res, 400, { error: 'album name required' });
+        const tracks = db.prepare(`SELECT t.id, t.title, t.artist, t.duration FROM tracks t
+          WHERE lower(COALESCE(t.album,''))=lower(?)
+          AND NOT EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')`).all(name);
+        let queued = 0;
+        for (const t of tracks) if (enqueueTrackDownload(t)) queued += 1;
+        return json(res, 200, { queued, total: tracks.length });
+      });
+      return;
+    }
+
     // queue a whole playlist
     const mBulk = u.pathname.match(/^\/api\/playlists\/([^/]+)\/download$/);
     if (mBulk && req.method === 'POST') {
