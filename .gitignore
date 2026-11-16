@@ -1,0 +1,20 @@
+# backups and editor leftovers
+backups/
+*.bak-*
+*.tar.gz
+*.sha256
+.DS_Store
+
+# runtime data never belongs in git
+data/
+*.db
+*.db-wal
+*.db-shm
+*.log
+node_modules/
+
+# secrets
+llm.json
+soundcloud.json
+settings.json
+tokens.json
