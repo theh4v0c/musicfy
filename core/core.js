@@ -1750,7 +1750,7 @@ const server = http.createServer(async (req, res) => {
         const cur = db.prepare('SELECT title, artist FROM tracks WHERE id=?').get(id);
         if (!cur) return json(res, 404, { error: 'no such track' });
         const fields = {};
-        for (const k of ['title', 'artist', 'album', 'year', 'genre', 'genre_family']) {
+        for (const k of ['title', 'artist', 'album', 'year', 'genre', 'genre_family', 'taste_genres', 'taste_artists', 'taste_context', 'taste_avoid']) {
           if (b[k] !== undefined) fields[k] = String(b[k] || '').trim() || null;
         }
         if (!Object.keys(fields).length) return json(res, 400, { error: 'nothing to change' });
