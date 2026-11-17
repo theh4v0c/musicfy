@@ -1084,7 +1084,7 @@ async function renderSongs(push = true) {
       <button class="chip-card sm" data-browse="fillgenres"><b>Fill genres</b><span>FROM MUSICBRAINZ</span></button>
       <button class="chip-card sm" data-browse="covers"><b>Find missing covers</b><span>LOOKS UP ARTWORK</span></button>
       <button class="chip-card sm" data-browse="bpm"><b>Sort by BPM</b><span>${all.filter((t) => t.bpm).length} ANALYSED</span></button>
-      <button class="chip-card sm" data-browse="genres"><b>Genres</b><span>${new Set(all.map((t) => t.genre_family).filter(Boolean)).size} FAMILIES</span></button>`;
+      <button class="chip-card sm" data-browse="genres"><b>Genres</b><span id="genre-count">...</span></button>`;
     chips.querySelectorAll('[data-browse]').forEach((b) => b.onclick = async () => {
       if (b.dataset.browse === 'import') { importSpotifyTrack(); return; }
       if (b.dataset.browse === 'picks') {
@@ -1172,9 +1172,17 @@ async function renderSongs(push = true) {
         return;
       }
       if (b.dataset.browse === 'genres') {
-        const fams = {};
-        for (const t of all) { const g = t.genre_family || t.genre; if (!g) continue; fams[g] = (fams[g] || 0) + 1; }
-        const rows = Object.entries(fams).sort((a, b) => b[1] - a[1]);
+        // the server knows every family in the library; the loaded page does not
+        let rows = [];
+        try {
+          const st = await api('/api/genre/status', { nocache: true });
+          rows = (st.families || []).map((f) => [f.g, f.c]);
+        } catch {}
+        if (!rows.length) {
+          const fams = {};
+          for (const t of all) { const g = t.genre_family || t.genre; if (!g) continue; fams[g] = (fams[g] || 0) + 1; }
+          rows = Object.entries(fams).sort((a, b) => b[1] - a[1]);
+        }
         if (!rows.length) {
           toast('No genres tagged yet. Press Fill genres first.', 5000);
           return;
@@ -1331,6 +1339,10 @@ async function renderSongs(push = true) {
     });
   };
 
+  api('/api/genre/status', { nocache: true }).then((st) => {
+    const el = document.getElementById('genre-count');
+    if (el && st && st.families) el.textContent = st.families.length + ' FAMILIES';
+  }).catch(() => {});
   $('songs-q').oninput = (e) => { query = e.target.value.trim(); browse = null; state.genreFilter = null; limit = 60; draw(); };
   document.querySelectorAll('#songs-filter .mode-tab').forEach((b) => b.onclick = () => {
     filter = b.dataset.f;
