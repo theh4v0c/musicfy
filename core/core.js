@@ -57,7 +57,14 @@ function backfillDupKeys() {
   const upd = db.prepare('UPDATE tracks SET dup_key=? WHERE id=?');
   for (const r of rows) {
     const k = dupKeyOf(r.artist, r.title);
-    if (r.dup_key !== k) upd.run(k, r.id);
+    if (r.dup_key === k) continue;
+    try {
+      upd.run(k, r.id);
+    } catch (e) {
+      // another row already owns this identity: keep this one addressable instead of crashing
+      try { upd.run(`${k}#${r.id}`, r.id); } catch {}
+      console.error('[dupkey] collision for', r.id, k.slice(0, 60));
+    }
   }
   // merge rows that now share a key, keeping the one with playlists and files
   const groups = db.prepare(`SELECT dup_key k, COUNT(*) c FROM tracks WHERE dup_key IS NOT NULL GROUP BY dup_key HAVING c > 1`).all();
@@ -384,12 +391,111 @@ function sendStatic(req, res, body, type) {
 }
 
 // ---------- uploads and cover helpers ----------
-function readBody(req) {
-  return new Promise((resolve) => {
+const MAX_BODY_BYTES = Number(process.env.MUSICFY_MAX_BODY || 64 * 1024 * 1024);
+function readBody(req, limit = MAX_BODY_BYTES) {
+  return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on('data', (c) => chunks.push(c));
-    req.on('end', () => resolve(Buffer.concat(chunks)));
+    let size = 0;
+    let done = false;
+    const fail = (msg) => {
+      if (done) return;
+      done = true;
+      req.destroy();
+      reject(new Error(msg));
+    };
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > limit) return fail(`body too large: ${Math.round(size / 1048576)}MB`);
+      chunks.push(c);
+    });
+    req.on('end', () => { if (!done) { done = true; resolve(Buffer.concat(chunks)); } });
+    req.on('error', (e) => fail(e.message));
   });
+}
+
+// 2. cheap token bucket for the expensive routes only
+const RATE = { window: 60000, max: 40 };
+const buckets = new Map();
+function allow(key) {
+  const now = Date.now();
+  const list = (buckets.get(key) || []).filter((t) => now - t < RATE.window);
+  if (list.length >= RATE.max) { buckets.set(key, list); return false; }
+  list.push(now);
+  buckets.set(key, list);
+  return true;
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of buckets) {
+    const kept = v.filter((t) => now - t < RATE.window);
+    if (kept.length) buckets.set(k, kept); else buckets.delete(k);
+  }
+}, 60000);
+
+// 3. ladder results are expensive and rarely change inside a few minutes
+const LADDER_TTL = Number(process.env.MUSICFY_LADDER_TTL || 10 * 60 * 1000);
+const ladderCache = new Map();
+
+// 4. schema version, so column changes stop being invisible
+const SCHEMA_VERSION = 2;
+function currentVersion() {
+  try {
+    const row = db.prepare('SELECT value FROM meta WHERE key=?').get('schema_version');
+    return row ? Number(row.value) : 0;
+  } catch { return 0; }
+}
+function setVersion(v) {
+  db.prepare('INSERT INTO meta (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
+    .run('schema_version', String(v));
+}
+function migrate() {
+  db.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+  const at = currentVersion();
+  if (at >= SCHEMA_VERSION) return at;
+  const steps = [
+    [1, () => {
+      // tracked columns that used to be added with bare try/catch ALTER
+      for (const sql of [
+        'ALTER TABLE tracks ADD COLUMN genre_family TEXT',
+        'ALTER TABLE tracks ADD COLUMN src_kind TEXT',
+        'ALTER TABLE tracks ADD COLUMN src_id TEXT',
+        'ALTER TABLE tracks ADD COLUMN src_url TEXT',
+        'ALTER TABLE tracks ADD COLUMN loudness REAL',
+        'ALTER TABLE tracks ADD COLUMN energy REAL',
+      ]) { try { db.exec(sql); } catch {} }
+    }],
+    [2, () => {
+      // search goes through FTS5: a leading wildcard LIKE cannot use a B-tree
+      db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS tracks_fts USING fts5(title, artist, album, content='tracks', content_rowid='id')");
+      db.exec("INSERT INTO tracks_fts(rowid, title, artist, album) SELECT id, title, COALESCE(artist,''), COALESCE(album,'') FROM tracks WHERE id NOT IN (SELECT rowid FROM tracks_fts)");
+      db.exec(`CREATE TRIGGER IF NOT EXISTS tracks_fts_ai AFTER INSERT ON tracks BEGIN
+        INSERT INTO tracks_fts(rowid, title, artist, album) VALUES (new.id, new.title, COALESCE(new.artist,''), COALESCE(new.album,''));
+      END`);
+      db.exec(`CREATE TRIGGER IF NOT EXISTS tracks_fts_ad AFTER DELETE ON tracks BEGIN
+        INSERT INTO tracks_fts(tracks_fts, rowid, title, artist, album) VALUES ('delete', old.id, old.title, COALESCE(old.artist,''), COALESCE(old.album,''));
+      END`);
+      db.exec(`CREATE TRIGGER IF NOT EXISTS tracks_fts_au AFTER UPDATE ON tracks BEGIN
+        INSERT INTO tracks_fts(tracks_fts, rowid, title, artist, album) VALUES ('delete', old.id, old.title, COALESCE(old.artist,''), COALESCE(old.album,''));
+        INSERT INTO tracks_fts(rowid, title, artist, album) VALUES (new.id, new.title, COALESCE(new.artist,''), COALESCE(new.album,''));
+      END`);
+    }],
+  ];
+  for (const [version, run] of steps) {
+    if (at >= version) continue;
+    try { run(); setVersion(version); console.log('[migrate] applied', version); }
+    catch (e) { console.error('[migrate] failed at', version, e.message); break; }
+  }
+  return currentVersion();
+}
+
+// 5. dependencies must fail loudly at boot, not silently mid download
+function checkDependencies() {
+  const bins = [['/usr/bin/ffprobe', 'ffprobe'], ['/usr/bin/ffmpeg', 'ffmpeg'], ['/opt/musicfy/ytdlp-venv/bin/yt-dlp', 'yt-dlp']];
+  for (const [full, name] of bins) {
+    if (!fs.existsSync(full) && !fs.existsSync(`/usr/bin/${name}`) && !fs.existsSync(`/usr/local/bin/${name}`)) {
+      console.error('[deps] MISSING', name);
+    }
+  }
 }
 
 function plCoverFile(pid) {
@@ -896,9 +1002,17 @@ const server = http.createServer(async (req, res) => {
       return sendStatic(req, res, body, 'text/javascript; charset=utf-8');
     }
 
+    if ((u.pathname === '/api/search/ladder' || u.pathname === '/api/ask' || u.pathname === '/api/agent') && !allow(u.pathname)) {
+      return json(res, 429, { error: 'slow down', retry_after: 60 });
+    }
     if (u.pathname === '/api/search/ladder') {
       const q = (u.searchParams.get('q') || '').trim();
       if (q.length < 2) return json(res, 400, { error: 'query too short' });
+      const cacheKey = `${q}|${u.searchParams.get('limit') || ''}`;
+      const cachedLadder = ladderCache.get(cacheKey);
+      if (cachedLadder && cachedLadder.exp > Date.now()) {
+        return json(res, 200, { ...cachedLadder.payload, cached: true });
+      }
       let artist = '', title = q;
       const m = q.match(/^(.+?)\s+-\s+(.+)$/);
       if (m) { artist = m[1]; title = m[2]; } else { artist = q; }
@@ -1066,7 +1180,7 @@ const server = http.createServer(async (req, res) => {
       let catalogue = { songs: [], albums: [], artists: [] };
       try { catalogue = await identity.catalog(q, { songs: 40, albums: 12, artists: 6 }); } catch {}
 
-      return json(res, 200, {
+      const payload = {
         query: q, normalized: normalize(q), results: deduped.slice(0, 80), artistOnly,
         catalogue,
         canonical: canonical ? { title: canonical.title, artist: canonical.artist, album: canonical.album,
@@ -1076,7 +1190,10 @@ const server = http.createServer(async (req, res) => {
           duration: t.duration, isrc: t.isrc, bpm: t.bpm, key: t.key, has_file: !!t.has_file })),
         albums: [...albums.map((a) => ({ ...a, kind: 'library' })), ...archiveAlbums],
         rungs: ['ytmusic', 'soundcloud', 'bandcamp', 'archive'], connected: true,
-      });
+      };
+      ladderCache.set(cacheKey, { exp: Date.now() + LADDER_TTL, payload });
+      if (ladderCache.size > 200) ladderCache.delete(ladderCache.keys().next().value);
+      return json(res, 200, payload);
     }
 
     // spotify track/playlist id or url -> exact metadata, then ladder with duration-strict seed
@@ -2738,6 +2855,23 @@ process.on('uncaughtException', (e) => {
 process.on('unhandledRejection', (e) => {
   console.error('[unhandledRejection]', e && e.message ? e.message : String(e));
 });
+
+try { migrate(); } catch (e) { console.error('[migrate]', e.message); }
+checkDependencies();
+
+// a download that stops reporting progress is dead weight: kill and retry it
+const STUCK_MS = Number(process.env.MUSICFY_STUCK_MS || 10 * 60 * 1000);
+setInterval(() => {
+  try {
+    const rows = db.prepare("SELECT id, COALESCE(progress,0) p, COALESCE(updated_at, created_at, 0) u FROM jobs WHERE state='running'").all();
+    for (const r of rows) {
+      const seen = Number(r.u) * (Number(r.u) > 1e12 ? 1 : 1000);
+      if (Date.now() - seen < STUCK_MS) continue;
+      db.prepare("UPDATE jobs SET state='queued', progress=0 WHERE id=?").run(r.id);
+      console.error('[jobs] requeued stuck job', r.id);
+    }
+  } catch {}
+}, 60000);
 
 server.listen(PORT, '0.0.0.0', () => log('boot', `core listening on ${PORT}`));
 console.log(`MUSICFY core on :${PORT}`);
