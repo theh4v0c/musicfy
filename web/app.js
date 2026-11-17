@@ -1077,6 +1077,7 @@ async function renderSongs(push = true) {
       <button class="chip-card sm" data-browse="import"><b>Import track</b><span>SPOTIFY LINK</span></button>
       <button class="chip-card sm" data-browse="dedupe"><b>Remove duplicates</b><span>KEEPS BEST QUALITY</span></button>
       <button class="chip-card sm" data-browse="picks"><b>For you</b><span>FROM WHAT YOU PLAY</span></button>
+      <button class="chip-card sm" data-browse="importpl"><b>Import playlist</b><span>PASTE A LIST OR A LINK</span></button>
       <button class="chip-card sm" data-browse="recentdl"><b>Recently downloaded</b><span>NEWEST FIRST</span></button>
       <button class="chip-card sm" data-browse="upload"><b>Upload files</b><span>MP3, FLAC, M4A, WAV</span></button>
       <button class="chip-card sm" data-browse="uploadfolder"><b>Upload a folder</b><span>ADDS EVERY TRACK INSIDE</span></button>
@@ -1092,6 +1093,35 @@ async function renderSongs(push = true) {
           if (r.created) { afterWrite(); await loadPlaylists(); toast(`Created "${r.created.name}" with ${r.created.tracks} tracks`, 6000); openPlaylist(r.created.id, false); }
           else toast(r.reason || 'Not enough listening yet', 6000);
         } catch { toast('Could not build picks', 4000); }
+        return;
+      }
+      if (b.dataset.browse === 'importpl') {
+        const m = $('ctx');
+        m.innerHTML = `<div class="ctx-title">Import playlist</div>
+          <div class="ctx-form">
+            <label>Playlist name<input id="imp-name" placeholder="Driving, Sunday morning..."></label>
+            <label>Tracks<textarea id="imp-text" rows="6" placeholder="One per line:\nBurial - Archangel\nPinkfong - Baby Shark"></textarea></label>
+            <p class="set-note">Paste <b>artist - title</b> per line, from any service. Links open the service; the track list has to be pasted.</p>
+            <div class="ctx-row"><button class="btn btn-primary" id="imp-go">Import</button><button class="btn btn-ghost" id="imp-cancel">Cancel</button></div>
+          </div>`;
+        m.classList.add('open');
+        m.style.left = Math.max(8, innerWidth / 2 - 190) + 'px';
+        m.style.top = '10%';
+        m.onclick = null;
+        m.querySelector('#imp-cancel').onclick = () => m.classList.remove('open');
+        m.querySelector('#imp-go').onclick = async () => {
+          const text = m.querySelector('#imp-text').value.trim();
+          if (!text) return toast('Nothing to import', 3000);
+          try {
+            const r = await api('/api/import/list', { method: 'POST', headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ name: m.querySelector('#imp-name').value.trim() || 'Imported playlist', text }) });
+            if (r.needs_tracks) { toast(`That is a ${r.platform} link. Paste the track list instead.`, 7000); return; }
+            m.classList.remove('open');
+            afterWrite(); await loadPlaylists();
+            toast(`Imported ${r.playlist.tracks} tracks${r.queued ? `, ${r.queued} downloading` : ''}`, 7000);
+            if (r.playlist.id) openPlaylist(r.playlist.id, false);
+          } catch { toast('Import failed', 4000); }
+        };
         return;
       }
       if (b.dataset.browse === 'recentdl') {
@@ -1149,7 +1179,9 @@ async function renderSongs(push = true) {
         api('/api/covers/fill?limit=40', { method: 'POST' }).then((r) => {
           bustCache();
           state.artV = Date.now();
-          toast(r.found ? `${r.found} covers found, ${r.remaining} still missing` : `No artwork found, ${r.remaining} still missing`, 7000);
+          const names = (r.missing_titles || []).slice(0, 4).join(', ');
+          const more = (r.missing_titles || []).length > 4 ? ` and ${r.missing_titles.length - 4} more` : '';
+          toast((r.found ? `${r.found} covers found. ` : '') + `${r.remaining} still missing` + (names ? `: ${names}${more}` : ''), 12000);
           renderSongs(false);
         }).catch(() => toast('cover lookup failed', 5000));
         return;

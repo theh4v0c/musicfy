@@ -2245,6 +2245,45 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    // import a playlist from a pasted list, or a link we can name tracks from
+    if (u.pathname === '/api/import/list' && req.method === 'POST') {
+      let body = ''; req.on('data', c => body += c);
+      req.on('end', async () => {
+        let b = {};
+        try { b = JSON.parse(body || '{}'); } catch {}
+        const name = String(b.name || 'Imported playlist').slice(0, 80);
+        const lines = String(b.text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+        const rows = [];
+        for (const line of lines) {
+          const m = line.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+          if (m) rows.push({ artist: m[1].trim(), title: m[2].trim() });
+          else if (/spotify\.com|apple\.com|deezer\.com|youtube\.com|youtu\.be|bandcamp\.com|soundcloud\.com/.test(line) && !b.text.trim().includes('\n')) {
+            return json(res, 200, { needs_tracks: true, platform: (line.match(/spotify|apple|deezer|youtube|bandcamp|soundcloud/) || ['unknown'])[0], url: line });
+          } else rows.push({ artist: '', title: line });
+        }
+        if (!rows.length) return json(res, 400, { error: 'nothing to import' });
+        const pid = `imp-${Date.now().toString(36)}`;
+        db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)').run(pid, name, 'import', now(), now());
+        let added = 0, queued = 0, pos = 0;
+        for (const r of rows) {
+          const key = `${(r.artist || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${r.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}`;
+          let row = db.prepare('SELECT id FROM tracks WHERE dup_key=?').get(key);
+          if (!row) {
+            const t2 = Date.now();
+            const ins = db.prepare(`INSERT INTO tracks (uid,dup_key,title,artist,album,format,added_at,updated_at)
+              VALUES (?,?,?,?,?,?,?,?)`).run(key, key, r.title, r.artist || '', '', 'import', t2, t2);
+            row = { id: Number(ins.lastInsertRowid) };
+          }
+          db.prepare('INSERT OR IGNORE INTO playlist_tracks (playlist_id,track_id,position,added_at) VALUES (?,?,?,?)').run(pid, row.id, pos++, now());
+          added += 1;
+          const owned = db.prepare("SELECT 1 FROM files WHERE track_id=? AND tier='owned' LIMIT 1").get(row.id);
+          if (!owned && enqueueTrackDownload({ id: row.id, title: r.title, artist: r.artist })) queued += 1;
+        }
+        return json(res, 200, { playlist: { id: pid, name, tracks: added }, queued });
+      });
+      return;
+    }
+
     // queue a whole album, or only the tracks that are missing audio
     if (u.pathname === '/api/albums/download' && req.method === 'POST') {
       let body = ''; req.on('data', c => body += c);
