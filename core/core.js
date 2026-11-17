@@ -2262,9 +2262,13 @@ const server = http.createServer(async (req, res) => {
           } else rows.push({ artist: '', title: line });
         }
         if (!rows.length) return json(res, 400, { error: 'nothing to import' });
-        const pid = `imp-${Date.now().toString(36)}`;
-        db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)').run(pid, name, 'import', now(), now());
-        let added = 0, queued = 0, pos = 0;
+        const existing = b.playlist_id ? db.prepare('SELECT id FROM playlists WHERE id=?').get(String(b.playlist_id)) : null;
+        const pid = existing ? existing.id : `imp-${Date.now().toString(36)}`;
+        if (!existing) {
+          db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)').run(pid, name, 'import', now(), now());
+        }
+        let added = 0, queued = 0;
+        let pos = (db.prepare('SELECT COALESCE(MAX(position),-1) m FROM playlist_tracks WHERE playlist_id=?').get(pid).m || -1) + 1;
         for (const r of rows) {
           const key = `${(r.artist || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${r.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}`;
           let row = db.prepare('SELECT id FROM tracks WHERE dup_key=?').get(key);
@@ -2279,7 +2283,7 @@ const server = http.createServer(async (req, res) => {
           const owned = db.prepare("SELECT 1 FROM files WHERE track_id=? AND tier='owned' LIMIT 1").get(row.id);
           if (!owned && enqueueTrackDownload({ id: row.id, title: r.title, artist: r.artist })) queued += 1;
         }
-        return json(res, 200, { playlist: { id: pid, name, tracks: added }, queued });
+        return json(res, 200, { playlist: { id: pid, name, tracks: added, appended: !!existing }, queued });
       });
       return;
     }
