@@ -1100,8 +1100,8 @@ async function renderSongs(push = true) {
         m.innerHTML = `<div class="ctx-title">Import playlist</div>
           <div class="ctx-form">
             <label>Playlist name<input id="imp-name" placeholder="Driving, Sunday morning..."></label>
-            <label>Tracks<textarea id="imp-text" rows="6" placeholder="One per line:\nBurial - Archangel\nPinkfong - Baby Shark"></textarea></label>
-            <p class="set-note">Paste <b>artist - title</b> per line, from any service. Links open the service; the track list has to be pasted.</p>
+            <label>Spotify playlist link, or a track list<textarea id="imp-text" rows="6" placeholder="https://open.spotify.com/playlist/...\n\nor one per line:\nBurial - Archangel"></textarea></label>
+            <p class="set-note">Paste a Spotify playlist link and it imports like before. Any other service needs the tracks pasted as <b>artist - title</b>.</p>
             <div class="ctx-row"><button class="btn btn-primary" id="imp-go">Import</button><button class="btn btn-ghost" id="imp-cancel">Cancel</button></div>
           </div>`;
         m.classList.add('open');
@@ -1112,9 +1112,28 @@ async function renderSongs(push = true) {
         m.querySelector('#imp-go').onclick = async () => {
           const text = m.querySelector('#imp-text').value.trim();
           if (!text) return toast('Nothing to import', 3000);
+          const name = m.querySelector('#imp-name').value.trim() || 'Imported playlist';
+          const link = text.match(/https?:\/\/\S+/);
+          // a Spotify link goes through the mirror importer, exactly like before
+          if (link && /spotify\.com/.test(link[0])) {
+            try {
+              const r = await api('/api/mirror/spotify', { method: 'POST', headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ url: link[0], target: link[0], name }) });
+              m.classList.remove('open');
+              afterWrite(); await loadPlaylists();
+              toast(r && r.created ? `Imported ${r.created} tracks` : 'Imported from Spotify', 7000);
+              refreshView();
+            } catch (e) { toast('Spotify import failed: ' + (e.message || 'unknown'), 8000); }
+            return;
+          }
+          if (link && !/spotify\.com/.test(link[0])) {
+            const host = (link[0].match(/https?:\/\/([^/]+)/) || [])[1] || 'that service';
+            toast(`Only Spotify links import directly for now. ${host} needs a pasted list.`, 9000);
+            return;
+          }
           try {
             const r = await api('/api/import/list', { method: 'POST', headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ name: m.querySelector('#imp-name').value.trim() || 'Imported playlist', text }) });
+              body: JSON.stringify({ name, text }) });
             if (r.needs_tracks) { toast(`That is a ${r.platform} link. Paste the track list instead.`, 7000); return; }
             m.classList.remove('open');
             afterWrite(); await loadPlaylists();
