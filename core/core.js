@@ -433,7 +433,7 @@ setInterval(() => {
 }, 60000);
 
 // 3. ladder results are expensive and rarely change inside a few minutes
-const LADDER_TTL = Number(process.env.MUSICFY_LADDER_TTL || 10 * 60 * 1000);
+const LADDER_TTL = Number(process.env.MUSICFY_LADDER_TTL || 5 * 60 * 1000);
 const ladderCache = new Map();
 
 // 4. schema version, so column changes stop being invisible
@@ -1331,65 +1331,25 @@ const server = http.createServer(async (req, res) => {
 
 
     // generic resolver for bandcamp and other yt-dlp supported pages
-    if (u.pathname === '/api/ladder/stream/generic') {
-      const target = u.searchParams.get('u') || '';
-      if (!/^https:\/\//.test(target)) return json(res, 400, { error: 'absolute https url required' });
-      try {
-        const loc = await ytdlp.streamUrlFor(target);
-        res.writeHead(302, { location: loc });
-        return res.end();
-      } catch (e) { return json(res, 502, { error: e.message }); }
-    }
+
 
 
 
     // generic resolver for bandcamp and other yt-dlp supported pages
-    if (u.pathname === '/api/ladder/stream/generic') {
-      const target = u.searchParams.get('u') || '';
-      if (!/^https:\/\//.test(target)) return json(res, 400, { error: 'absolute https url required' });
-      try {
-        const loc = await ytdlp.streamUrlFor(target);
-        res.writeHead(302, { location: loc });
-        return res.end();
-      } catch (e) { return json(res, 502, { error: e.message }); }
-    }
+
 
     // generic resolver for bandcamp and other yt-dlp supported pages
-    if (u.pathname === '/api/ladder/stream/generic') {
-      const target = u.searchParams.get('u') || '';
-      if (!/^https:\/\//.test(target)) return json(res, 400, { error: 'absolute https url required' });
-      try {
-        const loc = await ytdlp.streamUrlFor(target);
-        res.writeHead(302, { location: loc });
-        return res.end();
-      } catch (e) { return json(res, 502, { error: e.message }); }
-    }
+
 
 
 
     // generic resolver for bandcamp and other yt-dlp supported pages
-    if (u.pathname === '/api/ladder/stream/generic') {
-      const target = u.searchParams.get('u') || '';
-      if (!/^https:\/\//.test(target)) return json(res, 400, { error: 'absolute https url required' });
-      try {
-        const loc = await ytdlp.streamUrlFor(target);
-        res.writeHead(302, { location: loc });
-        return res.end();
-      } catch (e) { return json(res, 502, { error: e.message }); }
-    }
+
 
 
 
     // generic resolver for bandcamp and other yt-dlp supported pages
-    if (u.pathname === '/api/ladder/stream/generic') {
-      const target = u.searchParams.get('u') || '';
-      if (!/^https:\/\//.test(target)) return json(res, 400, { error: 'absolute https url required' });
-      try {
-        const loc = await ytdlp.streamUrlFor(target);
-        res.writeHead(302, { location: loc });
-        return res.end();
-      } catch (e) { return json(res, 502, { error: e.message }); }
-    }
+
 
 
 
