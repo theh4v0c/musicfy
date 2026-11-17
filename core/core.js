@@ -749,7 +749,16 @@ function startLadderDownload(jobId, b, onDone) {
       // yt-dlp writes a .part file while it works; never treat that as a result
       .filter((f) => !/\.part$/i.test(f));
     if (!files.length) return finish('error', 'no audio file produced');
-    const fp = path.join(dir, files[0]);
+    let fp = path.join(dir, files[0]);
+    // Safari cannot play webm: convert the container before it enters the library
+    const rawExt = (files[0].split('.').pop() || '').toLowerCase();
+    if (['webm', 'mkv', 'ogg', 'opus'].includes(rawExt)) {
+      const conv = fp.replace(/\.[^.]+$/, '') + '.m4a';
+      try {
+        execFileSync('/usr/bin/ffmpeg', ['-v', 'error', '-y', '-i', fp, '-vn', '-c:a', 'aac', '-b:a', '256k', conv], { timeout: 180000 });
+        if (fs.existsSync(conv) && fs.statSync(conv).size > 10000) { try { fs.unlinkSync(fp); } catch {} fp = conv; files[0] = path.basename(conv); }
+      } catch {}
+    }
     spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration,bit_rate:format_tags=title,artist', '-of', 'json', fp]).on('exit', () => {});
     execFile('ffprobe', ['-v', 'error', '-show_entries', 'format=duration,bit_rate:format_tags=title,artist', '-of', 'json', fp], { timeout: 20000 }, (err, stdout) => {
       let dur = null, br = null, t = b.title || files[0], a = b.artist || '';
