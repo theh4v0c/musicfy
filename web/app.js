@@ -184,9 +184,9 @@ function openCtx(t, x, y) {
     <button data-act="like">${liked ? IC.heart + ' Remove from Liked Songs' : IC.heartFull + ' Save to Liked Songs'}</button>
     ${hasAudio(t) ? '' : '<button data-act="dl">Download this track</button>'}
     ${hasAudio(t) ? '<button data-act="cover">Change cover</button>' : ''}
+    ${(hasAudio(t) && Number(t.bitrate || 0) > 0 && Number(t.bitrate) < 180000) ? '<button data-act="upgrade">Find higher quality</button>' : ''}
     ${hasAudio(t) ? '<button data-act="tofile">Download to device</button>' : ''}
     <button data-act="addpl">Add to playlist</button>
-    ${(!t.ladder && t.id) ? '<button data-act="rename">Rename track</button>' : ''}
     ${state.view === 'playlist' && state.playlistId ? '<button data-act="rmpl">Remove from this playlist</button>' : ''}
     ${(!t.ladder && t.id) ? '<button data-act="rename">Rename track</button>' : ''}
     ${(!t.ladder && t.id) ? '<button data-act="repair">Fix metadata</button>' : ''}
@@ -232,6 +232,15 @@ $('ctx').addEventListener('click', async (e) => {
   if (act === 'like') toggleLike(t);
   if (act === 'addpl') openAddPl(t);
   if (act === 'radiostart') startRadio(t);
+    if (act === 'upgrade') {
+      closeCtx();
+      try {
+        await api(`/api/tracks/${t.id}/download`, { method: 'POST' });
+        toast('Looking for a better copy. It is only replaced if the new file is better.', 7000);
+        openDownloads();
+      } catch { toast('Could not queue an upgrade', 4000); }
+      return;
+    }
     if (act === 'rename') { ctxRename(t); return; }
   if (act === 'repair') {
     try {
