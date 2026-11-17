@@ -1240,8 +1240,13 @@ async function renderSongs(push = true) {
   const drawBrowse = (host) => {
     if (!browse) return false;
     if (browse === 'genres') {
+      // real families only: the genre column also holds labels like composer or actress
+      const KNOWN = ['metal', 'electronic', 'hip hop', 'jazz', 'classical', 'rock', 'folk', 'soul', 'reggae', 'pop'];
       const fams = {};
-      for (const t of all) { const g = t.genre_family || t.genre; if (!g) continue; fams[g] = (fams[g] || 0) + 1; }
+      for (const t of all) {
+        const g = String(t.genre_family || '').toLowerCase();
+        if (g && KNOWN.includes(g)) fams[g] = (fams[g] || 0) + 1;
+      }
       const rows = Object.entries(fams).sort((a, b) => b[1] - a[1]);
       host.innerHTML = `<div class="sec-title">Genres <small>${rows.length}</small></div><div class="pgrid" id="browse-grid"></div>`;
       const grid = host.querySelector('#browse-grid');
