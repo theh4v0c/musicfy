@@ -1180,8 +1180,15 @@ async function renderSongs(push = true) {
           rows = (st.families || []).filter((f) => KNOWN.includes(String(f.g).toLowerCase())).map((f) => [f.g, f.c]);
         } catch {}
         if (!rows.length) {
+          // fall back to the loaded tracks, but only real families: the genre column
+          // also carries catalogue labels like composer or actress
+          const KNOWN2 = ['metal', 'electronic', 'hip hop', 'jazz', 'classical', 'rock', 'folk', 'soul', 'reggae', 'pop'];
           const fams = {};
-          for (const t of all) { const g = t.genre_family || t.genre; if (!g) continue; fams[g] = (fams[g] || 0) + 1; }
+          for (const t of all) {
+            const g = String(t.genre_family || '').toLowerCase();
+            if (!g || !KNOWN2.includes(g)) continue;
+            fams[g] = (fams[g] || 0) + 1;
+          }
           rows = Object.entries(fams).sort((a, b) => b[1] - a[1]);
         }
         if (!rows.length) {
