@@ -2369,10 +2369,11 @@ function targetVolume() {
 }
 
 function setStatus(text) {
-  const el = document.getElementById('mini-artist') || document.getElementById('pb-artist');
+  // dedicated element only: the artist line is not ours to rewrite
+  const el = document.getElementById('pb-status');
   if (!el) return;
-  if (text) { el.dataset.prev = el.dataset.prev || el.textContent || ''; el.textContent = text; }
-  else if (el.dataset.prev !== undefined) { el.textContent = el.dataset.prev; delete el.dataset.prev; }
+  el.textContent = text || '';
+  el.hidden = !text;
 }
 
 function applyLoudnessGain(t) {
@@ -2861,10 +2862,7 @@ async function playAt(i, opts = {}) {
   const t = state.current;
   applyLoudnessGain(t);
   audio.src = `/api/stream/${t.id}`;
-  const want = targetVolume();
-  const fadeMs = Number((state.settings || {}).fade_on_play_ms || 350);
-  try { audio.volume = 0; } catch {}
-  audio.addEventListener('playing', () => { if (!state._fadingIn) { state._fadingIn = true; fadeTo(want, fadeMs); setTimeout(() => { state._fadingIn = false; }, fadeMs + 100); } }, { once: true });
+  try { audio.volume = targetVolume(); } catch {}
   try { await audio.play(); } catch {}
   prefetchNext();
   // do not log a play the moment it starts: wait until it is genuinely being listened to
