@@ -200,17 +200,22 @@ function openCtx(t, x, y) {
 function closeCtx() { const el = $('ctx'); el.classList.remove('open'); el.onclick = null; el.style.transform = ''; }
 let ctxOpenedAt = 0;
 // close on any press outside the menu, in the capture phase so nothing can swallow it
+let ctxTouchInside = false;
+const ctxStart = (e) => { ctxTouchInside = ctx.contains(e.target); };
+document.addEventListener('pointerdown', ctxStart, true);
+document.addEventListener('touchstart', ctxStart, true);
 document.addEventListener('pointerdown', (e) => {
   if (!ctx.classList.contains('open')) return;
   if (Date.now() - ctxOpenedAt < 150) return;
-  if (ctx.contains(e.target)) return;
+  if (ctxTouchInside || ctx.contains(e.target)) return;
   closeCtx();
 }, true);
 // and on tap, which is what iOS sends for a plain touch
 document.addEventListener('touchend', (e) => {
   if (!ctx.classList.contains('open')) return;
   if (Date.now() - ctxOpenedAt < 150) return;
-  if (ctx.contains(e.target)) return;
+  // a gesture that began on the sheet never closes it, whatever the touch ends on
+  if (ctxTouchInside || ctx.contains(e.target)) return;
   closeCtx();
 }, true);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCtx(); });
