@@ -201,10 +201,13 @@ function showBack() {
   const b = document.getElementById('ctx-back');
   if (!b) return;
   b.hidden = false;
-  b.onclick = () => closeCtx();
+  b.onclick = () => closeCtx(true);
 }
-function closeCtx() {
+function closeCtx(force = false) {
   const el = $('ctx');
+  // never yank the sheet away from someone who is typing in it, whoever asked
+  const active = document.activeElement;
+  if (!force && active && el.contains(active) && /INPUT|TEXTAREA|SELECT/.test(active.tagName)) return;
   el.classList.remove('open');
   el.onclick = null;
   el.style.transform = '';
