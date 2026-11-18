@@ -212,6 +212,18 @@ let ctxOpenedAt = 0;
 // close on any press outside the menu, in the capture phase so nothing can swallow it
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCtx(); });
 
+// desktop dismissal: a real mouse press outside the sheet closes it. Touch devices also
+// synthesise mouse events after a tap, so those are ignored for a moment after a real touch.
+let lastTouchAt = 0;
+document.addEventListener('touchstart', () => { lastTouchAt = Date.now(); }, { capture: true, passive: true });
+document.addEventListener('mousedown', (e) => {
+  if (!ctx.classList.contains('open')) return;
+  if (Date.now() - ctxOpenedAt < 150) return;
+  if (Date.now() - lastTouchAt < 800) return;
+  if (ctx.contains(e.target)) return;
+  closeCtx();
+}, true);
+
 document.addEventListener('contextmenu', (e) => {
   const row = e.target.closest('.trow, .tcard');
   if (!row) return;
