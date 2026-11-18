@@ -66,11 +66,35 @@ async function playlistInfo(id) {
   };
 }
 
+async function albumInfo(id) {
+  const html = await fetchJson(`https://open.spotify.com/embed/album/${id}`);
+  const e = extractEntity(html);
+  if (!e) return null;
+  const list = e.trackList || e.tracks?.items || [];
+  if (!list.length) return null;
+  const artists = (e.artists || []).map((a) => a.name);
+  return {
+    kind: 'playlist',                       // imported as a playlist carrying the album
+    id: e.id || id,
+    title: e.title || e.name,
+    cover: e.coverArt?.sources?.[0]?.url || null,
+    tracks: list.map((t) => ({
+      uri: t.uri,
+      id: (t.uri || '').split(':').pop(),
+      title: t.title || t.name,
+      artists: (t.artists || []).map((a) => a.name).length ? (t.artists || []).map((a) => a.name)
+        : (artists.length ? artists : String(t.subtitle || '').split(',').map((s) => s.trim()).filter(Boolean)),
+      durationMs: t.duration || t.durationMs || null,
+    })),
+  };
+}
+
 async function resolve(idOrUrl) {
   const p = parseId(idOrUrl);
   if (!p) throw new Error('unrecognized id or url');
   if (p.kind === 'playlist') { const pl = await playlistInfo(p.id); if (pl) return pl; return trackInfo(p.id); }
+  if (p.kind === 'album') { const al = await albumInfo(p.id); if (al) return al; return null; }
   return trackInfo(p.id);
 }
 
-module.exports = { resolve, trackInfo, playlistInfo, parseId };
+module.exports = { resolve, trackInfo, playlistInfo, albumInfo, parseId };
