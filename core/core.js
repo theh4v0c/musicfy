@@ -1408,10 +1408,13 @@ const server = http.createServer(async (req, res) => {
         try {
           const b = JSON.parse(body || '{}');
           let target = String(b.url || b.id || '').trim();
+          // accept open.spotify.com/intl-pt/playlist/<id>?si=... and bare ids
+          const idMatch = target.match(/playlist[/:]([A-Za-z0-9]{16,30})/) || target.match(/^([A-Za-z0-9]{16,30})$/);
+          if (idMatch) target = `https://open.spotify.com/playlist/${idMatch[1]}`;
           // a bare id is ambiguous; for mirroring treat it as a playlist id
           if (/^[A-Za-z0-9]{16,30}$/.test(target)) target = `https://open.spotify.com/playlist/${target}`;
           const info = await spotify.resolve(target);
-          if (!info) return json(res, 404, { error: 'not found on spotify' });
+          if (!info) return json(res, 404, { error: 'Spotify did not return that playlist. It may be private, or the link is not a playlist.' });
           if (info.kind !== 'playlist') return json(res, 400, { error: 'that is a single track, use its download button' });
           const pid = `sp-${info.id}`;
           db.prepare(`INSERT INTO playlists (id,name,source,spotify_id,created_at,updated_at) VALUES (?,?,?,?,?,?)
