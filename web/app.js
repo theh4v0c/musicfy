@@ -399,6 +399,7 @@ function nav(v, push = true) {
   else if (v === 'songs') renderSongs(push);
   else if (v === 'askai') renderAskAi();
   else if (v === 'settings') renderSettings();
+  else if (v === 'import') renderImport();
   else if (v === 'artist' && state.artistName) renderArtist(state.artistName, false);
   else if (v === 'album' && state.albumName) renderAlbum(state.albumName, false);
 }
@@ -1092,47 +1093,7 @@ async function renderSongs(push = true) {
         } catch { toast('Could not build picks', 4000); }
         return;
       }
-      if (b.dataset.browse === 'importpl') {
-        // inline panel, not an overlay: nothing can dismiss it from under the keyboard
-        const host = document.getElementById('songs-list');
-        host.innerHTML = `<div class="inline-panel">
-            <div class="sec-title" style="margin-top:0">Import playlist</div>
-            <label class="ip-label">Playlist name
-              <input id="imp-name" placeholder="Driving, Sunday morning...">
-            </label>
-            <label class="ip-label">Spotify playlist link, or one track per line
-              <textarea id="imp-text" rows="7" placeholder="https://open.spotify.com/playlist/...&#10;&#10;or&#10;Burial - Archangel"></textarea>
-            </label>
-            <div class="ip-actions">
-              <button class="btn btn-primary" id="imp-go">Import</button>
-              <button class="btn btn-ghost" id="imp-cancel">Close</button>
-            </div>
-            <p class="set-note">A Spotify link imports the playlist. Any other service needs the tracks pasted.</p>
-          </div>`;
-        document.getElementById('imp-cancel').onclick = () => renderSongs(false);
-        document.getElementById('imp-go').onclick = async () => {
-          const text = document.getElementById('imp-text').value.trim();
-          const name = document.getElementById('imp-name').value.trim() || 'Imported playlist';
-          if (!text) return toast('Nothing to import', 3000);
-          const link = text.match(/https?:\/\/\S+/);
-          try {
-            if (link && /spotify\.com/.test(link[0])) {
-              const r = await api('/api/mirror/spotify', { method: 'POST', headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ url: link[0], target: link[0], name }) });
-              afterWrite(); await loadPlaylists();
-              toast(r && r.created ? `Imported ${r.created} tracks` : 'Imported from Spotify', 7000);
-              renderSongs(false);
-              return;
-            }
-            if (link) return toast('Only Spotify links import directly. Paste the track list for other services.', 8000);
-            const r = await api('/api/import/list', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, text }) });
-            afterWrite(); await loadPlaylists();
-            toast(`Imported ${r.playlist.tracks} tracks${r.queued ? `, ${r.queued} downloading` : ''}`, 7000);
-            if (r.playlist.id) openPlaylist(r.playlist.id, false); else renderSongs(false);
-          } catch (e) { toast('Import failed: ' + (e.message || 'unknown'), 8000); }
-        };
-        return;
-      }
+      if (b.dataset.browse === 'importpl') { nav('import'); return; }
       if (b.dataset.browse === 'recentdl') {
         const theadEl = document.getElementById('songs-thead');
         if (theadEl) theadEl.style.display = '';
@@ -1367,6 +1328,49 @@ async function importSpotifyTrack() {
     toast(`Added ${r.title}`, 5000);
     renderSongs(false);
   } catch { toast('Could not find that track', 5000); }
+}
+
+async function renderImport() {
+  setNav('songs'); state.playlistId = null; state.genreFilter = null; renderSidebar();
+  $('view-title').textContent = 'Import playlist';
+  const v = $('view');
+  v.innerHTML = `<div class="inline-panel">
+      <label class="ip-label">Playlist name
+        <input id="imp-name" placeholder="Driving, Sunday morning...">
+      </label>
+      <label class="ip-label">Spotify playlist link, or one track per line
+        <textarea id="imp-text" rows="8" placeholder="https://open.spotify.com/playlist/...&#10;&#10;or&#10;Burial - Archangel"></textarea>
+      </label>
+      <div class="ip-actions">
+        <button class="btn btn-primary" id="imp-go">Import</button>
+        <button class="btn btn-ghost" id="imp-back">Back to songs</button>
+      </div>
+      <p class="set-note">A Spotify link imports the playlist. Any other service needs its tracks pasted.</p>
+    </div>`;
+  $('imp-back').onclick = () => nav('songs');
+  $('imp-go').onclick = async () => {
+    const text = $('imp-text').value.trim();
+    const name = $('imp-name').value.trim() || 'Imported playlist';
+    if (!text) return toast('Nothing to import', 3000);
+    const link = text.match(/https?:\/\/\S+/);
+    try {
+      if (link && /spotify\.com/.test(link[0])) {
+        const r = await api('/api/mirror/spotify', { method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ url: link[0], target: link[0], name }) });
+        afterWrite(); await loadPlaylists();
+        toast(r && r.created ? `Imported ${r.created} tracks` : 'Imported from Spotify', 7000);
+        nav('songs');
+        return;
+      }
+      if (link) return toast('Only Spotify links import directly. Paste the track list for other services.', 8000);
+      const r = await api('/api/import/list', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, text }) });
+      afterWrite(); await loadPlaylists();
+      toast(`Imported ${r.playlist.tracks} tracks${r.queued ? `, ${r.queued} downloading` : ''}`, 7000);
+      if (r.playlist.id) openPlaylist(r.playlist.id, false); else nav('songs');
+    } catch (e) { toast('Import failed: ' + (e.message || 'unknown'), 8000); }
+  };
+  const f = $('imp-text');
+  if (f) f.focus();
 }
 
 async function renderSettings() {
