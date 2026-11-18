@@ -745,7 +745,7 @@ function startLadderDownload(jobId, b, onDone) {
     if (child.stdout) child.stdout.on('data', onChunk);
     if (child.stderr) child.stderr.on('data', onChunk);
   };
-  const ingestDownloaded = () => {
+  const ingestDownloaded = async () => {
     const files = fs.readdirSync(dir)
       .filter((f) => !f.startsWith('.') && /\.(mp3|m4a|aac|opus|ogg|flac|wav|webm|mp4|m4b|mkv|aiff?)$/i.test(f))
       // yt-dlp writes a .part file while it works; never treat that as a result
@@ -757,7 +757,10 @@ function startLadderDownload(jobId, b, onDone) {
     if (['webm', 'mkv', 'ogg', 'opus'].includes(rawExt)) {
       const conv = fp.replace(/\.[^.]+$/, '') + '.m4a';
       try {
-        execFileSync('/usr/bin/ffmpeg', ['-v', 'error', '-y', '-i', fp, '-vn', '-c:a', 'aac', '-b:a', '256k', conv], { timeout: 180000 });
+        await new Promise((resolve, reject) => {
+          execFile('/usr/bin/ffmpeg', ['-v', 'error', '-y', '-i', fp, '-vn', '-c:a', 'aac', '-b:a', '256k', conv],
+            { timeout: 300000, maxBuffer: 8 * 1024 * 1024 }, (err) => (err ? reject(err) : resolve()));
+        });
         if (fs.existsSync(conv) && fs.statSync(conv).size > 10000) { try { fs.unlinkSync(fp); } catch {} fp = conv; files[0] = path.basename(conv); }
       } catch {}
     }
