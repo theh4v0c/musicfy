@@ -197,12 +197,7 @@ function openCtx(t, x, y) {
   m.style.left = Math.min(x, innerWidth - r.width - 8) + 'px';
   m.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
 }
-function showBack() {
-  const b = document.getElementById('ctx-back');
-  if (!b) return;
-  b.hidden = false;
-  b.onclick = () => closeCtx(true);
-}
+function showBack() {}
 function closeCtx(force = false) {
   const el = $('ctx');
   // never yank the sheet away from someone who is typing in it, whoever asked
@@ -211,8 +206,7 @@ function closeCtx(force = false) {
   el.classList.remove('open');
   el.onclick = null;
   el.style.transform = '';
-  const b = document.getElementById('ctx-back');
-  if (b) { b.hidden = true; b.onclick = null; }
+
 }
 let ctxOpenedAt = 0;
 // close on any press outside the menu, in the capture phase so nothing can swallow it

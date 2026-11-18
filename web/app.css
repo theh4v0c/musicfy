@@ -558,6 +558,4 @@ html, body { overflow-x: hidden; max-width: 100%; }
 }
 
 /* a transparent backdrop is the only thing that dismisses a sheet */
-.ctx-back { position: fixed; inset: 0; z-index: 59; background: rgba(0,0,0,.25); }
 .ctx { z-index: 60; }
-@media (max-width: 760px) { .ctx-back { background: rgba(0,0,0,.4); } }
