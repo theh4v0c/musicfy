@@ -556,3 +556,8 @@ html, body { overflow-x: hidden; max-width: 100%; }
   .topbar { padding: 0 12px; gap: 8px; height: 56px; min-height: 56px; }
   .main, .view { max-width: 100vw; overflow-x: hidden; }
 }
+
+/* a transparent backdrop is the only thing that dismisses a sheet */
+.ctx-back { position: fixed; inset: 0; z-index: 59; background: rgba(0,0,0,.25); }
+.ctx { z-index: 60; }
+@media (max-width: 760px) { .ctx-back { background: rgba(0,0,0,.4); } }

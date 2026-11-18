@@ -148,7 +148,7 @@ function ctxRename(t) {
       <label>Album<input id="rn-album" value="${esc(t.album || '')}"></label>
       <div class="ctx-row"><button class="btn btn-primary" id="rn-save">Save</button><button class="btn btn-ghost" id="rn-cancel">Cancel</button></div>
     </div>`;
-  m.classList.add('open');
+  m.classList.add('open'); showBack();
   m.style.left = Math.max(8, innerWidth / 2 - 160) + 'px';
   m.style.top = '12%';
   m.onclick = null;
@@ -197,7 +197,20 @@ function openCtx(t, x, y) {
   m.style.left = Math.min(x, innerWidth - r.width - 8) + 'px';
   m.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
 }
-function closeCtx() { const el = $('ctx'); el.classList.remove('open'); el.onclick = null; el.style.transform = ''; }
+function showBack() {
+  const b = document.getElementById('ctx-back');
+  if (!b) return;
+  b.hidden = false;
+  b.onclick = () => closeCtx();
+}
+function closeCtx() {
+  const el = $('ctx');
+  el.classList.remove('open');
+  el.onclick = null;
+  el.style.transform = '';
+  const b = document.getElementById('ctx-back');
+  if (b) { b.hidden = true; b.onclick = null; }
+}
 let ctxOpenedAt = 0;
 // close on any press outside the menu, in the capture phase so nothing can swallow it
 let ctxTouchInside = false;
@@ -219,7 +232,7 @@ document.addEventListener('touchend', (e) => {
   closeCtx();
 }, true);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCtx(); });
-window.addEventListener('scroll', () => { if (document.getElementById('ctx')?.classList.contains('open')) closeCtx(); }, true);
+
 document.addEventListener('contextmenu', (e) => {
   const row = e.target.closest('.trow, .tcard');
   if (!row) return;
@@ -1109,7 +1122,7 @@ async function renderSongs(push = true) {
             <p class="set-note">Paste a Spotify playlist link and it imports like before. Any other service needs the tracks pasted as <b>artist - title</b>.</p>
             <div class="ctx-row"><button class="btn btn-primary" id="imp-go">Import</button><button class="btn btn-ghost" id="imp-cancel">Cancel</button></div>
           </div>`;
-        m.classList.add('open');
+        m.classList.add('open'); showBack();
         m.style.left = Math.max(8, innerWidth / 2 - 190) + 'px';
         m.style.top = '10%';
         m.onclick = null;
