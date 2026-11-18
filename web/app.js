@@ -2368,6 +2368,13 @@ function targetVolume() {
   return Math.max(0, Math.min(1, base * Math.pow(10, Math.max(-18, Math.min(0, gainDb)) / 20)));
 }
 
+function setStatus(text) {
+  const el = document.getElementById('mini-artist') || document.getElementById('pb-artist');
+  if (!el) return;
+  if (text) { el.dataset.prev = el.dataset.prev || el.textContent || ''; el.textContent = text; }
+  else if (el.dataset.prev !== undefined) { el.textContent = el.dataset.prev; delete el.dataset.prev; }
+}
+
 function applyLoudnessGain(t) {
   const s = state.settings || {};
   const base = Number(state.volume ?? 0.9);
@@ -2908,6 +2915,13 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) bind
 audio.addEventListener('play', () => { if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
 audio.addEventListener('pause', () => { if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
 audio.addEventListener('timeupdate', () => {
+  if (audio.duration && audio.duration > 1 && !state._advancing && audio.currentTime > audio.duration - 0.4) {
+    state._advancing = true;
+    setStatus('Next track');
+    setTimeout(() => { state._advancing = false; }, 2500);
+    nextTrack();
+    return;
+  }
   const t = state._listenTrack;
   if (t && !state._listenLogged) {
     const played = audio.currentTime;
@@ -3048,7 +3062,11 @@ audio.addEventListener('timeupdate', () => {
   $('bar-fill').style.width = pct; $('np-bar-fill').style.width = pct;
   $('t-cur').textContent = fmt(audio.currentTime); $('np-cur').textContent = fmt(audio.currentTime);
 });
-audio.addEventListener('ended', nextTrack);
+audio.addEventListener('ended', () => { setStatus('Next track'); nextTrack(); });
+audio.addEventListener('waiting', () => setStatus('Buffering...'));
+audio.addEventListener('playing', () => setStatus(null));
+audio.addEventListener('stalled', () => setStatus('Reconnecting...'));
+audio.addEventListener('pause', () => { if (!audio.ended) setStatus(null); });
 audio.addEventListener('error', () => { if (state.current) $('pb-title').textContent = `error: ${state.current.title}`; });
 
 function setPlayIcons(playing) {
