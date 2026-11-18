@@ -656,6 +656,8 @@ function verifyFiles({ requeue = true } = {}) {
 const downloadQueue = [];
 let activeDownloads = 0;
 const MAX_DOWNLOADS = Number(process.env.MUSICFY_DOWNLOAD_CONCURRENCY || 4);
+// failures are reported for this run of the service only, not for all time
+const BOOTED_AT = Math.floor(Date.now() / 1000);
 
 // 'best' keeps whatever the source serves instead of transcoding to a lossy copy
 function downloadFormat() {
@@ -2237,10 +2239,12 @@ const server = http.createServer(async (req, res) => {
     // live download queue for the UI
     if (u.pathname === '/api/downloads') {
       const counts = db.prepare(`SELECT state, COUNT(*) c FROM jobs
-        WHERE (kind='track-download' OR kind='ladder-download') AND state != 'dismissed' GROUP BY state`).all();
+        WHERE (kind='track-download' OR kind='ladder-download') AND state != 'dismissed'
+          AND (state != 'error' OR created_at >= ?) GROUP BY state`).all(BOOTED_AT);
       const rows = db.prepare(`SELECT id, state, detail, COALESCE(progress,0) progress, payload, created_at
         FROM jobs WHERE (kind='track-download' OR kind='ladder-download') AND state NOT IN ('dismissed','cancelled','skipped')
-        ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'error' THEN 2 ELSE 3 END, id DESC LIMIT 60`).all();
+          AND (state != 'error' OR created_at >= ?)
+        ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'error' THEN 2 ELSE 3 END, id DESC LIMIT 60`).all(BOOTED_AT);
       const items = rows.map((r) => {
         let p = {};
         try { p = JSON.parse(r.payload); } catch {}
