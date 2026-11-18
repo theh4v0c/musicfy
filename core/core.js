@@ -333,7 +333,7 @@ function soundcloudFallbackDownload(b, dir, finish, ingestDownloaded, setProgres
           execFile('/opt/musicfy/ytdlp-venv/bin/yt-dlp',
             ['--no-warnings', '-f', 'bestaudio/best', '-x', '--audio-format', 'm4a',
               '-o', path.join(dir, '%(title)s.%(ext)s'), b.url],
-            { timeout: 12 * 60 * 1000, maxBuffer: 4 * 1024 * 1024 }, (err2) => {
+            { timeout: 30 * 60 * 1000, maxBuffer: 4 * 1024 * 1024 }, (err2) => {
               if (err2) return finish('error', String(err2.message).slice(0, 200));
               ingestDownloaded();
             });
@@ -759,7 +759,7 @@ function startLadderDownload(jobId, b, onDone) {
       try {
         await new Promise((resolve, reject) => {
           execFile('/usr/bin/ffmpeg', ['-v', 'error', '-y', '-i', fp, '-vn', '-c:a', 'aac', '-b:a', '256k', conv],
-            { timeout: 300000, maxBuffer: 8 * 1024 * 1024 }, (err) => (err ? reject(err) : resolve()));
+            { timeout: 900000, maxBuffer: 8 * 1024 * 1024 }, (err) => (err ? reject(err) : resolve()));
         });
         if (fs.existsSync(conv) && fs.statSync(conv).size > 10000) { try { fs.unlinkSync(fp); } catch {} fp = conv; files[0] = path.basename(conv); }
       } catch {}
@@ -787,6 +787,13 @@ function startLadderDownload(jobId, b, onDone) {
       const declared = Number(b.duration) || Number(db.prepare('SELECT duration FROM tracks WHERE id=?').get(tid)?.duration) || 0;
       if (dur && declared && dur < declared * 0.6) {
         try { fs.rmSync(dest, { force: true }); } catch {}
+        // the source was a clip: try a plain search for the full version once
+        if (!b.retried) {
+          try {
+            enqueueDownload(b.jobId + '-r', { trackId: b.trackId, rung: 'search', title: b.title, artist: b.artist, duration: declared });
+          } catch {}
+          return finish('unavailable', `truncated audio: ${Math.round(dur)}s of ${Math.round(declared)}s, retrying by search`);
+        }
         return finish('unavailable', `truncated audio: ${Math.round(dur)}s of ${Math.round(declared)}s`);
       }
       if (dur && dur < 3) {
@@ -2887,7 +2894,7 @@ try { migrate(); } catch (e) { console.error('[migrate]', e.message); }
 checkDependencies();
 
 // a download that stops reporting progress is dead weight: kill and retry it
-const STUCK_MS = Number(process.env.MUSICFY_STUCK_MS || 10 * 60 * 1000);
+const STUCK_MS = Number(process.env.MUSICFY_STUCK_MS || 45 * 60 * 1000);
 setInterval(() => {
   try {
     const rows = db.prepare("SELECT id, COALESCE(progress,0) p, COALESCE(updated_at, created_at, 0) u FROM jobs WHERE state='running'").all();
