@@ -559,3 +559,9 @@ html, body { overflow-x: hidden; max-width: 100%; }
 
 /* a transparent backdrop is the only thing that dismisses a sheet */
 .ctx { z-index: 60; }
+
+/* inline forms live in the page flow, so nothing can dismiss them */
+.inline-panel { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--bg-elev); margin-bottom: 18px; }
+.ip-label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-mute); margin-bottom: 12px; }
+.ip-label input, .ip-label textarea { font-family: inherit; font-size: 16px; padding: 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-elev2); color: var(--fg); width: 100%; }
+.ip-actions { display: flex; gap: 10px; margin-bottom: 8px; }
