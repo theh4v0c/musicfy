@@ -392,6 +392,13 @@ function nav(v, push = true) {
   if (typeof clearSelection === 'function') clearSelection();
   if (push && state.view && v !== state.view) state.history.push({ v: state.view, pid: state.playlistId });
   $('back').hidden = !state.history.length;
+  const resetScroll = () => {
+    try { window.scrollTo(0, 0); } catch {}
+    const view = document.getElementById('view');
+    if (view) view.scrollTop = 0;
+    const list = document.getElementById('songs-list');
+    if (list) list.scrollTop = 0;
+  };
   if (v === 'home') renderHome();
   else if (v === 'search') renderSearch();
   else if (v === 'library') renderLibrary();
@@ -400,6 +407,8 @@ function nav(v, push = true) {
   else if (v === 'askai') renderAskAi();
   else if (v === 'settings') renderSettings();
   else if (v === 'import') renderImport();
+  resetScroll();
+  if (v === 'import') { const f = document.getElementById('imp-name'); if (f) f.scrollIntoView({ block: 'start' }); }
   else if (v === 'artist' && state.artistName) renderArtist(state.artistName, false);
   else if (v === 'album' && state.albumName) renderAlbum(state.albumName, false);
 }
@@ -1334,6 +1343,7 @@ async function renderImport() {
   setNav('songs'); state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'Import playlist';
   const v = $('view');
+  try { window.scrollTo(0, 0); } catch {}
   v.innerHTML = `<div class="inline-panel">
       <label class="ip-label">Playlist name
         <input id="imp-name" placeholder="Driving, Sunday morning...">
