@@ -2969,7 +2969,12 @@ const togglePlay = () => state.current ? (audio.paused ? audio.play() : audio.pa
 function nextTrack() {
   if (!state.queue.length) return;
   if (state.repeat && state.qi >= state.queue.length - 1) return playAt(0);
-  if (state.qi >= state.queue.length - 1) { audio.pause(); return; }
+  if (state.qi >= state.queue.length - 1) {
+    // end of the queue: keep playing instead of stopping dead
+    if (state.queue.length > 1) return playAt(0);
+    audio.pause();
+    return;
+  }
   playAt(state.qi + 1);
 }
 function prevTrack(force = false) {
