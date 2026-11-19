@@ -3179,13 +3179,14 @@ async function renderDownloads() {
   const pct = lib.total ? Math.round((lib.with_audio / lib.total) * 100) : 0;
   host.innerHTML = `<div class="dl-summary">
       <span class="dl-lib">${lib.with_audio} of ${lib.total} tracks have audio (${pct}%)</span>
+      ${lib.catalogue ? `<span>·</span><span>${lib.catalogue} catalogue-only</span>` : ''}
       <span>·</span><span>${d.active} running</span><span>·</span><span>${d.queued} queued</span>${d.failed ? `<span>·</span><span class="warn-txt">${d.failed} failed</span>` : ''}
     </div>
     <div class="dl-libbar"><i style="width:${pct}%"></i></div>
     <div class="dl-tools">
       ${d.failed ? `<button class="dl-act" id="dl-retry-all">Retry all failed (${d.failed})</button>` : ''}
       ${(d.active + d.queued) ? `<button class="dl-act" id="dl-cancel-all">Cancel all (${d.active + d.queued})</button>` : ''}
-      ${lib.missing && !(d.active + d.queued) ? `<button class="dl-act" id="dl-fill">Download ${lib.missing} missing</button>` : ''}
+      ${lib.missing && !(d.active + d.queued) ? `<button class="dl-act" id="dl-fill">Fill ${lib.missing} missing track${lib.missing === 1 ? '' : 's'}</button>` : ''}
       ${d.failed ? `<button class="dl-act" id="dl-clear-failed">Dismiss failed (${d.failed})</button>` : ''}
     </div>` + (items.length ? items.map((i) => `
       <div class="dl-row" data-job="${i.id}">

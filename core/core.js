@@ -2684,10 +2684,14 @@ const server = http.createServer(async (req, res) => {
       const get = (s) => (counts.find((c) => c.state === s) || { c: 0 }).c;
       const total = db.prepare('SELECT COUNT(*) c FROM tracks').get().c;
       const withAudio = db.prepare("SELECT COUNT(DISTINCT track_id) c FROM files WHERE tier='owned'").get().c;
+      // catalogue-only rows are metadata imports that were never meant to be downloaded:
+      // counting them as "missing audio" made the Downloads panel alarm forever.
+      const catalogue = db.prepare(`SELECT COUNT(*) c FROM tracks t WHERE t.format='catalogue'
+        AND NOT EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')`).get().c;
       return json(res, 200, {
         active: get('running'), queued: get('queued'), done: get('done'),
         failed: get('error'), cancelled: get('cancelled'), skipped: get('skipped'),
-        library: { total, with_audio: withAudio, missing: total - withAudio },
+        library: { total, with_audio: withAudio, missing: Math.max(0, total - withAudio - catalogue), catalogue },
         items,
       });
     }
