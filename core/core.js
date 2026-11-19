@@ -159,7 +159,7 @@ function weatherWord(code) {
 
 // metadata to write into a track's file: Traktor PRIV + standard ID3. MP3 only.
 function trackTagMeta(db, tid) {
-  const t = db.prepare('SELECT id,title,artist,album,genre,bpm,key,key_scale,duration,beat_grid FROM tracks WHERE id=?').get(tid);
+  const t = db.prepare('SELECT id,title,artist,album,genre,year,bpm,key,key_scale,duration,beat_grid FROM tracks WHERE id=?').get(tid);
   if (!t) return { error: 'no track' };
   const f = db.prepare("SELECT path, bitrate FROM files WHERE track_id=? AND tier='owned' LIMIT 1").get(tid);
   if (!f || !fs.existsSync(f.path)) return { error: 'no owned audio' };
@@ -175,7 +175,7 @@ function trackTagMeta(db, tid) {
   }
   const plays = db.prepare('SELECT COUNT(*) c FROM listens WHERE track_id=?').get(tid).c;
   return { path: f.path, meta: {
-    title: t.title, artist: t.artist, album: t.album, genre: t.genre,
+    title: t.title, artist: t.artist, album: t.album, genre: t.genre, year: Number(t.year) || undefined,
     bpm: t.bpm || undefined, key: t.key ? `${t.key}${t.key_scale === 'minor' ? 'm' : ''}` : undefined,
     lengthMs: Math.round((t.duration || 0) * 1000), bitrate: f.bitrate ? Math.round(Number(f.bitrate)) : undefined,
     playCount: plays, cuePoints: cues,
@@ -1952,6 +1952,25 @@ const server = http.createServer(async (req, res) => {
         } catch {}
       }
       return json(res, 200, { fixed, checked: rows.length });
+    }
+
+    // write standard ID3 + Traktor tags from DB metadata into owned MP3s that lack a title tag
+    if (u.pathname === '/api/maintenance/write-tags' && req.method === 'POST') {
+      const limit = Math.min(Number(u.searchParams.get('limit') || 300), 2000);
+      const rows = db.prepare(`SELECT t.id FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned'
+        WHERE lower(f.path) LIKE '%.mp3' ORDER BY t.id LIMIT ?`).all(limit);
+      let written = 0, skipped = 0;
+      for (const { id } of rows) {
+        const plan = trackTagMeta(db, id);
+        if (plan.error) { skipped += 1; continue; }
+        try {
+          const id3 = tagwrite.readId3(fs.readFileSync(plan.path));
+          if (id3.frames.some((f) => f.id === 'TIT2')) { skipped += 1; continue; }
+          tagwrite.writeTags(plan.path, plan.meta, {});
+          written += 1;
+        } catch { skipped += 1; }
+      }
+      return json(res, 200, { written, skipped, checked: rows.length });
     }
 
     // stop everything that is queued or running

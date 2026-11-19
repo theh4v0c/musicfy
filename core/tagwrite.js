@@ -115,7 +115,14 @@ function writeTags(filePath, meta, opts = {}) {
   const id3 = readId3(buf);
   const audio = buf.subarray(id3.audioOffset);
   // preserve existing frames, replacing the ones we own
-  let frames = id3.frames.filter((f) => !isTraktorPriv(f) && f.id !== 'TBPM' && f.id !== 'TKEY');
+  // replace the frames we own, including the standard text ones, from DB metadata
+  const owned = new Set(['TBPM', 'TKEY', 'TIT2', 'TPE1', 'TALB', 'TCON', 'TDRC']);
+  let frames = id3.frames.filter((f) => !isTraktorPriv(f) && !owned.has(f.id));
+  if (meta.title) frames.push(textFrame('TIT2', meta.title));
+  if (meta.artist) frames.push(textFrame('TPE1', meta.artist));
+  if (meta.album) frames.push(textFrame('TALB', meta.album));
+  if (meta.genre) frames.push(textFrame('TCON', meta.genre));
+  if (meta.year) frames.push(textFrame('TDRC', String(meta.year)));
   if (meta.bpm) frames.push(textFrame('TBPM', String(Math.round(meta.bpm))));
   if (meta.key) frames.push(textFrame('TKEY', String(meta.key)));
   const trak = buildTraktorBinary(meta);
