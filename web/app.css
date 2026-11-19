@@ -30,7 +30,7 @@ img { -webkit-user-drag: none; }
 
 /* ============ sidebar ============ */
 .sidebar { grid-area: side; background: var(--bg-elev); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
-.brand { font-weight: 800; letter-spacing: .18em; font-size: 15px; padding: 22px 22px 18px; }
+.brand { font-weight: 800; letter-spacing: .06em; font-size: 15px; padding: 22px 22px 18px; }
 .brand::after { content: none; }
 .snav { display: flex; flex-direction: column; gap: 2px; padding: 0 12px; }
 /* settings sits with the other entries on the rail, and at the far right on the phone bar */
