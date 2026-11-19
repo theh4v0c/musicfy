@@ -2251,22 +2251,29 @@ const server = http.createServer(async (req, res) => {
 
     // dynamic Ask suggestions from what you actually play this week
     if (u.pathname === '/api/ask/suggest') {
+      res.setHeader('cache-control', 'no-store');
       const week = now() - 7 * 86400;
-      const topArtist = db.prepare(`SELECT t.artist, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
-        WHERE l.played_at>=? AND t.artist IS NOT NULL AND t.artist!='' GROUP BY t.artist ORDER BY n DESC LIMIT 1`).get(week);
-      const keyRow = db.prepare(`SELECT t.key k, t.key_scale s, COUNT(*) n FROM tracks t
+      const topArtists = db.prepare(`SELECT t.artist, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
+        WHERE l.played_at>=? AND t.artist IS NOT NULL AND t.artist!='' GROUP BY t.artist ORDER BY n DESC LIMIT 5`).all(week).map((r) => r.artist);
+      const keys = db.prepare(`SELECT t.key k, t.key_scale s, COUNT(*) n FROM tracks t
         JOIN files f ON f.track_id=t.id AND f.tier='owned'
-        WHERE t.key IS NOT NULL AND t.key!='' GROUP BY t.key, t.key_scale ORDER BY n DESC LIMIT 1`).get();
-      const fam = db.prepare(`SELECT genre_family f, COUNT(*) n FROM tracks WHERE genre_family IS NOT NULL AND genre_family!='' GROUP BY genre_family ORDER BY n DESC LIMIT 1`).get();
+        WHERE t.key IS NOT NULL AND t.key!='' GROUP BY t.key, t.key_scale ORDER BY n DESC LIMIT 3`).all();
+      const fams = db.prepare(`SELECT genre_family f, COUNT(*) n FROM tracks WHERE genre_family IS NOT NULL AND genre_family!=''
+        GROUP BY genre_family ORDER BY n DESC LIMIT 3`).all().map((r) => r.f);
       const bpmRow = db.prepare(`SELECT AVG(bpm) a FROM tracks WHERE bpm IS NOT NULL AND bpm>0`).get();
-      const prompts = [];
-      if (topArtist) prompts.push(`more from ${topArtist.artist}`);
-      if (keyRow) prompts.push(`tracks in ${keyRow.k}${keyRow.s === 'minor' ? 'm' : ''} I have not played`);
-      if (fam) prompts.push(`${fam.f} I never played`);
-      if (bpmRow && bpmRow.a) prompts.push(`tracks around ${Math.round(bpmRow.a)} bpm`);
-      prompts.push('tracks I have not played in months');
-      const seen = new Set();
-      return json(res, 200, { prompts: prompts.filter((p) => !seen.has(p) && seen.add(p)).slice(0, 4) });
+      const recent = db.prepare(`SELECT t.artist FROM listens l JOIN tracks t ON t.id=l.track_id
+        WHERE l.played_at>=? AND t.artist IS NOT NULL AND t.artist!='' GROUP BY l.track_id ORDER BY MAX(l.played_at) DESC LIMIT 4`).all(week).map((r) => r.artist);
+      const pool = [];
+      for (const a of topArtists.slice(0, 2)) pool.push(`more from ${a}`);
+      for (const k of keys.slice(0, 2)) pool.push(`tracks in ${k.k}${k.s === 'minor' ? 'm' : ''} I have not played`);
+      for (const f of fams.slice(0, 2)) pool.push(`${f} I never played`);
+      if (bpmRow && bpmRow.a) { const b = Math.round(bpmRow.a); pool.push(`tracks around ${b} bpm`, `tracks between ${b - 3} and ${b + 3} bpm`); }
+      for (const a of recent.slice(0, 2)) pool.push(`more from ${a}`);
+      pool.push('tracks I have not played in months', 'tracks added this week', 'long tracks for a set', 'tracks under 3 minutes');
+      // dedupe, shuffle, take four — so the suggestions are not frozen
+      const uniq = [...new Set(pool)];
+      for (let i = uniq.length - 1; i > 0; i -= 1) { const j = Math.floor(Math.random() * (i + 1)); [uniq[i], uniq[j]] = [uniq[j], uniq[i]]; }
+      return json(res, 200, { prompts: uniq.slice(0, 4) });
     }
 
     // what arrived most recently, newest first
@@ -2953,16 +2960,20 @@ const server = http.createServer(async (req, res) => {
 
     // discovery outside the library: several genre shelves, none of it already owned
     if (u.pathname === '/api/discover/outside') {
+      res.setHeader('cache-control', 'no-store');
       // seeds = artists you actually play, not a genre keyword. Then Deezer's related
       // artists, excluding anyone already in the library, so this is genuinely new.
       let seeds = db.prepare(`SELECT t.artist, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
         WHERE t.artist IS NOT NULL AND t.artist != '' AND l.played_at >= ?
           AND EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')
-        GROUP BY t.artist ORDER BY n DESC LIMIT 2`).all(now() - 120 * 86400);
+        GROUP BY t.artist ORDER BY n DESC LIMIT 12`).all(now() - 120 * 86400);
       if (!seeds.length) {
         seeds = db.prepare(`SELECT artist, COUNT(*) n FROM tracks WHERE artist IS NOT NULL AND artist != ''
-          GROUP BY artist ORDER BY n DESC LIMIT 2`).all();
+          GROUP BY artist ORDER BY n DESC LIMIT 12`).all();
       }
+      // rotate which of your top artists seeds the shelves so results are not frozen
+      for (let i = seeds.length - 1; i > 0; i -= 1) { const j = Math.floor(Math.random() * (i + 1)); [seeds[i], seeds[j]] = [seeds[j], seeds[i]]; }
+      seeds = seeds.slice(0, 2);
       const normKey = (a, t) => `${String(a).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${String(t).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}`;
       const inLib = new Set(db.prepare('SELECT dup_key FROM tracks').all().map((r) => r.dup_key));
       const libArtists = new Set(db.prepare("SELECT lower(artist) a FROM tracks WHERE artist IS NOT NULL AND artist != '' GROUP BY lower(artist)").all().map((r) => String(r.a).trim()));
@@ -2972,8 +2983,10 @@ const server = http.createServer(async (req, res) => {
         const a = await deezer.artistSearch(seed.artist);
         if (!a) continue;
         const rel = await deezer.relatedArtists(a.id);
+        const relList = (rel.data || []).slice();
+        for (let i = relList.length - 1; i > 0; i -= 1) { const j = Math.floor(Math.random() * (i + 1)); [relList[i], relList[j]] = [relList[j], relList[i]]; }
         const out = [];
-        for (const r of (rel.data || []).slice(0, 4)) {
+        for (const r of relList.slice(0, 5)) {
           const rn = String(r.name || '').toLowerCase().trim();
           if (!rn || libArtists.has(rn)) continue; // already in your library: skip
           const top = await deezer.artistTop(r.id, 2);
