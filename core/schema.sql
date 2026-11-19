@@ -82,3 +82,13 @@ CREATE TABLE IF NOT EXISTS jobs (
   created_at  INTEGER NOT NULL,
   finished_at INTEGER
 );
+
+-- query paths used by the list views and the ladder
+CREATE INDEX IF NOT EXISTS ix_tracks_title ON tracks(title);
+CREATE INDEX IF NOT EXISTS ix_tracks_added ON tracks(added_at);
+CREATE INDEX IF NOT EXISTS ix_tracks_album_lower ON tracks(lower(album));
+CREATE INDEX IF NOT EXISTS ix_tracks_artist_lower ON tracks(lower(artist));
+CREATE INDEX IF NOT EXISTS ix_files_track_tier ON files(track_id, tier);
+CREATE INDEX IF NOT EXISTS ix_pt_playlist_pos ON playlist_tracks(playlist_id, position);
+CREATE INDEX IF NOT EXISTS ix_jobs_state ON jobs(state);
+CREATE INDEX IF NOT EXISTS ix_jobs_kind_state ON jobs(kind, state);
