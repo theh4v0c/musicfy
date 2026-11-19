@@ -3580,12 +3580,16 @@ $('np-like').onclick = () => state.current && toggleLike(state.current);
 $('mini-like') && ($('mini-like').onclick = () => state.current && toggleLike(state.current));
 
 document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => { state.history = []; $('back').hidden = true; nav(b.dataset.nav); });
-// collapsible sidebar, remembers the choice
+// collapsible sidebar: the toggle lives inside it, collapsed is an icon rail
 (() => {
   const app = $('app');
-  const btn = $('side-toggle');
+  const btn = $('side-collapse');
   if (!app || !btn) return;
-  const apply = (c) => app.classList.toggle('side-collapsed', c);
+  const apply = (c) => {
+    app.classList.toggle('side-collapsed', c);
+    btn.title = c ? 'Show sidebar' : 'Hide sidebar';
+    btn.setAttribute('aria-label', btn.title);
+  };
   apply(localStorage.getItem('mf-side-collapsed') === '1');
   btn.onclick = () => {
     const c = !app.classList.contains('side-collapsed');

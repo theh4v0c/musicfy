@@ -664,7 +664,19 @@ html, body { overflow-x: hidden; max-width: 100%; }
   .tno-play { display: flex; }
 }
 
-/* collapsible sidebar (desktop) */
-#app.side-collapsed { grid-template-columns: 0 1fr; }
-#app.side-collapsed .sidebar { display: none; }
-@media (max-width: 760px) { #side-toggle { display: none; } }
+/* collapsible sidebar (desktop): collapsed is an icon-only rail */
+.brand-row { display: flex; align-items: center; justify-content: space-between; padding: 20px 16px 14px 22px; }
+.brand { padding: 0; }
+.side-icon { background: none; border: none; color: var(--fg-mute); padding: 6px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; }
+.side-icon:hover { color: var(--fg); background: var(--bg-elev2); }
+#app.side-collapsed { grid-template-columns: 68px 1fr; }
+#app.side-collapsed .brand,
+#app.side-collapsed .slib-label,
+#app.side-collapsed .slib,
+#app.side-collapsed .slib-filter,
+#app.side-collapsed .slib-sort,
+#app.side-collapsed .slib-add { display: none; }
+#app.side-collapsed .brand-row { justify-content: center; padding: 20px 0 14px; }
+#app.side-collapsed .snav-btn { justify-content: center; gap: 0; padding: 13px 0; font-size: 0; }
+#app.side-collapsed .snav-btn svg { width: 22px; height: 22px; }
+@media (max-width: 760px) { .side-icon { display: none; } }
