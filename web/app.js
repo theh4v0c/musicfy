@@ -1837,6 +1837,14 @@ async function renderSearch() {
             card.className = 'chip-card';
             card.innerHTML = `<b>${esc(al.name)}</b><span>${esc(al.artist || '')}${al.year ? ' · ' + al.year : ''}</span>`;
             card.onclick = () => { q.value = `${al.artist} ${al.name}`; draw(); };
+            card.oncontextmenu = (e) => {
+              e.preventDefault();
+              toast(`Queueing "${al.name}"`, 4000);
+              api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ q: `download the album ${al.name} by ${al.artist}` }) })
+                .then((r) => { toast(r.spoken || 'Queueing album', 9000); if (r.data && r.data.queued) openDownloads(); })
+                .catch(() => toast('Could not queue that album', 4000));
+            };
             row.appendChild(card);
           }
           box.appendChild(sec);
@@ -1912,6 +1920,7 @@ async function renderSearch() {
         holder.replaceWith(box); return;
       }
       // catalogue answers first; the ladder is a fallback you open deliberately
+      const hasCatalogue = (((data.catalogue || {}).songs) || []).length > 0;
       const webBox = document.createElement('div');
       webBox.className = 'ladder-fold';
       const foldHead = document.createElement('div');
@@ -2139,7 +2148,7 @@ async function renderSearch() {
         };
         fold.appendChild(head);
         fold.appendChild(body);
-        outer.appendChild(fold);
+        if (!hasCatalogue) outer.appendChild(fold);
         holder.replaceWith(outer);
       } else {
         holder.replaceWith(box);
@@ -2413,7 +2422,9 @@ async function waitForJob(jobId, title, trackId = null, tries = 90) {
         bustCache();
         if (trackId) markRowOwned(trackId);
         toast(`Downloaded: ${title}`, 7000);
-        refreshView();
+        // refresh the row in place: rebuilding the view threw away the search results
+        if (state.view === 'search' || state.view === 'songs') { if (trackId) markRowOwned(trackId); }
+        else refreshView();
         return true;
       }
       if (j.state === 'error') {
