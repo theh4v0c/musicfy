@@ -1611,7 +1611,7 @@ async function renderSongs(push = true) {
       for (const [name, n] of rows) {
         const card = document.createElement('div');
         card.className = 'pcard';
-        card.innerHTML = `<div class="pcard-art ph">${esc(name.charAt(0).toUpperCase())}</div>
+        card.innerHTML = `<div class="pcard-art ph" style="background:${gradFor(name)};color:rgba(255,255,255,.9)">${esc(name.charAt(0).toUpperCase())}</div>
           <div class="pcard-name">${esc(name)}</div><div class="pcard-sub">${n} tracks</div>`;
         card.onclick = () => { browse = null; state.genreFilter = name; limit = 60; draw(); };
         grid.appendChild(card);
@@ -1635,7 +1635,7 @@ async function renderSongs(push = true) {
     for (const r of rows.slice(0, limit)) {
       const card = document.createElement('div');
       card.className = 'pcard';
-      card.innerHTML = `<div class="pcard-art ph">${esc(r.name.charAt(0).toUpperCase())}</div>
+      card.innerHTML = `<div class="pcard-art ph" style="background:${gradFor(r.name)};color:rgba(255,255,255,.9)">${esc(r.name.charAt(0).toUpperCase())}</div>
         <div class="pcard-name">${esc(r.name)}</div><div class="pcard-sub">${r.n} tracks</div>`;
       card.onclick = () => (browse === 'artists' ? renderArtist(r.name) : renderAlbum(r.name));
       g.appendChild(card);
