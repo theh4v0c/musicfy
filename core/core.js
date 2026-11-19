@@ -461,8 +461,15 @@ function gzipBody(file, body) {
   return gzipCache.get(key);
 }
 function sendStatic(req, res, body, type) {
+  // revalidate every load (ETag): a year-long "immutable" cache is how a stale app.js
+  // shadows a deploy for every client, which is exactly what kept happening.
+  const etag = '"' + require('node:crypto').createHash('md5').update(body).digest('hex') + '"';
+  if (req.headers['if-none-match'] === etag) {
+    res.writeHead(304, { etag, 'cache-control': 'no-cache' });
+    return res.end();
+  }
   const acceptsGzip = /gzip/.test(req.headers['accept-encoding'] || '');
-  const headers = { 'content-type': type, 'cache-control': 'public, max-age=31536000, immutable', vary: 'Accept-Encoding' };
+  const headers = { 'content-type': type, 'cache-control': 'no-cache', etag, vary: 'Accept-Encoding' };
   if (acceptsGzip) {
     const gz = gzipBody(type + body.length, body);
     headers['content-encoding'] = 'gzip';
