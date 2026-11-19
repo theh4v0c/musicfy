@@ -633,6 +633,10 @@ async function renderHome() {
     <div class="hero-sub">${state.playlists.length} playlists</div>
     <div class="quicktiles" id="quick"></div>
     <div id="rotation-slot"></div>
+    <div class="sec-title">Fresh in your library <small>NEWEST FIRST</small></div>
+    <div class="row-scroller" id="fresh-row"></div>
+    <div class="sec-title" id="newart-title" hidden>New artists <small>NEVER PLAYED</small></div>
+    <div class="artist-chips" id="newart-row"></div>
     <div class="sec-title">Recently played <small id="recent-hint"></small></div>
     <div class="row-scroller" id="recent-row"></div>
     <div class="sec-title">Your playlists <small>${state.playlists.length} TOTAL</small></div>
@@ -640,9 +644,30 @@ async function renderHome() {
   drawQuick();
   const g = $('home-grid');
   for (const p of state.playlists) g.appendChild(pcard(p));
+  drawDiscover();
   const rec = await loadRecentlyPlayed();
   drawRecents(rec);
   drawRotation(rec);
+}
+
+async function drawDiscover() {
+  const row = $('fresh-row'); if (!row) return;
+  try {
+    const d = await api('/api/discover', { nocache: true });
+    if (!$('fresh-row')) return;
+    for (const t of (d.recent || [])) row.appendChild(trackCard(t, d.recent, 'Fresh in your library'));
+    const wrap = $('newart-row'); const title = $('newart-title');
+    if (wrap && title && d.newArtists && d.newArtists.length) {
+      title.hidden = false;
+      for (const a of d.newArtists) {
+        const b = document.createElement('button');
+        b.className = 'chip-card sm';
+        b.innerHTML = `<b>${esc(a.artist)}</b><span>${a.n} never played</span>`;
+        b.onclick = () => renderArtist(a.artist);
+        wrap.appendChild(b);
+      }
+    }
+  } catch {}
 }
 
 /* the algorithm, visible: radio built from what you actually played */

@@ -832,10 +832,13 @@ function startLadderDownload(jobId, b, onDone) {
       db.prepare('INSERT OR REPLACE INTO resolutions (track_id,rung,quality,resolved_at) VALUES (?,?,?,?)')
         .run(tid, b.rung || 'yt-dlp', br ? `${Math.round(br / 1000)}k` : '320k', now());
       if (b.isrc) db.prepare('UPDATE tracks SET isrc=? WHERE id=?').run(b.isrc, tid);
-      const haveArt = fs.existsSync(coverFile(tid));
       const done = () => finish('done', `track ${tid}`);
-      if (!haveArt && b.thumb) saveThumb(b.thumb, tid).then(done).catch(done);
-      else done();
+      // prefer the album art embedded in the file over the source's video thumbnail
+      if (!fs.existsSync(coverFile(tid))) {
+        extractCover(tid, dest)
+          .then((ok) => (ok ? done() : (b.thumb ? saveThumb(b.thumb, tid).then(done).catch(done) : done())))
+          .catch(done);
+      } else done();
       } catch (e) {
         finish('error', String((e && e.message) || e).slice(0, 160));
       }
@@ -2525,6 +2528,21 @@ const server = http.createServer(async (req, res) => {
         LEFT JOIN resolutions r ON r.track_id=t.id
         GROUP BY t.id ORDER BY last_played DESC LIMIT ?`).all(limit);
       return json(res, 200, rows);
+    }
+
+    // discovery: what is new in the library, and which artists you have never played
+    if (u.pathname === '/api/discover') {
+      const owned = `EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')`;
+      const recent = db.prepare(`SELECT t.*, 1 AS owned, f.bitrate, r.rung, r.quality
+        FROM tracks t
+        LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
+        LEFT JOIN resolutions r ON r.track_id=t.id
+        WHERE ${owned} ORDER BY t.added_at DESC LIMIT 12`).all();
+      const newArtists = db.prepare(`SELECT t.artist, COUNT(*) n
+        FROM tracks t WHERE t.artist IS NOT NULL AND t.artist != '' AND ${owned}
+          AND NOT EXISTS (SELECT 1 FROM listens l JOIN tracks t2 ON t2.id=l.track_id WHERE lower(t2.artist)=lower(t.artist))
+        GROUP BY t.artist ORDER BY n DESC LIMIT 10`).all();
+      return json(res, 200, { recent, newArtists });
     }
 
     // track cover: embedded art served from cover cache
