@@ -1224,6 +1224,18 @@ const server = http.createServer(async (req, res) => {
       const body = fs.readFileSync(path.join(WEB, 'app.js'));
       return sendStatic(req, res, body, 'text/javascript; charset=utf-8');
     }
+    if (u.pathname === '/sw.js') {
+      res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache', 'service-worker-allowed': '/' });
+      return res.end(fs.readFileSync(path.join(WEB, 'sw.js')));
+    }
+    if (u.pathname === '/manifest.webmanifest') {
+      res.writeHead(200, { 'content-type': 'application/manifest+json; charset=utf-8', 'cache-control': 'no-cache' });
+      return res.end(fs.readFileSync(path.join(WEB, 'manifest.webmanifest')));
+    }
+    if (u.pathname === '/icon.svg') {
+      res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400' });
+      return res.end(fs.readFileSync(path.join(WEB, 'icon.svg')));
+    }
 
     if ((u.pathname === '/api/search/ladder' || u.pathname === '/api/ask' || u.pathname === '/api/agent') && !allow(u.pathname)) {
       return json(res, 429, { error: 'slow down', retry_after: 60 });

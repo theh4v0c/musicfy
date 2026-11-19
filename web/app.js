@@ -17,6 +17,7 @@ const state = {
   artV: 0,
   longSets: false,
   artistName: null, albumName: null,
+  offlineIds: new Set(),
 };
 
 const esc = (s) => (s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -203,6 +204,7 @@ function openCtx(t, x, y) {
     ${hasAudio(t) ? '<button data-act="tofile">Download to device</button>' : ''}
     ${hasAudio(t) ? `<button data-act="analyze">${t.bpm ? 'Re-analyze' : 'Analyze'} BPM &amp; key</button>` : ''}
     ${hasAudio(t) ? '<button data-act="tags">Write Traktor tags</button>' : ''}
+    ${hasAudio(t) ? `<button data-act="offline">${state.offlineIds && state.offlineIds.has(t.id) ? 'Remove from offline' : 'Save for offline'}</button>` : ''}
     <button data-act="addpl">Add to playlist</button>
     ${state.view === 'playlist' && state.playlistId ? '<button data-act="rmpl">Remove from this playlist</button>' : ''}
     ${(!t.ladder && t.id) ? '<button data-act="rename">Rename track</button>' : ''}
@@ -283,6 +285,13 @@ $('ctx').addEventListener('click', async (e) => {
       if (r.error) return toast(r.error, 6000);
       toast('Tags written. Open the file in Traktor to see BPM, key and cues.', 5000);
     } catch { toast('Could not write tags', 4000); }
+    return;
+  }
+  if (act === 'offline') {
+    if (!('serviceWorker' in navigator)) { toast('Offline playback needs HTTPS — open the Pangolin URL', 6000); return; }
+    const on = !(state.offlineIds && state.offlineIds.has(t.id));
+    postToSw(on ? { type: 'cache-track', id: t.id } : { type: 'uncache-track', id: t.id });
+    toast(on ? 'Saving for offline…' : 'Removed from offline', 4000);
     return;
   }
     if (act === 'upgrade') {
@@ -2703,7 +2712,7 @@ function trow(t, i, list) {
       : t.streamable
         ? `<div class="trbadge rung-yt" title="Plays from the source when you press play."><b>STREAM</b></div>`
         : `<div class="trbadge rung-mirror" title="Metadata only. Press the download icon to get the audio."><b>Not downloaded</b></div>`}
-    <div class="tdur">${t.duration ? fmt(t.duration) : '—'}</div>
+    <div class="tdur">${t.duration ? fmt(t.duration) : '—'}${state.offlineIds && state.offlineIds.has(t.id) ? '<span class="offline-dot" title="Available offline"></span>' : ''}</div>
     ${hasAudio(t)
       ? `<button class="tmore" title="More options">${IC.dots}</button>`
       : `<button class="tmore tdl" title="Download this track">${IC.download}</button>`}`;
@@ -3818,6 +3827,29 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft') prevTrack();
   if (e.key === 'Escape') { closeCtx(); $('queue-drawer').hidden = true; }
 });
+
+/* ============ offline (service worker) ============ */
+function postToSw(msg) {
+  try {
+    const sw = navigator.serviceWorker;
+    const target = sw && (sw.controller || (state.sw && state.sw.active));
+    if (target) target.postMessage(msg);
+  } catch {}
+}
+function onSwMessage(e) {
+  const d = e.data || {};
+  if (d.type === 'offline-list') { state.offlineIds = new Set(d.ids || []); try { refreshView(); } catch {} }
+  else if (d.type === 'offline-set') {
+    if (d.on) state.offlineIds.add(d.id); else state.offlineIds.delete(d.id);
+    toast(d.on ? 'Saved for offline' : 'Removed from offline', 3000);
+    try { refreshView(); } catch {}
+  } else if (d.type === 'offline-fail') { toast('Could not save for offline', 4000); }
+}
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', onSwMessage);
+  navigator.serviceWorker.register('/sw.js').then((reg) => { state.sw = reg; }).catch(() => {});
+  navigator.serviceWorker.ready.then(() => postToSw({ type: 'list-offline' })).catch(() => {});
+}
 
 /* ============ boot ============ */
 async function loadPlaylists() {
