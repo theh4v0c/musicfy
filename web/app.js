@@ -1590,11 +1590,25 @@ async function renderSongs(push = true) {
       }
       if (b.dataset.browse === 'fixmeta') {
         toast('Repairing metadata…', 5000);
-        api('/api/maintenance/repair', { method: 'POST' }).then((r) => {
+        api('/api/maintenance/repair', { method: 'POST' }).then(async (r) => {
           bustCache();
           toast(`Years fixed ${r.fixed_year || 0}, placeholders cleared ${r.cleared_placeholder_album || 0}`, 6000);
-          state.allTracks = null;
-          renderSongs(false);
+          // refresh the rows in place: keep the scroll position, filter, query and expanded limit
+          const sc = document.getElementById('songs-list');
+          const viewEl = document.getElementById('view');
+          const keep = { win: window.scrollY, view: viewEl ? viewEl.scrollTop : 0, list: sc ? sc.scrollTop : 0 };
+          try {
+            const fresh = await api('/api/tracks', { nocache: true });
+            all.length = 0; all.push(...fresh);
+            state.allTracks = all;
+            draw();
+            requestAnimationFrame(() => {
+              try { window.scrollTo(0, keep.win); } catch {}
+              if (viewEl) viewEl.scrollTop = keep.view;
+              const sc2 = document.getElementById('songs-list');
+              if (sc2) sc2.scrollTop = keep.list;
+            });
+          } catch {}
         }).catch(() => toast('Repair failed', 5000));
         return;
       }
