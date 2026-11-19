@@ -369,12 +369,36 @@ function registerRow(t) {
 
 /* ============ toasts ============ */
 function toast(msg, ms = 2600) {
+  const host = $('toasts');
+  // never let a burst of toasts fill the screen
+  while (host.children.length >= 4) host.firstElementChild.remove();
   const el = document.createElement('div');
   el.className = 'toast'; el.textContent = msg;
-  $('toasts').appendChild(el);
+  host.appendChild(el);
   setTimeout(() => el.classList.add('out'), Math.max(600, ms - 400));
   setTimeout(() => el.remove(), ms);
   return el;
+}
+// one toast that updates in place, for long multi-file work
+function toastPersistent(initial) {
+  const host = $('toasts');
+  let el = document.getElementById('mf-toast-status');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'mf-toast-status';
+    el.className = 'toast';
+    host.appendChild(el);
+  }
+  el.classList.remove('out');
+  el.textContent = initial;
+  return {
+    update(t) { el.textContent = t; },
+    done(finalMsg, ms = 6000) {
+      el.textContent = finalMsg;
+      el.classList.add('out');
+      setTimeout(() => el.remove(), Math.max(600, ms));
+    },
+  };
 }
 
 // a persistent pill with an animated gradient fill, for work that takes a while
@@ -1106,8 +1130,9 @@ async function openPlaylist(pid, push = true) {
   if (upBtn) upBtn.onclick = () => pickFiles('audio/*', async (files) => {
     const total = files.length;
     let ok = 0;
+    const t = toastPersistent(`Uploading ${total} file${total > 1 ? 's' : ''} to this playlist…`);
     for (let i = 0; i < total; i += 1) {
-      toast(`Uploading ${i + 1} of ${total}: ${files[i].name.slice(0, 30)}`, 60000);
+      t.update(`Uploading ${i + 1} of ${total}: ${files[i].name.slice(0, 30)}`);
       try {
         const d = await uploadTrack(files[i]);
         await api(`/api/playlists/${encodeURIComponent(pid)}/tracks`, {
@@ -1117,7 +1142,7 @@ async function openPlaylist(pid, push = true) {
       } catch {}
     }
     state.allTracks = null; bustCache(); await loadPlaylists();
-    toast(`Added ${ok} of ${total} track${total === 1 ? '' : 's'} to this playlist`, 6000);
+    t.done(`Added ${ok} of ${total} track${total === 1 ? '' : 's'} to this playlist`, 6000);
     openPlaylist(pid, false);
   });
   const harmBtn = $('pl-harm');
@@ -3689,16 +3714,16 @@ async function uploadFiles(files) {
   const total = files.length;
   let ok = 0;
   let failed = 0;
-  toast(`Uploading ${total} file${total > 1 ? 's' : ''}`);
+  const t = toastPersistent(`Uploading ${total} file${total > 1 ? 's' : ''}…`);
   for (let i = 0; i < total; i += 1) {
     const f = files[i];
-    toast(`Uploading ${i + 1} of ${total}: ${f.name.slice(0, 34)}`, 60000);
+    t.update(`Uploading ${i + 1} of ${total}: ${f.name.slice(0, 34)}`);
     try { await uploadTrack(f); ok += 1; }
     catch (e) { failed += 1; }
   }
   state.allTracks = null;
   bustCache();
-  toast(failed ? `Added ${ok}, ${failed} failed` : `Added ${ok} track${ok > 1 ? 's' : ''}`, 8000);
+  t.done(failed ? `Added ${ok}, ${failed} failed` : `Added ${ok} track${ok > 1 ? 's' : ''}`, 8000);
   refreshView();
 }
 
