@@ -560,6 +560,24 @@ function openPlaylistMenu(p, x, y) {
 
 /* long press helper: fires fn after 500ms hold, suppresses the trailing click */
 // wires both gesture and mouse: long press on a phone, right click on a desktop
+// simple action list for cards: desktop right click or phone long press
+function openCardMenu(title, actions, x, y) {
+  const m = $('ctx');
+  m.innerHTML = `<div class="ctx-title">${esc(title)}</div>` +
+    actions.map((a, i) => `<button data-ci="${i}">${esc(a.label)}</button>`).join('');
+  m.classList.add('open');
+  m.style.left = (x || Math.max(8, innerWidth / 2 - 150)) + 'px';
+  m.style.top = (y || innerHeight / 2 - 120) + 'px';
+  m.onclick = async (e) => {
+    const b = e.target.closest('button[data-ci]');
+    if (!b) return;
+    const a = actions[Number(b.dataset.ci)];
+    m.classList.remove('open');
+    m.onclick = null;
+    try { await a.run(); } catch { toast('That did not work', 4000); }
+  };
+}
+
 function bindContext(el, fn) {
   el.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); fn(e.clientX || 0, e.clientY || 0); };
   longPress(el, () => {
@@ -1834,6 +1852,14 @@ async function renderSearch() {
             card.className = 'chip-card';
             card.innerHTML = `<b>${esc(a.name)}</b><span>${esc(a.genre || 'artist')}</span>`;
             card.onclick = () => { q.value = a.name; draw(); };
+            bindContext(card, (x, y) => openCardMenu(a.name, [
+              { label: 'Search this artist', run: async () => { q.value = a.name; draw(); } },
+              { label: 'Download their latest album', run: async () => {
+                  const r = await api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ q: `download the latest album by ${a.name}` }) });
+                  toast(r.spoken || 'Queueing', 8000);
+                } },
+            ], x, y));
             row.appendChild(card);
           }
           box.appendChild(sec);
@@ -2246,6 +2272,8 @@ function trow(t, i, list) {
     if (state.current && state.current.id === t.id && audio.src) { togglePlay(); return; }
     playList(list || [t], list ? list.indexOf(t) : 0, false, state.view);
   };
+  // long press anywhere on the row is the phone's right click
+  bindContext(el, (x, y) => openCtx(t, x, y));
   const artEl = el.querySelector('.tart');
   if (artEl) {
     artEl.style.cursor = 'pointer';
