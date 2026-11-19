@@ -404,6 +404,12 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .chip-card.sm { min-width: 120px; padding: 10px 14px; }
 .show-all { margin: 14px auto 0; display: block; }
 .lib-actions { display: flex; gap: 10px; margin-bottom: 22px; align-items: center; flex-wrap: wrap; }
+.dj-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.dj-name { display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; }
+.dj-name b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dj-name small { color: var(--fg-mute); font-size: 11px; flex: none; }
+.dj-acts { display: flex; gap: 8px; flex: none; }
+@media (max-width: 700px) { .dj-row { flex-direction: column; align-items: flex-start; } .dj-acts { width: 100%; } .dj-acts .btn { flex: 1; } }
 .songs-head .search { flex: 1; min-width: 220px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 99px; color: var(--fg); font-family: inherit; font-size: 13.5px; padding: 10px 16px; outline: none; }
 .songs-head .search:focus { border-color: var(--acc); }
 

@@ -432,6 +432,7 @@ function nav(v, push = true) {
   else if (v === 'liked') renderLiked();
   else if (v === 'songs') renderSongs(push);
   else if (v === 'askai') renderAskAi();
+  else if (v === 'djexport') renderDjExport();
   else if (v === 'settings') renderSettings();
   else if (v === 'import') renderImport();
   resetScroll();
@@ -1136,6 +1137,45 @@ async function renderLibrary() {
     await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
     afterWrite(); await loadPlaylists(); renderLibrary(); toast('Playlist created');
   };
+}
+
+// DJ export: analysis coverage, a batch analyse for electronic, and per-playlist export
+async function renderDjExport() {
+  setNav('djexport'); state.playlistId = null; renderSidebar();
+  $('view-title').textContent = 'DJ Export';
+  const v = $('view');
+  v.innerHTML = `<div class="sec-title" style="margin-top:0">Analysis <small id="dj-cov">…</small></div>
+    <div class="lib-actions">
+      <button class="btn btn-ghost" id="dj-analyze">Analyze tracks (BPM + beat grid)</button>
+      <span class="pill" id="dj-status"></span>
+    </div>
+    <div class="sec-title">Playlists <small>EXPORT READY</small></div>
+    <div id="dj-list"></div>`;
+  try {
+    const st = await api('/api/analyze/status', { nocache: true });
+    const cov = document.getElementById('dj-cov');
+    if (cov) cov.textContent = `${st.analysed}/${st.total} ANALYZED · ${st.remaining} LEFT`;
+  } catch {}
+  const btn = document.getElementById('dj-analyze');
+  if (btn) btn.onclick = async () => {
+    try {
+      const r = await api('/api/analyze/run?limit=500&workers=2', { method: 'POST' });
+      const s = document.getElementById('dj-status');
+      if (s) s.textContent = `STARTED ${r.limit} · ${r.workers} WORKERS`;
+      toast('Analyzing in the background', 5000);
+    } catch { toast('Could not start analysis'); }
+  };
+  const list = document.getElementById('dj-list');
+  for (const p of state.playlists) {
+    const row = document.createElement('div');
+    row.className = 'dj-row';
+    row.innerHTML = `<span class="dj-name"><b>${esc(p.name)}</b> <small>${p.n_tracks} tracks</small></span>
+      <span class="dj-acts"><button class="btn btn-ghost" data-rb>Rekordbox .xml</button><button class="btn btn-ghost" data-tr>Traktor .nml</button></span>`;
+    row.querySelector('[data-rb]').onclick = () => { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/rekordbox.xml`; };
+    row.querySelector('[data-tr]').onclick = () => { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/traktor.nml`; };
+    list.appendChild(row);
+  }
+  if (!state.playlists.length) list.innerHTML = '<div class="empty">No playlists yet.</div>';
 }
 
 /* every track the server knows about, playlist membership or not */

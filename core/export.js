@@ -17,10 +17,15 @@ function fileUri(p) {
 
 function rowsFor(db, playlistId) {
   return db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.genre, t.bpm, t.key, t.key_scale,
-      t.duration, t.beat_grid, f.path, f.size, f.bitrate
+      t.duration, t.beat_grid, t.year, f.path, f.size, f.bitrate
     FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
     LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
     WHERE pt.playlist_id=? ORDER BY pt.position`).all(playlistId);
+}
+
+function tonality(key, scale) {
+  if (!key) return '';
+  return `${key}${scale === 'minor' ? 'm' : ''}`;
 }
 
 // downbeats every 16 bars, capped at 8 memory cues
@@ -57,10 +62,16 @@ function rekordboxXml(db, playlistId) {
       `Album="${xmlEsc(t.album)}"`, `Genre="${xmlEsc(t.genre || '')}"`, `Kind="${kindOf(t.path)}"`,
       `Size="${Number(t.size) || 0}"`, `TotalTime="${Math.round(Number(t.duration) || 0)}"`,
       `AverageBpm="${fmtBpm(t.bpm)}"`, `BitRate="${t.bitrate ? Math.round(Number(t.bitrate) / 1000) : 320}"`,
-      'SampleRate="44100"', 'DateAdded="2026-11-19"', `Location="${xmlEsc(fileUri(t.path))}"`,
+      'SampleRate="44100"', 'DateAdded="2026-11-19"',
+      // rekordbox reads Tonality as the musical key ("F#m"); it drives harmonic mixing
+      `Tonality="${xmlEsc(tonality(t.key, t.key_scale))}"`,
+      `Year="${Number(t.year) || 0}"`,
+      `Location="${xmlEsc(fileUri(t.path))}"`,
     ].join(' ');
     L.push(`    <TRACK ${attrs}>`);
+    // one TEMPO node is correct for a constant grid (rekordbox emits more only on BPM changes)
     L.push(`      <TEMPO Inizio="0.000" Bpm="${fmtBpm(t.bpm)}" Metro="4/4" Battito="1"/>`);
+    // auto-generated cues become hot cues A-H (Num 0..7), which CDJs can jump to
     cues(t.beat_grid).forEach((start, k) => {
       L.push(`      <POSITION_MARK Name="" Type="0" Start="${Number(start).toFixed(3)}" Num="${k}"/>`);
     });
