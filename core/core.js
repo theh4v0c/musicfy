@@ -99,7 +99,7 @@ function backfillDupKeys() {
 backfillDupKeys();
 
 // columns for playlist entries that stream from a source instead of a local file
-for (const col of ['src_kind TEXT', 'src_id TEXT', 'src_url TEXT', 'isrc TEXT', 'beat_grid TEXT']) {
+for (const col of ['src_kind TEXT', 'src_id TEXT', 'src_url TEXT', 'isrc TEXT', 'beat_grid TEXT', 'track_no INTEGER']) {
   try { db.exec(`ALTER TABLE tracks ADD COLUMN ${col}`); } catch {}
 }
 
@@ -186,21 +186,21 @@ const uidOf = (a, al, t) =>
     .replace(/\s+/g, ' ');
 
 // ---------- helpers ----------
-function upsertTrack({ title, artist, album, year, duration, format, spotify_id }) {
+function upsertTrack({ title, artist, album, year, duration, format, spotify_id, track_no }) {
   const dupKey = dupKeyOf(artist, title);
   const existing = db.prepare('SELECT id FROM tracks WHERE dup_key=?').get(dupKey);
   if (existing) {
     // fill in blanks on the row we already have instead of creating a second one
     db.prepare(`UPDATE tracks SET album=COALESCE(NULLIF(album,''), ?), year=COALESCE(year, ?),
-      duration=COALESCE(duration, ?), spotify_id=COALESCE(spotify_id, ?), updated_at=? WHERE id=?`)
-      .run(album || '', year || null, duration || null, spotify_id || null, now(), existing.id);
+      duration=COALESCE(duration, ?), spotify_id=COALESCE(spotify_id, ?), track_no=COALESCE(track_no, ?), updated_at=? WHERE id=?`)
+      .run(album || '', year || null, duration || null, spotify_id || null, track_no || null, now(), existing.id);
     return existing.id;
   }
   const uid = uidOf(artist, album, title);
   const t = now();
-  const r = db.prepare(`INSERT INTO tracks (uid,dup_key,title,artist,album,year,duration,format,spotify_id,added_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(uid, dupKey, title, artist || '', album || '', year || null, duration || null, format || null, spotify_id || null, t, t);
+  const r = db.prepare(`INSERT INTO tracks (uid,dup_key,title,artist,album,year,duration,format,spotify_id,track_no,added_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(uid, dupKey, title, artist || '', album || '', year || null, duration || null, format || null, spotify_id || null, track_no || null, t, t);
   return Number(r.lastInsertRowid);
 }
 
@@ -307,7 +307,7 @@ function probe(file) {
   return new Promise((resolve) => {
     const { spawn } = require('node:child_process');
     const ff = spawn('ffprobe', ['-v', 'error', '-show_entries',
-      'format=duration,bit_rate,size:format_tags=title,artist,album,date',
+      'format=duration,bit_rate,size:format_tags=title,artist,album,date,track',
       '-of', 'json', file]);
     let out = '';
     ff.stdout.on('data', d => out += d);
@@ -315,8 +315,10 @@ function probe(file) {
       try {
         const f = JSON.parse(out).format || {};
         const tg = f.tags || {};
+        const trk = String(tg.track || '').match(/^\d+/);
         resolve({
           title: tg.title, artist: tg.artist, album: tg.album, year: (tg.date || '').match(/^\d{4}/) ? tg.date.slice(0, 4) : null,
+          trackNumber: trk ? Number(trk[0]) : null,
           duration: f.duration ? Number(f.duration) : null,
           bitrate: f.bit_rate ? Number(f.bit_rate) : null,
           size: f.size ? Number(f.size) : null,
@@ -1719,6 +1721,7 @@ const server = http.createServer(async (req, res) => {
         album: meta.album || '',
         year: meta.year || null,
         duration: meta.duration,
+        track_no: meta.trackNumber || null,
         format: (name.split('.').pop() || 'mp3').toLowerCase(),
       });
       upsertFile({ track_id: tid, path: dest, tier: 'owned', bitrate: meta.bitrate, size: meta.size, mtime: meta.mtime });
@@ -1971,6 +1974,21 @@ const server = http.createServer(async (req, res) => {
         try {
           const m = await probe(r.path);
           if (m && m.duration) { db.prepare('UPDATE tracks SET duration=? WHERE id=?').run(m.duration, r.id); fixed += 1; }
+        } catch {}
+      }
+      return json(res, 200, { fixed, checked: rows.length });
+    }
+
+    // backfill album track numbers from the files (needed for album ordering)
+    if (u.pathname === '/api/maintenance/fill-tracknos' && req.method === 'POST') {
+      const rows = db.prepare(`SELECT t.id, f.path FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned'
+        WHERE t.track_no IS NULL LIMIT 2000`).all();
+      let fixed = 0;
+      for (const r of rows) {
+        if (!fs.existsSync(r.path)) continue;
+        try {
+          const m = await probe(r.path);
+          if (m && m.trackNumber) { db.prepare('UPDATE tracks SET track_no=? WHERE id=?').run(m.trackNumber, r.id); fixed += 1; }
         } catch {}
       }
       return json(res, 200, { fixed, checked: rows.length });
@@ -3472,11 +3490,28 @@ const server = http.createServer(async (req, res) => {
     const mGroup = u.pathname.match(/^\/api\/group\/(artist|album)\/(.+)$/);
     if (mGroup) {
       const col = mGroup[1];
-      const rows = db.prepare(`SELECT t.*, (f.id IS NOT NULL) AS owned, (t.src_id IS NOT NULL AND t.src_id != '') AS streamable, f.bitrate, r.rung, r.quality
+      const gname = decodeURIComponent(mGroup[2]);
+      let rows = db.prepare(`SELECT t.*, (f.id IS NOT NULL) AS owned, (t.src_id IS NOT NULL AND t.src_id != '') AS streamable, f.bitrate, r.rung, r.quality
         FROM tracks t
         LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
         LEFT JOIN resolutions r ON r.track_id=t.id
-        WHERE lower(${col})=lower(?) ORDER BY t.title`).all(decodeURIComponent(mGroup[2]));
+        WHERE lower(${col})=lower(?) ORDER BY COALESCE(t.track_no, 9999), t.id`).all(gname);
+      // album pages: sort by the album's official track order when we can get it
+      if (col === 'album' && rows.length > 1) {
+        try {
+          const list = await identity.albumTracklist(gname, rows[0].artist);
+          if (list && list.length) {
+            const nk = (s) => String(s || '').toLowerCase().replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+            const idx = new Map();
+            list.forEach((s, i) => idx.set(nk(s.title), i));
+            rows = rows.slice().sort((a, b) => {
+              const ia = idx.has(nk(a.title)) ? idx.get(nk(a.title)) : 9999;
+              const ib = idx.has(nk(b.title)) ? idx.get(nk(b.title)) : 9999;
+              return ia - ib || a.id - b.id;
+            });
+          }
+        } catch {}
+      }
       return json(res, 200, rows);
     }
 

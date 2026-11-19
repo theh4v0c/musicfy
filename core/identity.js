@@ -168,4 +168,33 @@ async function catalog(query, { songs = 40, albums = 12, artists = 6 } = {}) {
   };
 }
 
-module.exports = { canon, canonQuery, familyOf, catalog };
+// the ordered tracklist of one album, from iTunes, so album pages can sort by track number
+async function albumTracklist(name, artist) {
+  const key = 'albtrk:' + norm(name) + '|' + norm(artist || '');
+  const c = load();
+  if (c[key] && Date.now() - c[key].at < 30 * 24 * 3600 * 1000) return c[key].list || null;
+  await throttle();
+  let list = null;
+  try {
+    const q = encodeURIComponent(`${name} ${artist || ''}`.trim());
+    const search = await getJson(`https://itunes.apple.com/search?term=${q}&entity=album&limit=8`);
+    const albums = (search.results || []).filter((a) => a.wrapperType === 'collection');
+    let best = null;
+    for (const a of albums) {
+      const s = similarity(a.collectionName, name) * (artist ? (0.6 + 0.4 * similarity(a.artistName, artist)) : 1);
+      if (!best || s > best.s) best = { s, a };
+    }
+    if (best && best.s >= 0.4) {
+      await throttle();
+      const look = await getJson(`https://itunes.apple.com/lookup?id=${best.a.collectionId}&entity=song&limit=200`);
+      const songs = (look.results || []).filter((r) => r.wrapperType === 'track' && r.trackName);
+      list = songs.sort((x, y) => (x.trackNumber || 0) - (y.trackNumber || 0))
+        .map((r) => ({ title: r.trackName, trackNumber: r.trackNumber || 0 }));
+    }
+  } catch {}
+  c[key] = { at: Date.now(), list };
+  save();
+  return list;
+}
+
+module.exports = { canon, canonQuery, familyOf, catalog, albumTracklist };

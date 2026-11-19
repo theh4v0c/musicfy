@@ -1613,10 +1613,11 @@ async function renderSongs(push = true) {
       if (b.dataset.browse === 'fixmeta') {
         toast('Repairing metadata…', 5000);
         api('/api/maintenance/repair', { method: 'POST' }).then(async (r) => {
-          let durFixed = 0;
+          let durFixed = 0, trkFixed = 0;
           try { const dd = await api('/api/maintenance/fill-durations', { method: 'POST' }); durFixed = dd.fixed || 0; } catch {}
+          try { const tt = await api('/api/maintenance/fill-tracknos', { method: 'POST' }); trkFixed = tt.fixed || 0; } catch {}
           bustCache();
-          toast(`Years fixed ${r.fixed_year || 0}, placeholders cleared ${r.cleared_placeholder_album || 0}, durations filled ${durFixed}`, 6000);
+          toast(`Years fixed ${r.fixed_year || 0}, placeholders cleared ${r.cleared_placeholder_album || 0}, durations ${durFixed}, track numbers ${trkFixed}`, 7000);
           // refresh the rows in place: keep the scroll position, filter, query and expanded limit
           const sc = document.getElementById('songs-list');
           const viewEl = document.getElementById('view');
