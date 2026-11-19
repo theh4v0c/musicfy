@@ -3809,11 +3809,11 @@ async function loadPlaylists() {
   renderSidebar();
 }
 (async () => {
+  const bootView = state.view; // capture before any await so an early nav wins
   try {
     try { primeFromCache(); } catch {}
     try { restoreQueue(); } catch {}
     try { const s = await api('/api/settings', { nocache: true }); state.settings = s.settings || {}; } catch { state.settings = {}; }
-    const bootView = state.view;
     await loadPlaylists();
     try { await syncLikes(); } catch {}
     paintPill();
