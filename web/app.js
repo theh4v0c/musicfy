@@ -1496,6 +1496,7 @@ async function renderSongs(push = true) {
       <button class="chip-card sm" data-browse="uploadfolder"><b>Upload a folder</b><span>ADDS EVERY TRACK INSIDE</span></button>
       <button class="chip-card sm" data-browse="fillgenres"><b>Fill genres</b><span>FROM MUSICBRAINZ</span></button>
       <button class="chip-card sm" data-browse="covers"><b>Find missing covers</b><span>LOOKS UP ARTWORK</span></button>
+      <button class="chip-card sm" data-browse="fixmeta"><b>Fix metadata</b><span>YEARS &amp; PLACEHOLDERS</span></button>
       <button class="chip-card sm" data-browse="bpm"><b>Sort by BPM</b><span>${all.filter((t) => t.bpm).length} ANALYSED</span></button>
       <button class="chip-card sm" data-browse="genres"><b>Genres</b><span>BROWSE BY FAMILY</span></button>`;
     chips.querySelectorAll('[data-browse]').forEach((b) => b.onclick = async () => {
@@ -1585,6 +1586,16 @@ async function renderSongs(push = true) {
           toast((r.found ? `${r.found} covers found. ` : '') + `${r.remaining} still missing` + (names ? `: ${names}${more}` : ''), 12000);
           renderSongs(false);
         }).catch(() => toast('cover lookup failed', 5000));
+        return;
+      }
+      if (b.dataset.browse === 'fixmeta') {
+        toast('Repairing metadata…', 5000);
+        api('/api/maintenance/repair', { method: 'POST' }).then((r) => {
+          bustCache();
+          toast(`Years fixed ${r.fixed_year || 0}, placeholders cleared ${r.cleared_placeholder_album || 0}`, 6000);
+          state.allTracks = null;
+          renderSongs(false);
+        }).catch(() => toast('Repair failed', 5000));
         return;
       }
       if (b.dataset.browse === 'dedupe') {
