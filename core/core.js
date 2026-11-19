@@ -1939,6 +1939,21 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // backfill missing durations for owned files (imports can leave duration null)
+    if (u.pathname === '/api/maintenance/fill-durations' && req.method === 'POST') {
+      const rows = db.prepare(`SELECT t.id, f.path FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned'
+        WHERE t.duration IS NULL OR t.duration = 0 LIMIT 1000`).all();
+      let fixed = 0;
+      for (const r of rows) {
+        if (!fs.existsSync(r.path)) continue;
+        try {
+          const m = await probe(r.path);
+          if (m && m.duration) { db.prepare('UPDATE tracks SET duration=? WHERE id=?').run(m.duration, r.id); fixed += 1; }
+        } catch {}
+      }
+      return json(res, 200, { fixed, checked: rows.length });
+    }
+
     // stop everything that is queued or running
     if (u.pathname === '/api/downloads/cancel-all' && req.method === 'POST') {
       const live = db.prepare("SELECT id, payload FROM jobs WHERE state IN ('queued','running') AND kind='track-download'").all();

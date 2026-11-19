@@ -1591,8 +1591,10 @@ async function renderSongs(push = true) {
       if (b.dataset.browse === 'fixmeta') {
         toast('Repairing metadata…', 5000);
         api('/api/maintenance/repair', { method: 'POST' }).then(async (r) => {
+          let durFixed = 0;
+          try { const dd = await api('/api/maintenance/fill-durations', { method: 'POST' }); durFixed = dd.fixed || 0; } catch {}
           bustCache();
-          toast(`Years fixed ${r.fixed_year || 0}, placeholders cleared ${r.cleared_placeholder_album || 0}`, 6000);
+          toast(`Years fixed ${r.fixed_year || 0}, placeholders cleared ${r.cleared_placeholder_album || 0}, durations filled ${durFixed}`, 6000);
           // refresh the rows in place: keep the scroll position, filter, query and expanded limit
           const sc = document.getElementById('songs-list');
           const viewEl = document.getElementById('view');
@@ -2701,7 +2703,7 @@ function trow(t, i, list) {
       : t.streamable
         ? `<div class="trbadge rung-yt" title="Plays from the source when you press play."><b>STREAM</b></div>`
         : `<div class="trbadge rung-mirror" title="Metadata only. Press the download icon to get the audio."><b>Not downloaded</b></div>`}
-    <div class="tdur">${fmt(t.duration)}</div>
+    <div class="tdur">${t.duration ? fmt(t.duration) : '—'}</div>
     ${hasAudio(t)
       ? `<button class="tmore" title="More options">${IC.dots}</button>`
       : `<button class="tmore tdl" title="Download this track">${IC.download}</button>`}`;
