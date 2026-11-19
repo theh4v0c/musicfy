@@ -99,7 +99,18 @@ async function api(p, opts) {
   const bypass = !!(opts && opts.nocache);
   const cached = isGet && !bypass && CACHEABLE.test(p) ? cacheAge(p) : null;
   if (cached && cached.age < 90) return cached.body;
-  const r = await fetch(p, opts);
+  // no request may hang the interface forever
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), (opts && opts.timeout) || 60000);
+  let r;
+  try {
+    r = await fetch(p, { signal: ctl.signal, ...(opts || {}) });
+  } catch (e) {
+    if (cached) return cached.body;
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   if (!r.ok) {
     if (cached) return cached.body;       // stale beats broken while offline
     throw new Error(r.status);
@@ -240,15 +251,18 @@ function closeCtx(force = false) {
 // every sheet sits above a full screen transparent backdrop; the backdrop is the only
 // thing that dismisses it, so an outside tap can neither miss nor hit the page below
 let ctxOpenedAt = 0;
+let ctxOpenedByTouch = false;
 function markCtxOpen() {
   ctxOpenedAt = Date.now();
+  ctxOpenedByTouch = Date.now() - lastTouchAt < 1500;
   const bg = $('ctx-bg');
   if (bg) bg.hidden = false;
 }
 // safety net for browsers that still emit a click on the lift of a long press: the menu
-// has just appeared under the finger, so a click in the first 350ms is not a real choice
+// has just appeared under the finger, so a click in the first 350ms is not a real choice.
+// A mouse-opened menu is never guarded: right click then click is a normal, fast action.
 $('ctx').addEventListener('click', (e) => {
-  if (Date.now() - ctxOpenedAt < 350) { e.stopImmediatePropagation(); e.preventDefault(); }
+  if (ctxOpenedByTouch && Date.now() - ctxOpenedAt < 350) { e.stopImmediatePropagation(); e.preventDefault(); }
 }, true);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCtx(); });
 
@@ -2800,7 +2814,7 @@ function trow(t, i, list) {
   el.innerHTML = `
     <div class="tno"><span class="tno-num">${String(i + 1).padStart(2, '0')}</span><button class="tno-play" aria-label="Play">${IC.play}</button></div>
     ${artTag(t, 'tart', 96)}
-    <div class="tmeta"><div class="tt">${esc(t.title)}</div>${t.album ? `<div class="talbum-line"><span class="alink">${esc(t.album)}</span></div>` : ''}${t.genre || t.genre_family ? `<button class="genrechip" data-kind="genre">${esc(t.genre_family || t.genre)}</button>` : ''}${t.bpm ? `<div class="tbpm">${Math.round(t.bpm)} BPM${t.key ? ` <button class="keychip key-${keyHueClass(t.key, t.key_scale)}" data-kind="key" title="Sort by key">${esc(t.key)}${t.key_scale === 'minor' ? 'm' : ''}</button>` : ''}</div>` : ''}</div>
+    <div class="tmeta"><div class="tt">${esc(t.title)}</div>${t.album ? `<div class="talbum-line">${t.artist ? `<span class="tal-artist">${esc(t.artist)}</span><span class="tal-sep"> &middot; </span>` : ''}<span class="alink">${esc(t.album)}</span></div>` : ''}${t.genre || t.genre_family ? `<button class="genrechip" data-kind="genre">${esc(t.genre_family || t.genre)}</button>` : ''}${t.bpm ? `<div class="tbpm">${Math.round(t.bpm)} BPM${t.key ? ` <button class="keychip key-${keyHueClass(t.key, t.key_scale)}" data-kind="key" title="Sort by key">${esc(t.key)}${t.key_scale === 'minor' ? 'm' : ''}</button>` : ''}</div>` : ''}</div>
     <div class="tartist"><span class="alink ${t.artist ? '' : 'muted'}" data-kind="artist">${esc(t.artist || 'unknown artist')}</span></div>
     <div class="talbum"><span class="alink" data-kind="album">${esc(t.album || '')}</span></div>
     <div class="tadded">${esc(added)}</div>
@@ -3094,17 +3108,21 @@ async function renderAlbum(name, push = true) {
   const gnB = $('g-n'); const elB = $('g-list');
   if (!gnB || !elB) return;
   gnB.textContent = list.length;
-  if (!list.length) { elB.innerHTML = `<div class="empty">No owned tracks for this album.</div>`; return; }
-  list.forEach((t, i) => { registerRow(t); elB.appendChild(trow(t, i, list)); });
-  const gpB = $('g-play'); if (gpB) gpB.onclick = () => playList(list, 0, false, name);
+  if (!list.length) elB.innerHTML = `<div class="empty">Nothing from this album is here yet. Use Download album to fetch the full tracklist.</div>`;
+  else list.forEach((t, i) => { registerRow(t); elB.appendChild(trow(t, i, list)); });
+  const gpB = $('g-play'); if (gpB) gpB.onclick = () => { if (list.length) playList(list, 0, false, name); };
   $('g-dl').onclick = async () => {
     const btn = $('g-dl');
+    const label = btn.textContent;
     btn.disabled = true;
+    // the catalogue lookup can take a moment; say so instead of looking frozen
+    btn.textContent = 'Checking the tracklist…';
     try {
       const r = await api('/api/albums/download', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
       toast(r.queued ? `Downloading ${r.queued} of ${r.total} tracks` : 'Everything on this album is already here', 6000);
-      if (r.queued) openDownloads();
+      if (r.queued) { openDownloads(); refreshView(); }
     } catch { toast('Could not queue the album', 4000); }
+    btn.textContent = label;
     btn.disabled = false;
   };
   $('g-pick').onclick = async () => {
@@ -3931,10 +3949,14 @@ async function uploadPlaylistCover(pid) {
 }
 
 document.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT') { if (e.key === 'Escape') e.target.blur(); return; }
-  if (e.key === ' ') { e.preventDefault(); togglePlay(); }
-  if (e.key === 'ArrowRight') nextTrack();
-  if (e.key === 'ArrowLeft') prevTrack();
+  const tag = e.target.tagName;
+  const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable;
+  if (typing) { if (e.key === 'Escape' && tag === 'INPUT') e.target.blur(); return; }
+  // space belongs to the focused control, not to the player, when a control has focus
+  const onControl = e.target.closest && e.target.closest('button, a, [role="button"], [role="slider"]');
+  if (e.key === ' ' && !onControl) { e.preventDefault(); togglePlay(); }
+  if (e.key === 'ArrowRight' && !onControl) nextTrack();
+  if (e.key === 'ArrowLeft' && !onControl) prevTrack();
   if (e.key === 'Escape') { closeCtx(); $('queue-drawer').hidden = true; }
 });
 

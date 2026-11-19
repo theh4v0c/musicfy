@@ -6,7 +6,7 @@
   --line: rgba(255, 255, 255, 0.07);
   --fg: #f5f4f0;
   --fg-soft: rgba(245, 244, 240, 0.62);
-  --fg-mute: rgba(245, 244, 240, 0.36);
+  --fg-mute: rgba(245, 244, 240, 0.52);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --acc: #ff5c39;
@@ -146,6 +146,9 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 .talbum-line { font-size: 11px; color: var(--fg-mute); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .talbum-line .alink { cursor: pointer; }
 .talbum-line .alink:hover { color: var(--fg); text-decoration: underline; }
+/* below the breakpoint where the artist column disappears, the artist rides along with the album */
+.tal-artist, .tal-sep { display: none; }
+@media (max-width: 920px) { .tal-artist, .tal-sep { display: inline; } }
 /* in-app rename form */
 .ctx-form { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px 12px; min-width: 260px; }
 .ctx-form label { display: flex; flex-direction: column; gap: 4px; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--fg-mute); }
@@ -706,3 +709,28 @@ html, body { overflow-x: hidden; max-width: 100%; }
 
 /* offline availability dot in the duration cell */
 .offline-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); margin-left: 5px; vertical-align: middle; }
+
+/* keyboard focus must always be visible; search fields reset their outline */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+.trow:focus-visible { outline-offset: -2px; }
+
+/* respect the system motion setting */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* phones: the library tools become one swipeable row instead of seven rows of tiles */
+@media (max-width: 760px) {
+  #songs-chips { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+    -webkit-overflow-scrolling: touch; margin: 0 -16px 12px; padding: 0 16px 6px; }
+  #songs-chips::-webkit-scrollbar { display: none; }
+  #songs-chips .chip-card { flex: 0 0 auto; min-width: 0; padding: 9px 14px; }
+  #songs-chips .chip-card span { display: none; }
+}
+
+

@@ -156,6 +156,8 @@ function weatherWord(code) {
   if (c <= 86) return 'snowy';
   return 'stormy';
 }
+// one weather call per 10 minutes, not one per home screen load
+let weatherCache = { at: 0, key: '', data: null };
 
 // metadata to write into a track's file: Traktor PRIV + standard ID3. MP3 only.
 function trackTagMeta(db, tid) {
@@ -1161,8 +1163,21 @@ const json = (res, code, obj) => { res.writeHead(code, { 'content-type': 'applic
 const AUTH_TOKEN = String(process.env.MUSICFY_TOKEN || '');
 const ALLOWED_ORIGINS = String(process.env.MUSICFY_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
 
+// one definition of "the tracks in this playlist, in order", shared by both read routes
+function playlistRows(pid) {
+  return db.prepare(`SELECT t.*, (f.id IS NOT NULL) AS owned, (t.src_id IS NOT NULL AND t.src_id != '') AS streamable, pt.added_at date_added, f.bitrate, r.rung, r.quality
+    FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
+    LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
+    LEFT JOIN resolutions r ON r.track_id=t.id
+    WHERE pt.playlist_id=? ORDER BY pt.position`).all(pid);
+}
+
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
+  res.setHeader('x-content-type-options', 'nosniff');
+  res.setHeader('referrer-policy', 'no-referrer');
+  res.setHeader('x-frame-options', 'DENY');
+  res.setHeader('permissions-policy', 'geolocation=(), camera=(), microphone=()');
   // a throw inside a req.on('end') callback escapes the async try below and strands the
   // socket with no response. Wrap every 'end' listener so a bad body answers 400, never hangs.
   const _on = req.on.bind(req);
@@ -2255,11 +2270,17 @@ const server = http.createServer(async (req, res) => {
       const city = String(s.city || '');
       let weather = null;
       if (city && Number.isFinite(lat) && Number.isFinite(lon)) {
-        try {
-          const w = await httpGetTimed(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code`);
-          const cur = (JSON.parse(w) || {}).current || {};
-          weather = { temp: Math.round(Number(cur.temperature_2m)), word: weatherWord(cur.weather_code) };
-        } catch {}
+        const wkey = `${lat},${lon}`;
+        if (weatherCache.key === wkey && Date.now() - weatherCache.at < 10 * 60 * 1000) {
+          weather = weatherCache.data;
+        } else {
+          try {
+            const w = await httpGetTimed(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code`);
+            const cur = (JSON.parse(w) || {}).current || {};
+            weather = { temp: Math.round(Number(cur.temperature_2m)), word: weatherWord(cur.weather_code) };
+            weatherCache = { at: Date.now(), key: wkey, data: weather };
+          } catch {}
+        }
       }
       let line;
       if (city && weather) line = `${weather.temp}°C and ${weather.word} in ${city}.`;
@@ -3187,6 +3208,9 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     const mPlTrack = u.pathname.match(/^\/api\/playlists\/([^/]+)\/tracks$/);
+    if (mPlTrack && req.method === 'GET') {
+      return json(res, 200, playlistRows(decodeURIComponent(mPlTrack[1])));
+    }
     if (mPlTrack && req.method === 'POST') {
       const pid = decodeURIComponent(mPlTrack[1]);
       let body = ''; req.on('data', c => body += c);
@@ -3503,12 +3527,7 @@ const server = http.createServer(async (req, res) => {
 
     const m = u.pathname.match(/^\/api\/playlists\/([^/]+)$/);
     if (m && req.method === 'GET') {
-      const rows = db.prepare(`SELECT t.*, (f.id IS NOT NULL) AS owned, (t.src_id IS NOT NULL AND t.src_id != '') AS streamable, pt.added_at date_added, f.bitrate, r.rung, r.quality
-        FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
-        LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
-        LEFT JOIN resolutions r ON r.track_id=t.id
-        WHERE pt.playlist_id=? ORDER BY pt.position`).all(decodeURIComponent(m[1]));
-      return json(res, 200, rows);
+      return json(res, 200, playlistRows(decodeURIComponent(m[1])));
     }
     if (m && req.method === 'PATCH') {
       let body = ''; req.on('data', c => body += c);
