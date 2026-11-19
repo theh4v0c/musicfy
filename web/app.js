@@ -559,6 +559,16 @@ function openPlaylistMenu(p, x, y) {
 }
 
 /* long press helper: fires fn after 500ms hold, suppresses the trailing click */
+// wires both gesture and mouse: long press on a phone, right click on a desktop
+function bindContext(el, fn) {
+  el.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); fn(e.clientX || 0, e.clientY || 0); };
+  longPress(el, () => {
+    const b = el.getBoundingClientRect();
+    fn(Math.min(b.left, innerWidth - 240), Math.min(b.bottom + 6, innerHeight - 260));
+  });
+  return el;
+}
+
 function longPress(el, fn, holdMs = 500) {
   let t = null, fired = false, ox = 0, oy = 0;
   const start = (e) => {
@@ -1837,14 +1847,15 @@ async function renderSearch() {
             card.className = 'chip-card';
             card.innerHTML = `<b>${esc(al.name)}</b><span>${esc(al.artist || '')}${al.year ? ' · ' + al.year : ''}</span>`;
             card.onclick = () => { q.value = `${al.artist} ${al.name}`; draw(); };
-            card.oncontextmenu = (e) => {
-              e.preventDefault();
+            const queueAlbum = () => {
               toast(`Queueing "${al.name}"`, 4000);
               api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({ q: `download the album ${al.name} by ${al.artist}` }) })
                 .then((r) => { toast(r.spoken || 'Queueing album', 9000); if (r.data && r.data.queued) openDownloads(); })
                 .catch(() => toast('Could not queue that album', 4000));
             };
+            card.oncontextmenu = (e) => { e.preventDefault(); queueAlbum(); };
+            longPress(card, queueAlbum);
             row.appendChild(card);
           }
           box.appendChild(sec);
