@@ -912,7 +912,17 @@ function startLadderDownload(jobId, b, onDone) {
       tid = tid || upsertTrack({ title: t, artist: a, album: b.artist || 'Web', duration: dur, format: ext });
       // refuse truncated audio: a 30 second preview must never replace a real track
       const declared = Number(b.duration) || Number(db.prepare('SELECT duration FROM tracks WHERE id=?').get(tid)?.duration) || 0;
-      if (dur && declared && dur < declared * 0.6) {
+      // a YouTube "Official Video", Live clip, promo or DJ-mix cut is not the track
+      const sourceName = String(files[0] || '');
+      const badSource = /\b(official (video|music video)|lyric video|visuali[sz]er|live|promo|teaser|trailer|interview|reaction|karaoke|tutorial)\b/i.test(sourceName) || /\(mixed\)/i.test(sourceName);
+      if (badSource && b.trackId && !b.retried) {
+        try { fs.rmSync(dest, { force: true }); } catch {}
+        try {
+          enqueueDownload(jobId + '-r', { trackId: b.trackId, rung: 'search', title: b.title, artist: b.artist, duration: declared, retried: true });
+        } catch {}
+        return finish('unavailable', `video/promo source rejected (${sourceName.slice(0, 40)}), retrying by search`);
+      }
+      if (dur && declared && dur < declared * 0.8) {
         try { fs.rmSync(dest, { force: true }); } catch {}
         // the source was a clip: try a plain search for the full version once
         if (!b.retried) {
@@ -1971,6 +1981,22 @@ const server = http.createServer(async (req, res) => {
         } catch { skipped += 1; }
       }
       return json(res, 200, { written, skipped, checked: rows.length });
+    }
+
+    // one file per track: keep the best-quality owned file, delete the rest
+    if (u.pathname === '/api/maintenance/dedupe-files' && req.method === 'POST') {
+      const groups = db.prepare(`SELECT track_id, COUNT(*) c FROM files WHERE tier='owned' GROUP BY track_id HAVING c > 1`).all();
+      let removed = 0;
+      for (const g of groups) {
+        const list = db.prepare("SELECT id, path, bitrate FROM files WHERE track_id=? AND tier='owned'").all(g.track_id)
+          .sort((a, b) => fileQuality(path.extname(b.path), b.bitrate) - fileQuality(path.extname(a.path), a.bitrate));
+        for (const keep of list.slice(1)) {
+          db.prepare('DELETE FROM files WHERE id=?').run(keep.id);
+          try { fs.rmSync(keep.path, { force: true }); } catch {}
+          removed += 1;
+        }
+      }
+      return json(res, 200, { tracks: groups.length, removed });
     }
 
     // stop everything that is queued or running
