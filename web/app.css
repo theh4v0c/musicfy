@@ -640,3 +640,6 @@ html, body { overflow-x: hidden; max-width: 100%; }
 /* search location toggles: checkmarks, not tabs */
 .mode-tab .chk { display: inline-block; min-width: 1em; margin-right: 5px; color: transparent; font-weight: 800; }
 .mode-tab.on .chk { color: var(--acc); }
+
+/* drag-to-reorder feedback in playlists */
+.trow.dragover { outline: 2px dashed var(--acc); outline-offset: -2px; border-radius: 8px; }

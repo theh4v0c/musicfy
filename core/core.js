@@ -102,6 +102,46 @@ for (const col of ['src_kind TEXT', 'src_id TEXT', 'src_url TEXT', 'isrc TEXT', 
 }
 
 const now = () => Math.floor(Date.now() / 1000);
+
+// Camelot wheel for harmonic ordering (1A..12A minor, 1B..12B major)
+const FLAT_TO_SHARP = { Db: 'C#', Eb: 'D#', Gb: 'F#', Ab: 'G#', Bb: 'A#' };
+const MAJOR_B = { B: 1, 'F#': 2, 'C#': 3, 'G#': 4, 'D#': 5, 'A#': 6, F: 7, C: 8, G: 9, D: 10, A: 11, E: 12 };
+const MINOR_A = { 'G#': 1, 'D#': 2, 'A#': 3, F: 4, C: 5, G: 6, D: 7, A: 8, E: 9, B: 10, 'F#': 11, 'C#': 12 };
+function camelotOf(key, scale) {
+  let k = String(key || '').trim();
+  k = FLAT_TO_SHARP[k] || k.replace('♯', '#');
+  if (!k) return null;
+  if (scale === 'minor') { const n = MINOR_A[k]; return n ? { n, letter: 'A' } : null; }
+  const n = MAJOR_B[k]; return n ? { n, letter: 'B' } : null;
+}
+function harmonicScore(a, b) {
+  if (!a || !b) return 0;
+  const d = Math.min(Math.abs(a.n - b.n), 12 - Math.abs(a.n - b.n));
+  if (a.letter === b.letter) return d === 0 ? 1 : d === 1 ? 0.85 : d === 2 ? 0.4 : 0;
+  if (a.n === b.n) return 0.9; // relative major/minor
+  if (d === 1) return 0.45;
+  return 0;
+}
+// greedy nearest-neighbour on the wheel: each track lands next to the most compatible one
+function harmonicOrder(tracks) {
+  const items = tracks.map((t) => ({ t, c: camelotOf(t.key, t.key_scale) }));
+  const keyed = items.filter((x) => x.c);
+  const rest = items.filter((x) => !x.c).map((x) => x.t);
+  if (keyed.length < 2) return tracks;
+  const counts = {};
+  for (const x of keyed) { const k = `${x.c.letter}${x.c.n}`; counts[k] = (counts[k] || 0) + 1; }
+  const startKey = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+  let cur = keyed.find((x) => `${x.c.letter}${x.c.n}` === startKey) || keyed[0];
+  const used = new Set([cur]);
+  const order = [cur.t];
+  while (order.length < keyed.length) {
+    let best = null; let bestScore = -1;
+    for (const x of keyed) { if (used.has(x)) continue; const sc = harmonicScore(cur.c, x.c); if (sc > bestScore) { bestScore = sc; best = x; } }
+    if (!best) break;
+    order.push(best.t); used.add(best); cur = best;
+  }
+  return [...order, ...rest];
+}
 const uidOf = (a, al, t) =>
   `${(a || '').toLowerCase().trim()}|${(al || '').toLowerCase().trim()}|${(t || '').toLowerCase().trim()}`
     .replace(/\s+/g, ' ');
@@ -3030,6 +3070,34 @@ const server = http.createServer(async (req, res) => {
       db.prepare('UPDATE playlists SET updated_at=? WHERE id=?').run(now(), decodeURIComponent(mPlT2[1]));
       json(res, 200, { ok: true });
       return;
+    }
+    // reorder a playlist (drag and drop): order = [trackId, ...]
+    const mReorder = u.pathname.match(/^\/api\/playlists\/([^/]+)\/reorder$/);
+    if (mReorder && req.method === 'POST') {
+      let body = ''; req.on('data', c => body += c);
+      req.on('end', () => {
+        const pid = decodeURIComponent(mReorder[1]);
+        let ids = [];
+        try { ids = (JSON.parse(body || '{}').order) || []; } catch {}
+        if (!Array.isArray(ids) || !ids.length) return json(res, 400, { error: 'order required' });
+        const upd = db.prepare('UPDATE playlist_tracks SET position=? WHERE playlist_id=? AND track_id=?');
+        ids.forEach((id, i) => upd.run(i, pid, Number(id)));
+        db.prepare('UPDATE playlists SET updated_at=? WHERE id=?').run(now(), pid);
+        return json(res, 200, { ok: true, count: ids.length });
+      });
+      return;
+    }
+    // order a playlist harmonically (Camelot progression)
+    const mHarm = u.pathname.match(/^\/api\/playlists\/([^/]+)\/harmonic$/);
+    if (mHarm && req.method === 'POST') {
+      const pid = decodeURIComponent(mHarm[1]);
+      const rows = db.prepare(`SELECT t.id, t.key, t.key_scale FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
+        WHERE pt.playlist_id=? ORDER BY pt.position`).all(pid);
+      const ordered = harmonicOrder(rows);
+      const upd = db.prepare('UPDATE playlist_tracks SET position=? WHERE playlist_id=? AND track_id=?');
+      ordered.forEach((t, i) => upd.run(i, pid, t.id));
+      db.prepare('UPDATE playlists SET updated_at=? WHERE id=?').run(now(), pid);
+      return json(res, 200, { ok: true, count: ordered.length });
     }
     const mTrk = u.pathname.match(/^\/api\/tracks\/(\d+)$/);
     if (mTrk && req.method === 'DELETE') {

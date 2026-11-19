@@ -964,6 +964,7 @@ async function openPlaylist(pid, push = true) {
         <div class="plhead-actions">
           <button class="btn btn-primary" id="pl-play">${IC.play}&nbsp; Play</button>
           <button class="btn btn-ghost" id="pl-shuf">${IC.shuffle}&nbsp; Shuffle</button>
+          <button class="btn btn-ghost" id="pl-harm" title="Order by harmonic key progression (Camelot)">Harmonic</button>
           <button class="icon-btn" id="pl-menu" title="Playlist options">${IC.dots}</button>
         </div>
       </div>
@@ -995,7 +996,39 @@ async function openPlaylist(pid, push = true) {
       });
     }
     const tl = $('tlist'); tl.innerHTML = '';
-    sorted.forEach((t, i) => { registerRow(t); tl.appendChild(trow(t, i, sorted)); });
+    sorted.forEach((t, i) => {
+      registerRow(t);
+      const row = trow(t, i, sorted);
+      // drag to reorder, only when the list is shown in its stored order
+      if (state.sort.key === 'pos') {
+        row.ondragover = (e) => {
+          if (!e.dataTransfer.types.includes('application/x-musicfy')) return;
+          e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.classList.add('dragover');
+        };
+        row.ondragleave = () => row.classList.remove('dragover');
+        row.ondrop = async (e) => {
+          if (!e.dataTransfer.types.includes('application/x-musicfy')) return;
+          e.preventDefault(); e.stopPropagation();
+          row.classList.remove('dragover');
+          let ids = [];
+          try { ids = JSON.parse(e.dataTransfer.getData('application/x-musicfy')); } catch { return; }
+          if (!Array.isArray(ids) || !ids.length || ids.includes(t.id)) return;
+          const next = sorted.map((x) => x.id).filter((id) => !ids.includes(id));
+          const at = next.indexOf(t.id);
+          next.splice(at < 0 ? next.length : at, 0, ...ids);
+          try {
+            await api(`/api/playlists/${encodeURIComponent(pid)}/reorder`, {
+              method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ order: next }),
+            });
+            const byId = new Map(list.map((x) => [x.id, x]));
+            list.length = 0;
+            for (const id of next) { const x = byId.get(id); if (x) list.push(x); }
+            renderRows();
+          } catch { toast('Could not reorder', 3000); }
+        };
+      }
+      tl.appendChild(row);
+    });
     $('pl-thead').querySelectorAll('.th').forEach(th => {
       th.classList.toggle('sorted', th.dataset.key === state.sort.key && state.sort.key !== 'pos');
       th.classList.toggle('desc', th.dataset.key === state.sort.key && state.sort.dir === -1);
@@ -1030,6 +1063,20 @@ async function openPlaylist(pid, push = true) {
   };
   $('pl-play').onclick = () => playList(list, 0, false, p.name);
   $('pl-shuf').onclick = () => playList(list, 0, true, p.name);
+  const harmBtn = $('pl-harm');
+  if (harmBtn) harmBtn.onclick = async () => {
+    harmBtn.disabled = true;
+    try {
+      const r = await api(`/api/playlists/${encodeURIComponent(pid)}/harmonic`, { method: 'POST' });
+      const fresh = await api(`/api/playlists/${encodeURIComponent(pid)}`, { nocache: true });
+      list.length = 0; for (const x of fresh) list.push(x);
+      state._currentList = list;
+      state.sort = { key: 'pos', dir: 1 };
+      renderRows();
+      toast(`Ordered ${r.count} tracks harmonically`, 3000);
+    } catch { toast('Could not order', 3000); }
+    harmBtn.disabled = false;
+  };
 }
 
 function plHeadArt(pid, name) {
