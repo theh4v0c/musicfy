@@ -629,6 +629,10 @@ function longPress(el, fn, holdMs = 500) {
 /* ============ views ============ */
 const greetPart = () => { const h = new Date().getHours(); return h < 5 ? 'night' : h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'; };
 
+function heroBanner(kicker, title, sub) {
+  return `<div class="prep-hero"><div class="prep-kicker">${esc(kicker)}</div><div class="prep-title">${esc(title)}</div><p class="prep-sub">${esc(sub)}</p></div>`;
+}
+
 async function renderHome() {
   setNav('home'); state.playlistId = null; renderSidebar();
   $('view-title').textContent = 'MUSICFY';
@@ -1075,7 +1079,7 @@ async function renderLibrary() {
   setNav('library'); state.playlistId = null; renderSidebar();
   $('view-title').textContent = 'Your Library';
   const v = $('view');
-  v.innerHTML = `<div class="lib-actions">
+  v.innerHTML = `${heroBanner('LIBRARY', 'Your Library', 'Everything you own, and every playlist.')}<div class="lib-actions">
       <button class="btn btn-primary" id="lib-upload">Upload track</button>
       <button class="btn btn-ghost" id="lib-newpl">New playlist</button>
       <span class="pill" id="cache-pill">CACHE -</span>
@@ -1165,28 +1169,31 @@ async function renderDjExport() {
       <p class="prep-sub">Analyze for BPM and beat grid, then export a crate that carries the audio and the cues.</p>
       <div class="prep-meter"><div class="prep-meter-bar"><i id="prep-fill" style="width:0%"></i></div><span id="prep-cov">…</span></div>
       <div class="prep-actions">
-        <button class="btn btn-primary" id="dj-analyze">Analyze missing</button>
-        <span class="pill" id="dj-status"></span>
+        <button class="btn btn-primary" id="dj-analyze">Analyze unanalyzed</button>
       </div>
     </div>
     <div class="sec-title">Crates <small>EXPORT READY</small></div>
     <div class="crate-grid" id="dj-list"></div>`;
+  let remaining = 0;
   try {
     const st = await api('/api/analyze/status', { nocache: true });
+    remaining = st.remaining || 0;
     const cov = document.getElementById('prep-cov');
     const fill = document.getElementById('prep-fill');
     const pct = st.total ? Math.round((st.analysed / st.total) * 100) : 0;
     if (cov) cov.textContent = `${st.analysed}/${st.total} analyzed · ${st.remaining} left`;
     if (fill) fill.style.width = pct + '%';
+    const ab = document.getElementById('dj-analyze');
+    if (ab) ab.textContent = remaining ? `Analyze ${remaining} unanalyzed` : 'All analyzed';
   } catch {}
   const btn = document.getElementById('dj-analyze');
   if (btn) btn.onclick = async () => {
+    if (!remaining) { toast('Everything with audio is already analyzed'); return; }
+    if (!confirm(`Analyze ${remaining} track${remaining === 1 ? '' : 's'}? This runs on the Pi and takes a while.`)) return;
     btn.disabled = true;
     try {
       const r = await api('/api/analyze/run?limit=500&workers=2', { method: 'POST' });
-      const s = document.getElementById('dj-status');
-      if (s) s.textContent = `STARTED ${r.limit} · ${r.workers} WORKERS`;
-      toast('Analyzing in the background', 5000);
+      toast(`Analyzing ${r.limit} tracks in the background`, 5000);
     } catch { toast('Could not start analysis'); }
     btn.disabled = false;
   };
@@ -1203,13 +1210,22 @@ async function renderDjExport() {
       </div>
       <div class="crate-name">${esc(p.name)}</div>
       <div class="crate-ready"><i style="width:${cov}%"></i></div>
-      <div class="crate-meta">${p.n_tracks || 0} tracks · ${cov}% analyzed</div>
+      <div class="crate-meta">${p.n_tracks || 0} tracks · ${cov}% analyzed${(p.owned && cov < 100) ? ' · <button class="crate-analyze">Analyze</button>' : ''}</div>
       <div class="crate-acts">
         <button class="crate-btn" data-rb title="Download a ZIP with the audio + rekordbox XML">Rekordbox</button>
         <button class="crate-btn" data-tr title="Download a ZIP with the audio + Traktor NML">Traktor</button>
       </div>`;
     card.querySelector('[data-rb]').onclick = (e) => { e.stopPropagation(); toast('Zipping the crate…', 6000); window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.zip?format=rekordbox`; };
     card.querySelector('[data-tr]').onclick = (e) => { e.stopPropagation(); toast('Zipping the crate…', 6000); window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.zip?format=traktor`; };
+    const abt = card.querySelector('.crate-analyze');
+    if (abt) abt.onclick = async (e) => {
+      e.stopPropagation();
+      abt.disabled = true; abt.textContent = 'starting…';
+      try {
+        const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/analyze`, { method: 'POST' });
+        toast(`Analyzing ${r.count} track${r.count === 1 ? '' : 's'} in this crate`, 6000);
+      } catch { toast('Could not start'); abt.disabled = false; abt.textContent = 'Analyze'; }
+    };
     card.onclick = () => openPlaylist(p.id);
     list.appendChild(card);
   }
@@ -1250,7 +1266,7 @@ async function renderSongs(push = true) {
   renderSidebar();
   $('view-title').textContent = 'Songs';
   const v = $('view');
-  v.innerHTML = `<div class="songs-chips" id="songs-chips"></div>
+  v.innerHTML = `${heroBanner('CATALOGUE', 'Songs', 'Search, filter and play the whole library.')}<div class="songs-chips" id="songs-chips"></div>
     <div class="lib-actions songs-head">
       <input class="search" id="songs-q" placeholder="Filter by title, artist or album" autocomplete="off">
       <div class="mode-tabs" id="songs-filter">
@@ -1601,7 +1617,7 @@ async function renderSettings() {
   try { d = await api('/api/settings', { nocache: true }); } catch {}
   const s = d.settings || {};
   const l = d.llm || {};
-  v.innerHTML = `
+  v.innerHTML = `${heroBanner('SYSTEM', 'Settings', 'Your identity, taste and playback defaults.')}
     <div class="set-grid">
       <section class="set-card">
         <h2>You</h2>
@@ -1700,7 +1716,7 @@ async function renderAskAi() {
   setNav('askai'); state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'Ask';
   const v = $('view');
-  v.innerHTML = `<div class="search-wrap">
+  v.innerHTML = `${heroBanner('ASSISTANT', 'Ask', 'Search your library in plain language.')}<div class="search-wrap">
       <input class="search" id="ai-q" placeholder="Ask anything, for example: create a playlist of 10 ambient tracks" autocomplete="off">
       <div class="ask-hint">
         <button class="ask-ex">how much of my library has audio</button>
@@ -1825,7 +1841,7 @@ async function renderSearch() {
   setNav('search'); state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'Search';
   const v = $('view');
-  v.innerHTML = `<div class="search-wrap">
+  v.innerHTML = `${heroBanner('SEARCH', 'Search', 'Find artists, tracks and albums, or dig the ladder for new audio.')}<div class="search-wrap">
       <input class="search" id="q" placeholder="Artists, tracks, albums... or anything to search the ladder" autocomplete="off">
       <div class="mode-tabs" id="mode-tabs">
         <button class="mode-tab on" data-mode="all">All</button>

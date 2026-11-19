@@ -2216,6 +2216,21 @@ const server = http.createServer(async (req, res) => {
         return json(res, r.error ? 400 : 200, r);
       } catch (e) { return json(res, 500, { error: e.message }); }
     }
+    // analyse only the unanalyzed tracks in one playlist (a crate), in the background
+    const mCrateAnalyze = u.pathname.match(/^\/api\/playlists\/([^/]+)\/analyze$/);
+    if (mCrateAnalyze && req.method === 'POST') {
+      const pid = decodeURIComponent(mCrateAnalyze[1]);
+      const ids = db.prepare(`SELECT t.id FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
+        JOIN files f ON f.track_id=t.id AND f.tier='owned'
+        WHERE pt.playlist_id=? AND t.analyzed_at IS NULL`).all(pid).map((r) => r.id);
+      if (!ids.length) return json(res, 200, { started: false, count: 0, note: 'this crate has no unanalyzed tracks' });
+      (async () => {
+        let done = 0;
+        for (const id of ids) { try { await analyser.runOne(db, id); done += 1; } catch {} }
+        console.log('[crate analyze]', pid, `${done}/${ids.length}`);
+      })();
+      return json(res, 202, { started: true, count: ids.length });
+    }
 
     // re-download every track that lost its file, using the metadata we kept
     if (u.pathname === '/api/maintenance/redownload-missing' && req.method === 'POST') {

@@ -610,3 +610,17 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .ip-label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-mute); margin-bottom: 12px; }
 .ip-label input, .ip-label textarea { font-family: inherit; font-size: 16px; padding: 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-elev2); color: var(--fg); width: 100%; }
 .ip-actions { display: flex; gap: 10px; margin-bottom: 8px; }
+
+/* De-terminal pass: micro-labels read like a console; make them editorial. */
+.slib-label, .pill, .sec-title small, .qtile-sub, .pcard-sub, .plhead-kicker,
+.thead, .tno, .tadded, .trbadge, .tdur, .ladder-chip, .q-label, .pb-badge,
+.time, .ctx-title, .chip-card span, .canon-pill, .verif, .ask-pill,
+.prep-kicker, #prep-cov, .crate-badge, .np-kicker, .np-badge,
+.set-card h2, .set-card label, .ctx-form label, .ip-label {
+  font-family: "Figtree", system-ui, sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.set-card h2 { font-weight: 700; color: var(--fg); font-size: 14px; }
+.prep-kicker { letter-spacing: .04em; }
+.crate-badge, .pb-badge, .ask-pill { letter-spacing: .01em; }
