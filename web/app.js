@@ -232,7 +232,7 @@ let ctxTouchOpen = false;   // this sheet was opened by a long press
 let ctxReleaseIgnored = false;
 function markCtxOpen() {
   ctxOpenedAt = Date.now();
-  ctxTouchOpen = Date.now() - lastTouchAt < 900;
+  ctxTouchOpen = Date.now() - lastTouchAt < 2500;
   ctxReleaseIgnored = false;
 }
 // close on any press outside the menu, in the capture phase so nothing can swallow it
@@ -256,11 +256,20 @@ document.addEventListener('mousedown', (e) => {
   if (ctxTouchOpen && !ctxReleaseIgnored) { ctxReleaseIgnored = true; return; }
   closeCtx(true);
 }, true);
+// the lift that opens a touch menu can dispatch a click on the item now under the finger
+// (the menu appeared where the finger is). Swallow clicks landing right after opening.
+document.addEventListener('click', (e) => {
+  const el = $('ctx');
+  if (!el || !el.classList.contains('open')) return;
+  if (Date.now() - ctxOpenedAt < 450) { e.stopPropagation(); e.preventDefault(); }
+}, true);
 
 document.addEventListener('contextmenu', (e) => {
   const row = e.target.closest('.trow, .tcard');
   if (!row) return;
   e.preventDefault();
+  const el = $('ctx');
+  if (el && el.classList.contains('open')) return; // long-press timer already opened it
   const t = findTrack(row);
   if (t) openCtx(t, e.clientX, e.clientY);
 });
@@ -731,24 +740,30 @@ function bindContext(el, fn) {
   return el;
 }
 
+let activeLongPressTimer = null;
 function longPress(el, fn, holdMs = 500) {
   let t = null, fired = false, ox = 0, oy = 0;
   const start = (e) => {
     const p = (e.touches && e.touches[0]) || e;
     ox = p.clientX || 0; oy = p.clientY || 0;
     fired = false;
-    t = setTimeout(() => { fired = true; fn(); }, holdMs);
+    clearTimeout(activeLongPressTimer);
+    t = setTimeout(() => { fired = true; activeLongPressTimer = null; fn(); }, holdMs);
+    activeLongPressTimer = t;
   };
   const move = (e) => {
     const p = (e.touches && e.touches[0]) || e;
-    if (Math.abs((p.clientX || 0) - ox) > 12 || Math.abs((p.clientY || 0) - oy) > 12) clearTimeout(t);
+    // any real movement means the finger is scrolling, not holding
+    if (Math.abs((p.clientX || 0) - ox) > 8 || Math.abs((p.clientY || 0) - oy) > 8) { clearTimeout(t); activeLongPressTimer = null; }
   };
   el.addEventListener('touchstart', start, { passive: true });
   el.addEventListener('touchmove', move, { passive: true });
-  el.addEventListener('touchend', () => clearTimeout(t), { passive: true });
-  el.addEventListener('touchcancel', () => clearTimeout(t), { passive: true });
+  el.addEventListener('touchend', () => { clearTimeout(t); activeLongPressTimer = null; }, { passive: true });
+  el.addEventListener('touchcancel', () => { clearTimeout(t); activeLongPressTimer = null; }, { passive: true });
   el.addEventListener('click', (e) => { if (fired) { e.stopPropagation(); e.preventDefault(); fired = false; } }, true);
 }
+// a long press must never fire while the page is scrolling
+window.addEventListener('scroll', () => { if (activeLongPressTimer) { clearTimeout(activeLongPressTimer); activeLongPressTimer = null; } }, true);
 
 /* ============ views ============ */
 const greetPart = () => { const h = new Date().getHours(); return h < 5 ? 'night' : h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'; };
