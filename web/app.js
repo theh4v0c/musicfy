@@ -2272,8 +2272,6 @@ function trow(t, i, list) {
     if (state.current && state.current.id === t.id && audio.src) { togglePlay(); return; }
     playList(list || [t], list ? list.indexOf(t) : 0, false, state.view);
   };
-  // long press anywhere on the row is the phone's right click
-  bindContext(el, (x, y) => openCtx(t, x, y));
   const artEl = el.querySelector('.tart');
   if (artEl) {
     artEl.style.cursor = 'pointer';
