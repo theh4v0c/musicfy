@@ -1938,7 +1938,7 @@ async function renderSettings() {
       </section>
       <section class="set-card">
         <h2>Downloads</h2>
-        <label>Download folder<input id="set-root" value="${esc(s.download_root || 'EXTERNAL_MOUNT/owned')}"></label>
+        <label>Download folder<input id="set-root" value="${esc(s.download_root || '')}" placeholder="/srv/music/owned"></label>
         <label>Download format
           <select id="set-format">
             <option value="best"${(s.preferred_format || 'best') === 'best' ? ' selected' : ''}>keep the original (no transcoding)</option>

@@ -40,12 +40,12 @@ The hardcoded constants to replace (all in `core/core.js`) are:
 | constant | current | should be |
 |---|---|---|
 | `ROOT` | `/opt/musicfy` | `config.root` / `MUSICFY_ROOT` |
-| `OWNED` | `EXTERNAL_MOUNT/owned` | `config.owned` / `MUSICFY_OWNED` |
+| `OWNED` | `/srv/music/owned` | `config.owned` / `MUSICFY_OWNED` |
 | `DB_PATH` | `ROOT/data/musicfy.db` | `config.db` / `MUSICFY_DB` |
 | `PORT` | `8710` | `MUSICFY_PORT` (already env) |
 | `PY` (analyze.js) | `/opt/musicfy/essentia-venv/bin/python` | `config.python` |
 | yt-dlp path | `/opt/musicfy/ytdlp-venv/bin/yt-dlp` | `config.ytdlp` |
-| `WNL` | `http://192.168.1.39:8742` | optional `config.wnl_url` |
+| `WNL` | `http://wnl-host:8742` | optional `config.wnl_url` |
 
 **This is the first refactor any public release needs.** It is mechanical: read the file
 once at boot, fall back to env, fall back to defaults, and never hardcode `/opt` or `/media`.

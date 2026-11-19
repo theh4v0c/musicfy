@@ -5,7 +5,7 @@ const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 
 const DB = process.env.MUSICFY_DB || '/opt/musicfy/data/musicfy.db';
-const OUT = process.env.MUSICFY_BACKUP_DIR || '/media/rlima/AI_LAB/musicfy/backups';
+const OUT = process.env.MUSICFY_BACKUP_DIR || require('node:path').join(process.env.MUSICFY_HOME || '/opt/musicfy', 'backups');
 const KEEP = Number(process.env.MUSICFY_BACKUP_KEEP || 7);
 
 fs.mkdirSync(OUT, { recursive: true });

@@ -2,9 +2,9 @@
 
 Self hosted music platform on a Raspberry Pi 5. Own catalogue, own metadata, no third party account in the playback chain.
 
-- Host `plm` (Debian 12, aarch64), LAN `http://LAN_IP:8710`, public `https://musicfy.wnlab.com` behind Pangolin SSO
-- Code `/opt/musicfy/{core,web}` on the Pi, working copy `/Users/macmini/MUSICFY` on the Mac
-- Data `/opt/musicfy/data` (sqlite + covers + history), audio `EXTERNAL_MOUNT/owned/{web,upload,playlist-*}`
+- Host: one Raspberry Pi 5 class machine (Debian 12, aarch64), LAN `http://<host>:8710`, public behind a reverse proxy with SSO
+- Code `/opt/musicfy/{core,web}` on the host
+- Data `/opt/musicfy/data` (sqlite + covers + history), audio `<library root>/{web,upload,playlist-*}`
 
 Read this file first, then `core/core.js` sections in this order: schema, upsertTrack, ladder search, resolveBest, download queue, stream routes.
 
@@ -15,10 +15,10 @@ Working: catalogue with 600+ tracks, playlist CRUD, Spotify playlist and single 
 ## Deploy
 
 ```
-rsync -az --delete core/ plm:/opt/musicfy/core/
-rsync -az web/ plm:/opt/musicfy/web/
-ssh plm 'sudo -n systemctl restart musicfy-core'
-ssh plm 'journalctl -u musicfy-core -n 50'
+rsync -az --delete core/ HOST:/opt/musicfy/core/
+rsync -az web/ HOST:/opt/musicfy/web/
+ssh HOST 'sudo systemctl restart musicfy-core'
+ssh HOST 'journalctl -u musicfy-core -n 50'
 curl -s localhost:8710/api/health/rungs
 ```
 
@@ -136,7 +136,7 @@ Delete a track: the row is removed from the DOM immediately, the API deletes row
 
 ## Timers
 
-`musicfy-core` always on, `musicfy-history-scan.timer` daily at midnight, `musicfy-backup.timer` daily at 03:30 writing `VACUUM INTO` snapshots to `/media/rlima/AI_LAB/musicfy/backups` with seven day retention, and `musicfy-audio-backup.timer` daily at 04:15 mirroring the owned audio to `/media/rlima/AI_LAB/musicfy/audio-backup` on the second disk. Audio was not backed up before the incident above, which is why the loss mattered.
+`musicfy-core` always on, `musicfy-history-scan.timer` daily at midnight, `musicfy-backup.timer` daily at 03:30 writing `VACUUM INTO` snapshots to the backup disk with seven day retention, and `musicfy-audio-backup.timer` daily at 04:15 mirroring the owned audio to a second disk. Audio was not backed up before the incident above, which is why the loss mattered.
 
 ## Search, and why it was bad
 
@@ -379,8 +379,8 @@ importing it. Every ffprobe attempt threw, the code read that as "unreadable", c
 queued with an empty artist field, so most failed to match.
 
 Recovered: 4 files from `/opt/musicfy/pilot.zip`, then a further 64 from the WNL-DL library,
-which is intact on the Mac at `~/Music/wnl-dl` and served live by WNL-DL at
-`http://192.168.1.39:8742` (`GET /api/library`, `/api/library/tracks/{folder}`,
+which is intact at `~/Music/wnl-dl` and served live by WNL-DL at
+`http://<wnl-host>:8742` (`GET /api/library`, `/api/library/tracks/{folder}`,
 `/api/file/folder/{folder}/{filename}`). That source should always be checked first after any
 library damage: 301 files, 3.6 GB, tags intact. The rest were re-downloaded through the free rungs,
 which means most are now 160k AAC or mp3 rather than the originals.

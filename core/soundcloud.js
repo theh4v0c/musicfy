@@ -57,8 +57,7 @@ async function scrapeClientId() {
 // yt-dlp already keeps a working public client_id on disk; reuse it instead of
 // scraping the site, which no longer exposes one in the bundles
 const YTDLP_CACHE = [
-  `${process.env.HOME || '/home/rlima'}/.cache/yt-dlp/soundcloud/client_id.json`,
-  '/home/rlima/.cache/yt-dlp/soundcloud/client_id.json',
+  `${process.env.HOME || '/root'}/.cache/yt-dlp/soundcloud/client_id.json`,
   '/root/.cache/yt-dlp/soundcloud/client_id.json',
 ];
 

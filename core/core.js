@@ -28,11 +28,12 @@ const exporter = require('./export');
 const tagwrite = require('./tagwrite');
 const { DatabaseSync } = require('node:sqlite');
 
-const ROOT = '/opt/musicfy';
-const OWNED = 'EXTERNAL_MOUNT/owned';
+const ROOT = process.env.MUSICFY_HOME || '/opt/musicfy';
+// the audio library can live on another mount; never assume it is under ROOT
+const OWNED = process.env.MUSICFY_OWNED || path.join(ROOT, 'owned');
 const DB_PATH = process.env.MUSICFY_DB || path.join(ROOT, 'data', 'musicfy.db');
 const PORT = Number(process.env.MUSICFY_PORT || 8710);
-const WNL = process.env.WNL_URL || 'http://192.168.1.39:8742';
+const WNL = process.env.WNL_URL || '';
 const WEB = path.join(__dirname, '..', 'web');
 const COVER_DIR = path.join(ROOT, 'data', 'covers');
 fs.mkdirSync(COVER_DIR, { recursive: true });
@@ -216,6 +217,7 @@ function upsertFile({ track_id, path: p, tier, bitrate, size, mtime }) {
 
 // ---------- WNL-DL ingest ----------
 async function ingestWnlFolder(folder, name) {
+  if (!WNL) throw new Error('WNL_URL is not configured');
   const list = JSON.parse(await httpGet(`${WNL}/api/library/tracks/${encodeURIComponent(folder)}`));
   const playlistId = `wnl-${folder.replace(/^playlist-/, '')}`;
   db.prepare(`INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)
@@ -3660,6 +3662,7 @@ const server = http.createServer(async (req, res) => {
 
     const m3 = u.pathname.match(/^\/api\/ingest-wnl\/([^/]+)$/);
     if (m3) {
+      if (!WNL) return json(res, 400, { error: 'WNL_URL is not configured' });
       const folder = decodeURIComponent(m3[1]);
       const libs = JSON.parse(await httpGet(`${WNL}/api/library`));
       const entry = libs.find(l => l.folder === folder);
@@ -3668,6 +3671,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (u.pathname === '/api/ingest-wnl-all') {
+      if (!WNL) return json(res, 400, { error: 'WNL_URL is not configured' });
       const libs = JSON.parse(await httpGet(`${WNL}/api/library`));
       const results = [];
       for (const l of libs) results.push({ name: l.name, ...await ingestWnlFolder(l.folder, l.name) });
