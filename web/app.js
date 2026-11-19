@@ -47,7 +47,22 @@ const IC = {
 };
 const fmt = (s) => (!s || !isFinite(s)) ? '0:00' : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const artUrl = (t, s) => t && t.has_art ? `/api/cover/${t.id}?s=${s}&v=${state.artV || 0}` : null;
-const ph = (t, cls) => `<div class="${cls} ph">${esc((t ? (t.title || '?') : '?').charAt(0).toUpperCase())}</div>`;
+// deterministic gradient from a seed, so every placeholder has its own colour, not a flat box
+function gradFor(seed) {
+  const s = String(seed || '?');
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  const a = Math.abs(h) % 360;
+  const b = (a + 30 + (Math.abs(h >> 9) % 90)) % 360;
+  const l1 = 40 + (Math.abs(h >> 3) % 14);
+  const l2 = 16 + (Math.abs(h >> 5) % 10);
+  return `linear-gradient(135deg, hsl(${a} 58% ${l1}%), hsl(${b} 52% ${l2}%))`;
+}
+const ph = (t, cls) => {
+  const seed = t ? `${t.artist || ''}${t.title || ''}` : '?';
+  const letter = (t ? (t.title || '?') : '?').charAt(0).toUpperCase();
+  return `<div class="${cls} ph" style="background:${gradFor(seed)};color:rgba(255,255,255,.9)">${esc(letter)}</div>`;
+};
 // uniform artwork setter: always a div with a background image, never a stale <img src>
 function setArt(elId, url, letter) {
   const el = $(elId); if (!el) return;
@@ -55,7 +70,7 @@ function setArt(elId, url, letter) {
   if (url) {
     el.outerHTML = `<div id="${elId}" class="${base}" style="background-image:url('${url}');background-size:cover;background-position:center"></div>`;
   } else {
-    el.outerHTML = `<div id="${elId}" class="${base} ph">${esc((letter || '?').charAt(0).toUpperCase())}</div>`;
+    el.outerHTML = `<div id="${elId}" class="${base} ph" style="background:${gradFor(letter || '?')};color:rgba(255,255,255,.9)">${esc((letter || '?').charAt(0).toUpperCase())}</div>`;
   }
 }
 const artTag = (t, cls, size) => artUrl(t, size)
@@ -243,15 +258,16 @@ $('ctx').addEventListener('click', async (e) => {
   if (act === 'addpl') openAddPl(t);
   if (act === 'radiostart') startRadio(t);
   if (act === 'analyze') {
-    toast('Analyzing BPM and key…', 8000);
+    const pp = progressPill(`Analyzing ${t.title || 'track'}…`);
     try {
       const r = await api(`/api/analyze/track/${t.id}`, { method: 'POST', nocache: true });
+      pp.done();
       if (r.error) return toast(r.error, 6000);
       const bpmTxt = r.bpm ? `${Math.round(r.bpm)} BPM` : 'BPM n/a';
       const keyTxt = r.key ? `${r.key}${r.key_scale === 'minor' ? 'm' : ''}` : 'key n/a';
       toast(`Analysed · ${bpmTxt} · ${keyTxt}`, 6000);
       state.allTracks = null; afterWrite(); refreshView();
-    } catch { toast('Analysis failed', 5000); }
+    } catch { pp.done(); toast('Analysis failed', 5000); }
     return;
   }
     if (act === 'upgrade') {
@@ -344,6 +360,23 @@ function toast(msg, ms = 2600) {
   setTimeout(() => el.classList.add('out'), Math.max(600, ms - 400));
   setTimeout(() => el.remove(), ms);
   return el;
+}
+
+// a persistent pill with an animated gradient fill, for work that takes a while
+function progressPill(text) {
+  let el = document.getElementById('mf-progress');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'mf-progress';
+    el.className = 'progress-pill';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<span>${esc(text)}</span><i></i>`;
+  el.classList.add('on');
+  return {
+    update(t) { const s = el.querySelector('span'); if (s) s.textContent = t; },
+    done() { el.classList.remove('on'); },
+  };
 }
 
 /* ============ add to playlist ============ */
@@ -720,7 +753,7 @@ async function renderExternalInto(host) {
       for (const s of g.songs) {
         const card = document.createElement('div');
         card.className = 'tcard';
-        card.innerHTML = `<div class="tcard-art ph">${esc((s.artist || '?').charAt(0))}</div>
+        card.innerHTML = `<div class="tcard-art ph" style="background:${gradFor((s.artist || '') + (s.title || ''))};color:rgba(255,255,255,.9)">${esc((s.artist || '?').charAt(0))}</div>
           <div class="tcard-name">${esc(s.title)}</div>
           <div class="tcard-sub">${esc(s.artist)}</div>
           <button class="tcard-play" title="Add to library" aria-label="Add to library">${IC.download}</button>`;
@@ -1009,7 +1042,7 @@ async function renderLiked() {
   $('view-title').textContent = 'Liked Songs';
   const v = $('view');
   v.innerHTML = `<div class="plhead">
-      <div class="plhead-art ph liked-art">${IC.heartFull}</div>
+      <div class="plhead-art ph liked-art" style="background:linear-gradient(135deg,#ff6b47,#8a1d12)">${IC.heartFull}</div>
       <div>
         <div class="plhead-kicker">PLAYLIST</div>
         <h1 class="plhead-name">Liked Songs</h1>
@@ -1097,7 +1130,7 @@ async function renderLibrary() {
   const g = $('lib-grid');
   const liked = document.createElement('div');
   liked.className = 'pcard';
-  liked.innerHTML = `<div class="pcard-art ph liked-art">${IC.heartFull}</div><div class="pcard-name">Liked Songs</div><div class="pcard-sub">${state.liked.size} songs</div><button class="pcard-play">${IC.play}</button>`;
+  liked.innerHTML = `<div class="pcard-art ph liked-art" style="background:linear-gradient(135deg,#ff6b47,#8a1d12)">${IC.heartFull}</div><div class="pcard-name">Liked Songs</div><div class="pcard-sub">${state.liked.size} songs</div><button class="pcard-play">${IC.play}</button>`;
   liked.querySelector('.pcard-play').onclick = (e) => { e.stopPropagation(); playLiked(); };
   liked.onclick = () => nav('liked');
   g.appendChild(liked);
@@ -1210,7 +1243,7 @@ async function renderDjExport() {
       </div>
       <div class="crate-name">${esc(p.name)}</div>
       <div class="crate-ready"><i style="width:${cov}%"></i></div>
-      <div class="crate-meta">${p.n_tracks || 0} tracks · ${cov}% analyzed${(p.owned && cov < 100) ? ' · <button class="crate-analyze">Analyze</button>' : ''}</div>
+      <div class="crate-meta"><span>${p.n_tracks || 0} tracks · ${cov}% analyzed</span>${(p.owned && cov < 100) ? '<button class="crate-analyze">Analyze</button>' : '<span class="crate-ready-tag">ready</span>'}</div>
       <div class="crate-acts">
         <button class="crate-btn" data-rb title="Download a ZIP with the audio + rekordbox XML">Rekordbox</button>
         <button class="crate-btn" data-tr title="Download a ZIP with the audio + Traktor NML">Traktor</button>
@@ -1223,7 +1256,12 @@ async function renderDjExport() {
       abt.disabled = true; abt.textContent = 'starting…';
       try {
         const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/analyze`, { method: 'POST' });
-        toast(`Analyzing ${r.count} track${r.count === 1 ? '' : 's'} in this crate`, 6000);
+        if (r.count) {
+          const pp = progressPill(`Analyzing ${r.count} track${r.count === 1 ? '' : 's'} in ${p.name}…`);
+          setTimeout(() => pp.done(), 8000);
+        } else {
+          toast(r.note || 'Nothing to analyze in this crate', 5000);
+        }
       } catch { toast('Could not start'); abt.disabled = false; abt.textContent = 'Analyze'; }
     };
     card.onclick = () => openPlaylist(p.id);
@@ -1841,13 +1879,12 @@ async function renderSearch() {
   setNav('search'); state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'Search';
   const v = $('view');
-  v.innerHTML = `${heroBanner('SEARCH', 'Search', 'Find artists, tracks and albums, or dig the ladder for new audio.')}<div class="search-wrap">
-      <input class="search" id="q" placeholder="Artists, tracks, albums... or anything to search the ladder" autocomplete="off">
+  v.innerHTML = `${heroBanner('SEARCH', 'Search', 'Find artists, tracks and albums, or search the web for new audio.')}<div class="search-wrap">
+      <input class="search" id="q" placeholder="Artists, tracks, albums, or search the web" autocomplete="off">
       <div class="mode-tabs" id="mode-tabs">
-        <button class="mode-tab on" data-mode="all">All</button>
-        <button class="mode-tab" data-mode="library">Library</button>
-        <button class="mode-tab" data-mode="ladder">Ladder</button>
-        <button class="mode-tab" id="long-sets" data-on="false" title="Include DJ mixes, sets and long recordings">Long sets</button>
+        <button class="mode-tab loc on" data-loc="lib"><span class="chk">✓</span>Library</button>
+        <button class="mode-tab loc on" data-loc="web"><span class="chk">✓</span>Web sources</button>
+        <button class="mode-tab" id="long-sets" data-on="false" title="Include DJ mixes, sets and long recordings"><span class="chk"></span>Long sets</button>
       </div>
       <div class="ladder-state" id="ladder-state"></div>
     </div><div id="qres"></div>`;
@@ -1856,35 +1893,45 @@ async function renderSearch() {
   const all = state.allTracks;
   const res = $('qres');
   let mode = 'all';
+  let searchLib = state.searchLib !== false;
+  let searchWeb = state.searchWeb !== false;
   let ladderCtl = null; // {abort}
 
-  const setPlaceholder = () => {
-    q.placeholder = mode === 'ladder'
-      ? 'Find audio sources for a track'
-      : 'Artists, tracks, albums';
+  const setLoc = (b, on) => {
+    b.classList.toggle('on', on);
+    const c = b.querySelector('.chk'); if (c) c.textContent = on ? '✓' : '';
   };
-  document.querySelectorAll('.mode-tab[data-mode]').forEach(b => b.onclick = () => {
-    mode = b.dataset.mode;
-    document.querySelectorAll('.mode-tab[data-mode]').forEach(x => x.classList.toggle('on', x === b));
-    setPlaceholder();
-    if (mode === 'ask' && !q.value.trim()) q.focus();
-    draw();
+  document.querySelectorAll('.mode-tab.loc').forEach((b) => {
+    setLoc(b, b.dataset.loc === 'lib' ? searchLib : searchWeb);
+    b.onclick = () => {
+      if (b.dataset.loc === 'lib') { searchLib = !searchLib; state.searchLib = searchLib; setLoc(b, searchLib); }
+      else { searchWeb = !searchWeb; state.searchWeb = searchWeb; setLoc(b, searchWeb); }
+      if (!searchLib && !searchWeb) toast('Choose Library or Web sources to search', 3000);
+      draw();
+    };
   });
   document.querySelectorAll('.ask-ex').forEach(b => b.onclick = () => {
     q.value = b.textContent;
     draw();
     q.focus();
   });
-  setPlaceholder();
+  const paintLS = () => {
+    const ls = $('long-sets');
+    if (!ls) return;
+    ls.dataset.on = String(!!state.longSets);
+    ls.classList.toggle('on', !!state.longSets);
+    const c = ls.querySelector('.chk'); if (c) c.textContent = state.longSets ? '✓' : '';
+  };
+  paintLS();
   $('long-sets').onclick = () => {
     state.longSets = !state.longSets;
-    $('long-sets').dataset.on = String(state.longSets);
-    $('long-sets').classList.toggle('on', state.longSets);
+    paintLS();
     if (q.value.trim()) draw();
   };
 
 
   const draw = async () => {
+    mode = searchLib && searchWeb ? 'all' : searchLib ? 'library' : 'ladder';
     const s = q.value.trim().toLowerCase();
     if (state.genreFilter) { renderGenreView(res, all, 60); return; }
     res.innerHTML = '';
@@ -2157,7 +2204,7 @@ async function renderSearch() {
     if (ladderCtl) ladderCtl.abort = true;
     const ctl = { abort: false }; ladderCtl = ctl;
     const holder = document.createElement('div');
-    holder.innerHTML = `<div class="sec-title">Ladder <small>SEARCHING SOURCES...</small></div>
+    holder.innerHTML = `<div class="sec-title" >Web sources <small>SEARCHING SOURCES...</small></div>
       <div class="ladder-loading">resolving "${esc(s)}" across youtube, soundcloud and archive</div>
       ${Array.from({ length: 4 }).map(() => `<div class="trow lrow skeleton"><div class="tno"></div><div class="tart"></div><div class="tmeta"><div class="sk-line w60"></div><div class="sk-line w35"></div></div></div>`).join('')}`;
     if (mode === 'ladder' || !appendAfterLibrary) res.innerHTML = '';
@@ -2168,11 +2215,11 @@ async function renderSearch() {
       if (ctl.abort) return;
       const box = document.createElement('div');
       if (!data.connected) {
-        box.innerHTML = `<div class="sec-title">Ladder <small>OFFLINE</small></div><div class="empty">No ladder rungs available.</div>`;
+        box.innerHTML = `<div class="sec-title">Web sources <small>OFFLINE</small></div><div class="empty">No web sources available right now.</div>`;
         holder.replaceWith(box); return;
       }
       if (r.status !== 200) {
-        box.innerHTML = `<div class="sec-title">Ladder <small>ERROR</small></div><div class="empty">${esc(data.error || 'search failed')}</div>`;
+        box.innerHTML = `<div class="sec-title" >Web sources <small>ERROR</small></div><div class="empty">${esc(data.error || 'search failed')}</div>`;
         holder.replaceWith(box); return;
       }
       // catalogue answers first; the ladder is a fallback you open deliberately
@@ -2203,7 +2250,7 @@ async function renderSearch() {
           note.textContent = 'No open source has this audio yet. Use the download arrow on a catalogue row to fetch it.';
           box.appendChild(note);
         } else {
-          box.innerHTML = `<div class="sec-title">Ladder <small>NO MATCHES</small></div><div class="empty">No usable matches for "${esc(s)}"</div>`;
+          box.innerHTML = `<div class="sec-title" >Web sources <small>NO MATCHES</small></div><div class="empty">No usable matches for "${esc(s)}"</div>`;
         }
         if (data.catalogue && ((data.catalogue.songs || []).length || (data.catalogue.albums || []).length)) {
           const catBox = document.createElement('div');
@@ -2416,7 +2463,7 @@ async function renderSearch() {
     } catch (e) {
       if (ctl.abort) return;
       const box = document.createElement('div');
-      box.innerHTML = `<div class="sec-title">Ladder <small>ERROR</small></div><div class="empty">${esc(e.message)}</div>`;
+      box.innerHTML = `<div class="sec-title" >Web sources <small>ERROR</small></div><div class="empty">${esc(e.message)}</div>`;
       holder.replaceWith(box);
     }
   };
@@ -2722,7 +2769,7 @@ async function renderArtist(name, push = true) {
   state._currentList = list;
   $('g-n').textContent = list.length;
   const el = $('g-list');
-  if (!list.length) { el.innerHTML = `<div class="empty">No owned tracks for this artist yet. Search the ladder and download some.</div>`; return; }
+  if (!list.length) { el.innerHTML = `<div class="empty">No owned tracks for this artist yet. Search the web and download some.</div>`; return; }
   list.forEach((t, i) => { registerRow(t); el.appendChild(trow(t, i, list)); });
   $('g-play').onclick = () => playList(list, 0, false, name);
 }

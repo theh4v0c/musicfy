@@ -435,7 +435,19 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .crate-name { font-size: 14px; font-weight: 700; margin: 9px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .crate-ready { height: 4px; border-radius: 99px; background: var(--bg-elev2); overflow: hidden; }
 .crate-ready i { display: block; height: 100%; background: linear-gradient(90deg, var(--acc), #ffb454); }
-.crate-meta { font-size: 11px; color: var(--fg-mute); margin: 6px 0 9px; }
+.crate-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--fg-mute); margin: 6px 0 9px; }
+.crate-analyze { border: 1px solid rgba(255,92,57,.5); background: var(--acc-soft); color: #ff8a6a; border-radius: 99px; padding: 3px 11px; font-family: inherit; font-size: 10.5px; font-weight: 700; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.crate-analyze:hover { background: var(--acc); color: #fff; border-color: var(--acc); }
+.crate-analyze:disabled { opacity: .55; cursor: default; }
+.crate-ready-tag { color: var(--ok); font-size: 10px; font-weight: 700; }
+.progress-pill { position: fixed; left: 50%; bottom: calc(100px + var(--safe-bottom, 0px)); transform: translateX(-50%) translateY(12px); z-index: 80;
+  display: inline-flex; flex-direction: column; gap: 7px; min-width: 230px; padding: 11px 15px; border-radius: 12px;
+  background: rgba(18,18,20,.97); border: 1px solid var(--line); color: var(--fg); font-size: 12px; font-weight: 600;
+  box-shadow: 0 14px 44px rgba(0,0,0,.6); opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
+.progress-pill.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+.progress-pill i { position: relative; display: block; height: 4px; border-radius: 99px; overflow: hidden; background: var(--bg-elev2); }
+.progress-pill i::after { content: ""; position: absolute; inset: 0; width: 42%; border-radius: 99px; background: linear-gradient(90deg, var(--acc), #ffb454); animation: mf-slide 1.1s ease-in-out infinite; }
+@keyframes mf-slide { 0% { transform: translateX(-70%); } 100% { transform: translateX(290%); } }
 .crate-acts { display: flex; gap: 6px; }
 .crate-btn { flex: 1; border: 1px solid var(--line); background: var(--bg-elev2); color: var(--fg-soft); border-radius: 8px; padding: 7px 6px; font-family: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; }
 .crate-btn:hover { color: var(--fg); border-color: var(--acc); background: var(--acc-soft); }
@@ -624,3 +636,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .set-card h2 { font-weight: 700; color: var(--fg); font-size: 14px; }
 .prep-kicker { letter-spacing: .04em; }
 .crate-badge, .pb-badge, .ask-pill { letter-spacing: .01em; }
+
+/* search location toggles: checkmarks, not tabs */
+.mode-tab .chk { display: inline-block; min-width: 1em; margin-right: 5px; color: transparent; font-weight: 800; }
+.mode-tab.on .chk { color: var(--acc); }
