@@ -21,6 +21,7 @@ const repair = require('./repair');
 const agent = require('./agent');
 const recommend = require('./recommend');
 const identity = require('./identity');
+const deezer = require('./deezer');
 const archive = require('./archive');
 const spotify = require('./spotify');
 const exporter = require('./export');
@@ -2764,28 +2765,42 @@ const server = http.createServer(async (req, res) => {
 
     // discovery outside the library: several genre shelves, none of it already owned
     if (u.pathname === '/api/discover/outside') {
-      const fams = db.prepare(`SELECT genre_family f, COUNT(*) n FROM tracks
-        WHERE genre_family IS NOT NULL AND genre_family != ''
-        GROUP BY genre_family ORDER BY n DESC LIMIT 4`).all().map((x) => x.f).filter(Boolean);
-      const seeds = fams.length ? fams : db.prepare(`SELECT artist FROM tracks WHERE artist IS NOT NULL AND artist != ''
-        GROUP BY artist ORDER BY COUNT(*) DESC LIMIT 3`).all().map((x) => x.artist);
-      const norm = (a, t) => `${(a || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}`;
+      // seeds = artists you actually play, not a genre keyword. Then Deezer's related
+      // artists, excluding anyone already in the library, so this is genuinely new.
+      let seeds = db.prepare(`SELECT t.artist, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
+        WHERE t.artist IS NOT NULL AND t.artist != '' AND l.played_at >= ?
+          AND EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')
+        GROUP BY t.artist ORDER BY n DESC LIMIT 2`).all(now() - 120 * 86400);
+      if (!seeds.length) {
+        seeds = db.prepare(`SELECT artist, COUNT(*) n FROM tracks WHERE artist IS NOT NULL AND artist != ''
+          GROUP BY artist ORDER BY n DESC LIMIT 2`).all();
+      }
+      const normKey = (a, t) => `${String(a).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${String(t).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}`;
       const inLib = new Set(db.prepare('SELECT dup_key FROM tracks').all().map((r) => r.dup_key));
+      const libArtists = new Set(db.prepare("SELECT lower(artist) a FROM tracks WHERE artist IS NOT NULL AND artist != '' GROUP BY lower(artist)").all().map((r) => String(r.a).trim()));
       const seen = new Set();
       const groups = [];
-      for (const seed of seeds.slice(0, 3)) {
-        let data = null;
-        try { data = await identity.catalog(seed, { songs: 30, albums: 0, artists: 0 }); } catch {}
+      for (const seed of seeds) {
+        const a = await deezer.artistSearch(seed.artist);
+        if (!a) continue;
+        const rel = await deezer.relatedArtists(a.id);
         const out = [];
-        for (const s of (data && data.songs) || []) {
-          if (!s.title || !s.artist) continue;
-          const k = norm(s.artist, s.title);
-          if (inLib.has(k) || seen.has(k)) continue;
-          seen.add(k);
-          out.push({ title: s.title, artist: s.artist, album: s.album || '', duration: s.duration || null });
+        for (const r of (rel.data || []).slice(0, 4)) {
+          const rn = String(r.name || '').toLowerCase().trim();
+          if (!rn || libArtists.has(rn)) continue; // already in your library: skip
+          const top = await deezer.artistTop(r.id, 2);
+          for (const t of (top.data || [])) {
+            if (!t.title || !t.artist) continue;
+            const k = normKey(t.artist.name, t.title);
+            if (inLib.has(k) || seen.has(k)) continue;
+            seen.add(k);
+            out.push({ title: t.title, artist: t.artist.name, album: (t.album && t.album.title) || '', duration: t.duration || null });
+            if (out.length >= 12) break;
+          }
           if (out.length >= 12) break;
         }
-        if (out.length) groups.push({ label: String(seed).replace(/_/g, ' '), songs: out });
+        if (out.length) groups.push({ label: seed.artist, songs: out });
+        if (groups.length >= 2) break;
       }
       return json(res, 200, { groups });
     }

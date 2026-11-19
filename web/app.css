@@ -657,3 +657,9 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .advanced[open] summary::before { content: '\25BE '; }
 .advanced .lib-actions { margin-top: 8px; }
 .auto-save { display: inline-flex; align-items: center; gap: 8px; color: var(--fg-mute); font-size: 12.5px; }
+
+/* mobile rows: the 40px play target was sitting on top of the track number */
+@media (max-width: 760px) {
+  .tno-num { display: none; }
+  .tno-play { display: flex; }
+}

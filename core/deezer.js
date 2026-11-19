@@ -97,4 +97,34 @@ async function search(q, limit = 8) {
   }));
 }
 
-module.exports = { canon, search };
+// best Deezer artist for a name, then their related artists and top tracks
+async function artistSearch(name) {
+  const key = 'artist:' + norm(name);
+  if (cache.has(key)) return cache.get(key);
+  await throttle();
+  const data = await getJson(`https://api.deezer.com/search/artist?q=${encodeURIComponent(name)}&limit=4`).catch(() => null);
+  const items = (data && data.data) || [];
+  let best = null;
+  for (const it of items) { const s = similarity(it.name, name); if (!best || s > best.s) best = { s, id: it.id, name: it.name }; }
+  const out = best && best.s >= 0.5 ? best : null;
+  cache.set(key, out);
+  return out;
+}
+async function relatedArtists(id) {
+  const key = 'rel:' + id;
+  if (cache.has(key)) return cache.get(key);
+  await throttle();
+  const data = await getJson(`https://api.deezer.com/artist/${id}/related?limit=12`).catch(() => ({ data: [] }));
+  cache.set(key, data);
+  return data;
+}
+async function artistTop(id, limit = 8) {
+  const key = 'top:' + id + ':' + limit;
+  if (cache.has(key)) return cache.get(key);
+  await throttle();
+  const data = await getJson(`https://api.deezer.com/artist/${id}/top?limit=${limit}`).catch(() => ({ data: [] }));
+  cache.set(key, data);
+  return data;
+}
+
+module.exports = { canon, search, artistSearch, relatedArtists, artistTop };

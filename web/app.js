@@ -23,11 +23,11 @@ const esc = (s) => (s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 // rung display: short labels, stable classes for color coding
 function shortRung(rung) {
   switch ((rung || 'local').toLowerCase()) {
-    case 'local': return { label: 'OWNED', cls: 'local' };
+    case 'local': return { label: 'Local', cls: 'local' };
     case 'yt-dlp': case 'youtube': return { label: 'YT', cls: 'yt' };
     case 'soundcloud': return { label: 'SC', cls: 'sc' };
     case 'archive': return { label: 'WEB', cls: 'archive' };
-    default: return { label: String(rung || 'OWNED').toUpperCase(), cls: 'local' };
+    default: return { label: String(rung || 'Local'), cls: 'local' };
   }
 }
 
@@ -784,7 +784,7 @@ async function renderExternalInto(host) {
     for (const g of groups) {
       const h = document.createElement('div');
       h.className = 'sec-title';
-      h.innerHTML = `More ${esc(g.label)} <small>NOT IN YOUR LIBRARY</small>`;
+      h.innerHTML = `Because you play ${esc(g.label)} <small>NOT IN YOUR LIBRARY</small>`;
       host.appendChild(h);
       const row = document.createElement('div');
       row.className = 'row-scroller';
@@ -1402,8 +1402,8 @@ async function renderSongs(push = true) {
       <input class="search" id="songs-q" placeholder="Filter by title, artist or album" autocomplete="off">
       <div class="mode-tabs" id="songs-filter">
         <button class="mode-tab on" data-f="all">All</button>
-        <button class="mode-tab" data-f="owned">Owned</button>
-        <button class="mode-tab" data-f="mirror">No audio yet</button>
+        <button class="mode-tab" data-f="owned">Downloaded</button>
+        <button class="mode-tab" data-f="mirror" title="In the catalogue, but the audio is not downloaded to this server yet">Not downloaded</button>
       </div>
       <span class="meta-line" id="songs-stats"></span>
     </div>
@@ -1785,6 +1785,15 @@ async function renderSettings() {
             <option value="-18"${String(s.target_loudness) === '-18' ? ' selected' : ''}>-18 dB (quiet)</option>
           </select>
         </label>
+        <label class="set-check"><input type="checkbox" id="set-autoplay"${s.autoplay_next !== false ? ' checked' : ''}> Continue with similar tracks when a playlist ends</label>
+        <label>Buffer ahead
+          <select id="set-buffer">
+            <option value="0"${String(s.prefetch_ahead) === '0' ? ' selected' : ''}>off</option>
+            <option value="1"${String(s.prefetch_ahead) === '1' ? ' selected' : ''}>1 track</option>
+            <option value="2"${String(s.prefetch_ahead ?? 2) === '2' ? ' selected' : ''}>2 tracks</option>
+          </select>
+        </label>
+        <div class="lib-actions"><button class="btn btn-ghost" id="set-clearbuf" type="button">Clear buffer</button><span class="set-note">Frees preloaded audio and cached pages</span></div>
       </section>
       <section class="set-card">
         <h2>Library</h2>
@@ -1808,6 +1817,8 @@ async function renderSettings() {
       normalize_loudness: document.getElementById('set-normalize').checked,
       target_loudness: Number(document.getElementById('set-target').value),
       fade_on_play_ms: Number(document.getElementById('set-fadems').value),
+      autoplay_next: document.getElementById('set-autoplay').checked,
+      prefetch_ahead: Number(document.getElementById('set-buffer').value),
       taste_genres: document.getElementById('set-taste-genres').value.trim(),
       taste_artists: document.getElementById('set-taste-artists').value.trim(),
       taste_context: document.getElementById('set-taste-context').value.trim(),
@@ -1822,6 +1833,13 @@ async function renderSettings() {
       applyLoudnessGain(state.current);
       if (body.display_name) state.profileName = body.display_name;
     } catch { document.getElementById('set-msg').textContent = 'Could not save'; }
+  };
+  const cb = document.getElementById('set-clearbuf');
+  if (cb) cb.onclick = async () => {
+    try { for (const id of [...preload.keys()]) releasePreload(id); } catch {}
+    try { clearAppCache(); } catch {}
+    try { if (window.caches && caches.keys) for (const k of await caches.keys()) await caches.delete(k); } catch {}
+    toast('Buffer cleared', 3000);
   };
 }
 
@@ -2786,7 +2804,7 @@ function markRowOwned(trackId) {
   const row = document.querySelector(`.trow[data-tid="${trackId}"]`);
   if (!row) return;
   const badge = row.querySelector('.trbadge');
-  if (badge) { badge.className = 'trbadge rung-local'; badge.innerHTML = '<b>OWNED</b>'; }
+  if (badge) { badge.className = 'trbadge rung-local'; badge.innerHTML = '<b>Local</b>'; }
 }
 
 async function waitForJob(jobId, title, trackId = null, tries = 90) {
@@ -3198,10 +3216,12 @@ function prefetchTrack(t) {
 }
 
 function prefetchNext() {
+  const ahead = state.settings && state.settings.prefetch_ahead != null ? Number(state.settings.prefetch_ahead) : 2;
+  if (ahead <= 0) return;
   const next = state.queue[state.qi + 1];
   if (next) prefetchTrack(next);
   const after = state.queue[state.qi + 2];
-  if (after) setTimeout(() => prefetchTrack(after), 6000);
+  if (ahead >= 2 && after) setTimeout(() => prefetchTrack(after), 6000);
 }
 
 /* ============ playback ============ */
@@ -3362,7 +3382,7 @@ function paintNowPlaying() {
   $('np-like').innerHTML = isLiked(t) ? IC.heartFull : IC.heart;
   $('np-like').classList.toggle('on', isLiked(t));
   $('np-badge').hidden = false;
-  $('np-badge').textContent = `${rung} ${q} · OWNED`;
+  $('np-badge').textContent = `${rung} ${q}`;
   $('np-ctx').textContent = state.origin || '';
 }
 
@@ -3381,16 +3401,35 @@ function paintRows() {
 }
 
 const togglePlay = () => state.current ? (audio.paused ? audio.play() : audio.pause()) : null;
+let continuing = false;
 function nextTrack() {
   if (!state.queue.length) return;
   if (state.repeat && state.qi >= state.queue.length - 1) return playAt(0);
   if (state.qi >= state.queue.length - 1) {
-    // end of the queue: keep playing instead of stopping dead
-    if (state.queue.length > 1) return playAt(0);
-    audio.pause();
+    // end of the playlist: keep the vibe going from the last track instead of stopping
+    if (state.settings && state.settings.autoplay_next === false) { audio.pause(); return; }
+    continueQueue();
     return;
   }
   playAt(state.qi + 1);
+}
+async function continueQueue() {
+  if (continuing) return;
+  continuing = true;
+  const last = state.queue[state.queue.length - 1];
+  try {
+    const list = await api(`/api/radio/${last.id}`, { nocache: true });
+    const have = new Set(state.queue.map((t) => t.id));
+    const add = (list || []).filter((t) => t && !have.has(t.id)).slice(0, 15);
+    if (add.length) {
+      state.queue.push(...add);
+      toast('Continuing with similar tracks', 3000);
+      playAt(state.qi + 1);
+    } else {
+      audio.pause();
+    }
+  } catch { audio.pause(); }
+  continuing = false;
 }
 function prevTrack(force = false) {
   if (!force && audio.currentTime > 3) { audio.currentTime = 0; return; }
