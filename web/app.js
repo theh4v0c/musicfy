@@ -1040,6 +1040,7 @@ async function openPlaylist(pid, push = true) {
       <div class="th" data-key="artist">ARTIST</div>
       <div class="th" data-key="album">ALBUM</div>
       <div class="th" data-key="date_added">DATE ADDED</div>
+      <div></div>
       <div>SOURCE</div>
       <div class="th" data-key="duration" style="text-align:right">TIME</div>
       <div></div>
@@ -1462,6 +1463,7 @@ async function renderSongs(push = true) {
       <div class="th" data-key="artist">ARTIST</div>
       <div class="th" data-key="album">ALBUM</div>
       <div class="th" data-key="added_at">DATE ADDED</div>
+      <div></div>
       <div>SOURCE</div>
       <div class="th" data-key="duration" style="text-align:right">TIME</div>
       <div></div>
