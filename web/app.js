@@ -1003,6 +1003,7 @@ async function openPlaylist(pid, push = true) {
           <button class="btn btn-primary" id="pl-play">${IC.play}&nbsp; Play</button>
           <button class="btn btn-ghost" id="pl-shuf">${IC.shuffle}&nbsp; Shuffle</button>
           <button class="btn btn-ghost" id="pl-harm" title="Order by harmonic key progression (Camelot)">Harmonic</button>
+          <button class="btn btn-ghost" id="pl-upload">Upload tracks</button>
           <button class="icon-btn" id="pl-menu" title="Playlist options">${IC.dots}</button>
         </div>
       </div>
@@ -1101,6 +1102,24 @@ async function openPlaylist(pid, push = true) {
   };
   $('pl-play').onclick = () => playList(list, 0, false, p.name);
   $('pl-shuf').onclick = () => playList(list, 0, true, p.name);
+  const upBtn = $('pl-upload');
+  if (upBtn) upBtn.onclick = () => pickFiles('audio/*', async (files) => {
+    const total = files.length;
+    let ok = 0;
+    for (let i = 0; i < total; i += 1) {
+      toast(`Uploading ${i + 1} of ${total}: ${files[i].name.slice(0, 30)}`, 60000);
+      try {
+        const d = await uploadTrack(files[i]);
+        await api(`/api/playlists/${encodeURIComponent(pid)}/tracks`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ track_id: d.track }),
+        });
+        ok += 1;
+      } catch {}
+    }
+    state.allTracks = null; bustCache(); await loadPlaylists();
+    toast(`Added ${ok} of ${total} track${total === 1 ? '' : 's'} to this playlist`, 6000);
+    openPlaylist(pid, false);
+  });
   const harmBtn = $('pl-harm');
   if (harmBtn) harmBtn.onclick = async () => {
     harmBtn.disabled = true;
@@ -3561,6 +3580,19 @@ $('np-like').onclick = () => state.current && toggleLike(state.current);
 $('mini-like') && ($('mini-like').onclick = () => state.current && toggleLike(state.current));
 
 document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => { state.history = []; $('back').hidden = true; nav(b.dataset.nav); });
+// collapsible sidebar, remembers the choice
+(() => {
+  const app = $('app');
+  const btn = $('side-toggle');
+  if (!app || !btn) return;
+  const apply = (c) => app.classList.toggle('side-collapsed', c);
+  apply(localStorage.getItem('mf-side-collapsed') === '1');
+  btn.onclick = () => {
+    const c = !app.classList.contains('side-collapsed');
+    localStorage.setItem('mf-side-collapsed', c ? '1' : '0');
+    apply(c);
+  };
+})();
 $('back').onclick = goBack;
 $('pb-art').onclick = () => {
   const c = state.current;

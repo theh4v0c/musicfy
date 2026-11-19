@@ -663,3 +663,8 @@ html, body { overflow-x: hidden; max-width: 100%; }
   .tno-num { display: none; }
   .tno-play { display: flex; }
 }
+
+/* collapsible sidebar (desktop) */
+#app.side-collapsed { grid-template-columns: 0 1fr; }
+#app.side-collapsed .sidebar { display: none; }
+@media (max-width: 760px) { #side-toggle { display: none; } }
