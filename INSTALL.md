@@ -141,3 +141,20 @@ on the same host.
 
 None of this is hidden in the app; it is the honest distance between "works on my Pi" and
 "anyone can install it".
+
+---
+
+## Security switches (env)
+
+- **`MUSICFY_TOKEN`** — set a shared secret and every request needs it. Visit
+  `http://host:8710/?token=<secret>` once; the server sets an HttpOnly cookie and
+  redirects to the clean URL. API clients can send `Authorization: Bearer <secret>`.
+  Unset = no auth (current LAN behaviour).
+- **`MUSICFY_ORIGINS`** — comma-separated extra origins allowed to make writes
+  (needed when a proxy rewrites `Host`, e.g. `https://musicfy.example.com`).
+- **`MUSICFY_BIND`** — optional bind host; set `127.0.0.1` when a local reverse proxy
+  is the only client.
+
+Built-in defences: writes require a same-origin `Origin`; request bodies are capped
+(4 MB, 64 MB uploads); the generic streamer refuses loopback/private/metadata URLs;
+changing the LLM base URL clears the stored key.
