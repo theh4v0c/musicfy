@@ -577,6 +577,7 @@ function openPlaylistMenu(p, x, y) {
     <button data-act="pl-m3u">Export M3U</button>
     <button data-act="pl-rb">Export for Rekordbox (.xml)</button>
     <button data-act="pl-tr">Export for Traktor (.nml)</button>
+    <button data-act="pl-usb">Export for CDJ USB</button>
     <button data-act="pl-zip">Download to device (zip)</button>
     <button data-act="pl-delete">Delete playlist</button>`;
   m.classList.add('open');
@@ -592,6 +593,7 @@ function openPlaylistMenu(p, x, y) {
     if (act === 'pl-m3u') { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.m3u`; return; }
     if (act === 'pl-rb') { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/rekordbox.xml`; return; }
     if (act === 'pl-tr') { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/traktor.nml`; return; }
+    if (act === 'pl-usb') { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/pioneer.zip`; return; }
     if (act === 'pl-zip') { toast('Building the zip, this can take a minute', 6000); window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/zip`; return; }
     if (act === 'pl-rename') {
       const name = prompt('Rename playlist:', p.name); if (!name) return;
@@ -1301,9 +1303,11 @@ async function renderDjExport() {
       <div class="crate-acts">
         <button class="crate-btn" data-rb title="Download a ZIP with the audio + rekordbox XML">Rekordbox</button>
         <button class="crate-btn" data-tr title="Download a ZIP with the audio + Traktor NML">Traktor</button>
+        <button class="crate-btn" data-usb title="ZIP of the audio under Contents/ for a CDJ USB">USB</button>
       </div>`;
     card.querySelector('[data-rb]').onclick = (e) => { e.stopPropagation(); toast('Zipping the crate…', 6000); window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.zip?format=rekordbox`; };
     card.querySelector('[data-tr]').onclick = (e) => { e.stopPropagation(); toast('Zipping the crate…', 6000); window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.zip?format=traktor`; };
+    card.querySelector('[data-usb]').onclick = (e) => { e.stopPropagation(); toast('Zipping for the CDJ…', 6000); window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/pioneer.zip`; };
     const abt = card.querySelector('.crate-analyze');
     if (abt) abt.onclick = async (e) => {
       e.stopPropagation();

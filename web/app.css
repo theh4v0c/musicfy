@@ -643,3 +643,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
 
 /* drag-to-reorder feedback in playlists */
 .trow.dragover { outline: 2px dashed var(--acc); outline-offset: -2px; border-radius: 8px; }
+
+/* three export buttons in a crate: wrap instead of overflow */
+.crate-acts { flex-wrap: wrap; }
+.crate-btn { flex: 1 1 30%; min-width: 46px; font-size: 10.5px; padding: 7px 4px; }
