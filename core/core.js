@@ -2578,32 +2578,32 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { recent, deeper, unplaylisted });
     }
 
-    // discovery outside the library: same genre, not already owned
+    // discovery outside the library: several genre shelves, none of it already owned
     if (u.pathname === '/api/discover/outside') {
-      const fam = db.prepare(`SELECT genre_family FROM tracks WHERE genre_family IS NOT NULL AND genre_family != ''
-        GROUP BY genre_family ORDER BY COUNT(*) DESC LIMIT 1`).get();
-      const topArtist = db.prepare(`SELECT t.artist, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
-        WHERE t.artist IS NOT NULL AND t.artist != '' GROUP BY t.artist ORDER BY n DESC LIMIT 1`).get();
-      const seed = (fam && fam.genre_family) || (topArtist && topArtist.artist) || '';
-      if (!seed) return json(res, 200, { seed: '', songs: [] });
-      let data = null;
-      try { data = await identity.catalog(seed, { songs: 40, albums: 0, artists: 0 }); } catch {}
-      const results = (data && data.songs) || [];
+      const fams = db.prepare(`SELECT genre_family f, COUNT(*) n FROM tracks
+        WHERE genre_family IS NOT NULL AND genre_family != ''
+        GROUP BY genre_family ORDER BY n DESC LIMIT 4`).all().map((x) => x.f).filter(Boolean);
+      const seeds = fams.length ? fams : db.prepare(`SELECT artist FROM tracks WHERE artist IS NOT NULL AND artist != ''
+        GROUP BY artist ORDER BY COUNT(*) DESC LIMIT 3`).all().map((x) => x.artist);
       const norm = (a, t) => `${(a || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}`;
       const inLib = new Set(db.prepare('SELECT dup_key FROM tracks').all().map((r) => r.dup_key));
-      const seedArtist = (topArtist && topArtist.artist) || '';
       const seen = new Set();
-      const outside = [];
-      for (const s of results) {
-        if (!s.title || !s.artist) continue;
-        const k = norm(s.artist, s.title);
-        if (inLib.has(k) || seen.has(k)) continue;
-        if (seedArtist && s.artist.toLowerCase() === seedArtist.toLowerCase()) continue;
-        seen.add(k);
-        outside.push({ title: s.title, artist: s.artist, album: s.album || '', duration: s.duration || null, artwork: s.artwork || null });
-        if (outside.length >= 20) break;
+      const groups = [];
+      for (const seed of seeds.slice(0, 3)) {
+        let data = null;
+        try { data = await identity.catalog(seed, { songs: 30, albums: 0, artists: 0 }); } catch {}
+        const out = [];
+        for (const s of (data && data.songs) || []) {
+          if (!s.title || !s.artist) continue;
+          const k = norm(s.artist, s.title);
+          if (inLib.has(k) || seen.has(k)) continue;
+          seen.add(k);
+          out.push({ title: s.title, artist: s.artist, album: s.album || '', duration: s.duration || null });
+          if (out.length >= 12) break;
+        }
+        if (out.length) groups.push({ label: String(seed).replace(/_/g, ' '), songs: out });
       }
-      return json(res, 200, { seed, songs: outside });
+      return json(res, 200, { groups });
     }
 
     // track cover: embedded art served from cover cache
@@ -2793,7 +2793,13 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (u.pathname === '/api/playlists') {
-      const rows = db.prepare(`SELECT p.*, (SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id=p.id) n_tracks
+      const rows = db.prepare(`SELECT p.*, (SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id=p.id) n_tracks,
+        (SELECT COUNT(*) FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
+           JOIN files f ON f.track_id=t.id AND f.tier='owned'
+           WHERE pt.playlist_id=p.id AND t.analyzed_at IS NOT NULL) analyzed,
+        (SELECT COUNT(*) FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
+           JOIN files f ON f.track_id=t.id AND f.tier='owned'
+           WHERE pt.playlist_id=p.id) owned
         FROM playlists p ORDER BY p.name`).all();
       return json(res, 200, rows);
     }
@@ -2897,6 +2903,69 @@ const server = http.createServer(async (req, res) => {
       const name = ((db.prepare('SELECT name FROM playlists WHERE id=?').get(pid) || {}).name || 'playlist').replace(/[^\w. -]+/g, '_').slice(0, 80);
       res.writeHead(200, { 'content-type': 'application/xml; charset=utf-8', 'content-disposition': `attachment; filename="${name}.nml"`, 'cache-control': 'no-store' });
       return res.end(body);
+    }
+
+    // portable set: ZIP with the actual audio + the XML/NML so the right tracks travel with the set
+    const mDjZip = u.pathname.match(/^\/api\/playlists\/([^/]+)\/export\.zip$/);
+    if (mDjZip) {
+      const pid = decodeURIComponent(mDjZip[1]);
+      const fmt = u.searchParams.get('format') === 'traktor' ? 'traktor' : 'rekordbox';
+      const pl = db.prepare('SELECT name FROM playlists WHERE id=?').get(pid) || { name: 'playlist' };
+      const safe = (String(pl.name).replace(/[\/:*?"<>|]+/g, '_').slice(0, 60) || 'playlist').trim();
+      const root = `MUSICFY ${safe}`;
+      const tmpDir = fs.mkdtempSync(path.join('/tmp', 'mfdj-'));
+      const stage = path.join(tmpDir, root);
+      const audioDir = path.join(stage, 'audio');
+      fs.mkdirSync(audioDir, { recursive: true });
+      const rows = db.prepare(`SELECT t.id, t.title, t.artist, f.path FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
+        LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
+        WHERE pt.playlist_id=? ORDER BY pt.position`).all(pid);
+      const used = new Set();
+      const names = new Map();
+      let copied = 0;
+      for (const r of rows) {
+        if (!r.path || !fs.existsSync(r.path)) continue;
+        const ext = path.extname(r.path) || '.mp3';
+        const base = (`${r.artist ? r.artist + ' - ' : ''}${r.title}`.replace(/[\/:*?"<>|]+/g, '_').slice(0, 120) || ('track-' + r.id));
+        let name = base + ext;
+        let i = 2;
+        while (used.has(name.toLowerCase())) name = `${base} (${i++})${ext}`;
+        used.add(name.toLowerCase());
+        fs.copyFileSync(r.path, path.join(audioDir, name));
+        names.set(r.id, name);
+        copied += 1;
+      }
+      if (!copied) {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+        return json(res, 404, { error: 'nothing downloaded in this playlist yet' });
+      }
+      const body = fmt === 'traktor'
+        ? exporter.traktorNml(db, pid, { dirFor: () => '/:audio', fileFor: (t) => names.get(t.id) || path.basename(t.path) })
+        : exporter.rekordboxXml(db, pid, { pathFor: (t) => 'file://localhost/audio/' + encodeURIComponent(names.get(t.id) || path.basename(t.path)) });
+      fs.writeFileSync(path.join(stage, fmt === 'traktor' ? 'traktor.nml' : 'rekordbox.xml'), body);
+      fs.writeFileSync(path.join(stage, 'playlist.m3u8'), ['#EXTM3U', ...rows.filter((r) => names.has(r.id)).map((r) => names.get(r.id))].join('\n'));
+      fs.writeFileSync(path.join(stage, 'README.txt'),
+        `MUSICFY set export — ${pl.name} (${fmt})\n\n` +
+        `Contents\n  audio/        the actual audio files (this IS the set)\n` +
+        `  ${fmt === 'traktor' ? 'traktor.nml' : 'rekordbox.xml'}\n  playlist.m3u8\n\n` +
+        (fmt === 'traktor'
+          ? `Traktor\n  1. Right-click your Collection > Import Collection > choose traktor.nml\n  2. If tracks are missing: select them > Relocate > choose the audio/ folder\n`
+          : `Rekordbox\n  1. File > Import > Import Collection (rekordbox xml) > choose rekordbox.xml\n  2. If tracks are missing: select the playlist > Relocate > choose the audio/ folder\n`) +
+        `\nThe audio/ folder is the source of truth: whatever plays from it is exactly what you exported.\n`);
+      const zipPath = path.join(tmpDir, 'set.zip');
+      await new Promise((resolve, reject) => {
+        execFile('zip', ['-r', '-q', zipPath, root], { cwd: tmpDir, timeout: 180000 }, (err) => err ? reject(err) : resolve());
+      });
+      res.writeHead(200, {
+        'content-type': 'application/zip',
+        'content-disposition': `attachment; filename="${safe} (${fmt}).zip"`,
+        'content-length': fs.statSync(zipPath).size,
+        'cache-control': 'no-store',
+      });
+      const stream = fs.createReadStream(zipPath);
+      stream.pipe(res);
+      stream.on('close', () => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} });
+      return;
     }
     if (u.pathname === '/api/docs') {
       return json(res, 200, {

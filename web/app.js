@@ -704,32 +704,35 @@ async function renderExternalInto(host) {
   try {
     const d = await api('/api/discover/outside', { nocache: true });
     if (!document.body.contains(host)) return;
-    if (!d.songs || !d.songs.length) return;
-    const h = document.createElement('div');
-    h.className = 'sec-title';
-    h.innerHTML = `Outside your library <small>${esc(d.seed || 'similar')} · NOT OWNED</small>`;
-    host.appendChild(h);
-    const row = document.createElement('div');
-    row.className = 'row-scroller';
-    for (const s of d.songs) {
-      const card = document.createElement('div');
-      card.className = 'tcard';
-      card.innerHTML = `<div class="tcard-art ph">${esc((s.artist || '?').charAt(0))}</div>
-        <div class="tcard-name">${esc(s.title)}</div>
-        <div class="tcard-sub">${esc(s.artist)}</div>
-        <button class="tcard-play" title="Add to library" aria-label="Add to library">${IC.download}</button>`;
-      card.querySelector('.tcard-play').onclick = async (e) => {
-        e.stopPropagation();
-        try {
-          await api('/api/ladder/download', { method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ rung: 'search', title: s.title, artist: s.artist, duration: s.duration }) });
-          toast(`Fetching ${s.title}`, 4000);
-          openDownloads();
-        } catch { toast('Could not start', 3000); }
-      };
-      row.appendChild(card);
+    const groups = d.groups || [];
+    if (!groups.length) return;
+    for (const g of groups) {
+      const h = document.createElement('div');
+      h.className = 'sec-title';
+      h.innerHTML = `More ${esc(g.label)} <small>NOT IN YOUR LIBRARY</small>`;
+      host.appendChild(h);
+      const row = document.createElement('div');
+      row.className = 'row-scroller';
+      for (const s of g.songs) {
+        const card = document.createElement('div');
+        card.className = 'tcard';
+        card.innerHTML = `<div class="tcard-art ph">${esc((s.artist || '?').charAt(0))}</div>
+          <div class="tcard-name">${esc(s.title)}</div>
+          <div class="tcard-sub">${esc(s.artist)}</div>
+          <button class="tcard-play" title="Add to library" aria-label="Add to library">${IC.download}</button>`;
+        card.querySelector('.tcard-play').onclick = async (e) => {
+          e.stopPropagation();
+          try {
+            await api('/api/ladder/download', { method: 'POST', headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ rung: 'search', title: s.title, artist: s.artist, duration: s.duration }) });
+            toast(`Fetching ${s.title}`, 4000);
+            openDownloads();
+          } catch { toast('Could not start', 3000); }
+        };
+        row.appendChild(card);
+      }
+      host.appendChild(row);
     }
-    host.appendChild(row);
   } catch {}
 }
 
@@ -1153,38 +1156,62 @@ async function renderLibrary() {
 // DJ export: analysis coverage, a batch analyse for electronic, and per-playlist export
 async function renderDjExport() {
   setNav('djexport'); state.playlistId = null; renderSidebar();
-  $('view-title').textContent = 'DJ Export';
+  $('view-title').textContent = 'Prep';
   const v = $('view');
-  v.innerHTML = `<div class="sec-title" style="margin-top:0">Analysis <small id="dj-cov">…</small></div>
-    <div class="lib-actions">
-      <button class="btn btn-ghost" id="dj-analyze">Analyze tracks (BPM + beat grid)</button>
-      <span class="pill" id="dj-status"></span>
+  v.innerHTML = `
+    <div class="prep-hero">
+      <div class="prep-kicker">SET PREPARATION</div>
+      <div class="prep-title">Prep</div>
+      <p class="prep-sub">Analyze for BPM and beat grid, then export a crate that carries the audio and the cues.</p>
+      <div class="prep-meter"><div class="prep-meter-bar"><i id="prep-fill" style="width:0%"></i></div><span id="prep-cov">…</span></div>
+      <div class="prep-actions">
+        <button class="btn btn-primary" id="dj-analyze">Analyze missing</button>
+        <span class="pill" id="dj-status"></span>
+      </div>
     </div>
-    <div class="sec-title">Playlists <small>EXPORT READY</small></div>
-    <div id="dj-list"></div>`;
+    <div class="sec-title">Crates <small>EXPORT READY</small></div>
+    <div class="crate-grid" id="dj-list"></div>`;
   try {
     const st = await api('/api/analyze/status', { nocache: true });
-    const cov = document.getElementById('dj-cov');
-    if (cov) cov.textContent = `${st.analysed}/${st.total} ANALYZED · ${st.remaining} LEFT`;
+    const cov = document.getElementById('prep-cov');
+    const fill = document.getElementById('prep-fill');
+    const pct = st.total ? Math.round((st.analysed / st.total) * 100) : 0;
+    if (cov) cov.textContent = `${st.analysed}/${st.total} analyzed · ${st.remaining} left`;
+    if (fill) fill.style.width = pct + '%';
   } catch {}
   const btn = document.getElementById('dj-analyze');
   if (btn) btn.onclick = async () => {
+    btn.disabled = true;
     try {
       const r = await api('/api/analyze/run?limit=500&workers=2', { method: 'POST' });
       const s = document.getElementById('dj-status');
       if (s) s.textContent = `STARTED ${r.limit} · ${r.workers} WORKERS`;
       toast('Analyzing in the background', 5000);
     } catch { toast('Could not start analysis'); }
+    btn.disabled = false;
   };
   const list = document.getElementById('dj-list');
+  if (!list) return;
   for (const p of state.playlists) {
-    const row = document.createElement('div');
-    row.className = 'dj-row';
-    row.innerHTML = `<span class="dj-name"><b>${esc(p.name)}</b> <small>${p.n_tracks} tracks</small></span>
-      <span class="dj-acts"><button class="btn btn-ghost" data-rb>Rekordbox .xml</button><button class="btn btn-ghost" data-tr>Traktor .nml</button></span>`;
-    row.querySelector('[data-rb]').onclick = () => { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/rekordbox.xml`; };
-    row.querySelector('[data-tr]').onclick = () => { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/traktor.nml`; };
-    list.appendChild(row);
+    const cov = p.owned ? Math.round(((p.analyzed || 0) / p.owned) * 100) : 0;
+    const card = document.createElement('div');
+    card.className = 'crate';
+    card.innerHTML = `
+      <div class="crate-artwrap">
+        <img class="crate-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=340&v=${state.artV || 0}" alt="" loading="lazy">
+        <span class="crate-badge">${p.owned || 0}/${p.n_tracks || 0} audio</span>
+      </div>
+      <div class="crate-name">${esc(p.name)}</div>
+      <div class="crate-ready"><i style="width:${cov}%"></i></div>
+      <div class="crate-meta">${p.n_tracks || 0} tracks · ${cov}% analyzed</div>
+      <div class="crate-acts">
+        <button class="crate-btn" data-rb title="Download a ZIP with the audio + rekordbox XML">Rekordbox</button>
+        <button class="crate-btn" data-tr title="Download a ZIP with the audio + Traktor NML">Traktor</button>
+      </div>`;
+    card.querySelector('[data-rb]').onclick = (e) => { e.stopPropagation(); toast('Zipping the crate…', 6000); window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.zip?format=rekordbox`; };
+    card.querySelector('[data-tr]').onclick = (e) => { e.stopPropagation(); toast('Zipping the crate…', 6000); window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.zip?format=traktor`; };
+    card.onclick = () => openPlaylist(p.id);
+    list.appendChild(card);
   }
   if (!state.playlists.length) list.innerHTML = '<div class="empty">No playlists yet.</div>';
 }

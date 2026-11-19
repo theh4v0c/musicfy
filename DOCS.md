@@ -341,6 +341,17 @@ To spread the work across the Macs, the missing piece is a small worker that acc
 path and returns the same JSON. The analyser already talks JSON lines, so a worker is a thin
 wrapper, and `analyze.js` would post to it when configured and fall back to local otherwise.
 
+## DJ export (Rekordbox, Traktor)
+
+`GET /api/playlists/:id/export.zip?format=rekordbox|traktor` builds a self-contained set:
+a folder `MUSICFY <playlist>/` with `audio/` (the actual files, copied), the `rekordbox.xml`
+or `traktor.nml`, `playlist.m3u8`, and a `README.txt`. The XML `Location` points into
+`audio/`, so after extracting the user relocates to that folder in one action (Rekordbox:
+Import Collection → Relocate). Cues are hot cues (rekordbox `Num` 0–7) taken from the
+analyser's downbeats, every 16 bars. `Tonality` carries the key for harmonic mixing.
+
+There is also a bare `.../export/rekordbox.xml` and `.../export/traktor.nml` for scripting.
+
 ## Bandcamp, verified blocked from this network
 
 - `bandcamp.com/search` is unsupported by yt-dlp, by design

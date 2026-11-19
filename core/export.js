@@ -47,9 +47,10 @@ const kindOf = (p) => {
   return 'MP3 File';
 };
 
-function rekordboxXml(db, playlistId) {
+function rekordboxXml(db, playlistId, opts) {
   const pl = db.prepare('SELECT name FROM playlists WHERE id=?').get(playlistId) || { name: 'Playlist' };
   const tracks = rowsFor(db, playlistId).filter((r) => r.path);
+  const pathFor = (opts && opts.pathFor) || ((t) => fileUri(t.path));
   const L = [];
   L.push('<?xml version="1.0" encoding="UTF-8"?>');
   L.push('<DJ_PLAYLISTS Version="1.0.0">');
@@ -66,7 +67,7 @@ function rekordboxXml(db, playlistId) {
       // rekordbox reads Tonality as the musical key ("F#m"); it drives harmonic mixing
       `Tonality="${xmlEsc(tonality(t.key, t.key_scale))}"`,
       `Year="${Number(t.year) || 0}"`,
-      `Location="${xmlEsc(fileUri(t.path))}"`,
+      `Location="${xmlEsc(pathFor(t))}"`,
     ].join(' ');
     L.push(`    <TRACK ${attrs}>`);
     // one TEMPO node is correct for a constant grid (rekordbox emits more only on BPM changes)
@@ -89,9 +90,11 @@ function rekordboxXml(db, playlistId) {
   return L.join('\n');
 }
 
-function traktorNml(db, playlistId) {
+function traktorNml(db, playlistId, opts) {
   const pl = db.prepare('SELECT name FROM playlists WHERE id=?').get(playlistId) || { name: 'Playlist' };
   const tracks = rowsFor(db, playlistId).filter((r) => r.path);
+  const dirFor = (opts && opts.dirFor) || ((t) => '/:' + path.dirname(t.path).split(path.sep).join('/'));
+  const fileFor = (opts && opts.fileFor) || ((t) => path.basename(t.path));
   const L = [];
   L.push('<?xml version="1.0" encoding="UTF-8" standalone="no"?>');
   L.push('<NML VERSION="19">');
@@ -102,7 +105,7 @@ function traktorNml(db, playlistId) {
     const dir = path.dirname(t.path).split(path.sep).join('/');
     const file = path.basename(t.path);
     L.push(`    <ENTRY TITLE="${xmlEsc(t.title)}" ARTIST="${xmlEsc(t.artist)}">`);
-    L.push(`      <LOCATION DIR="${xmlEsc('/:' + dir)}" FILE="${xmlEsc(file)}" VOLUME=":" VOLUMEID="macintosh"/>`);
+    L.push(`      <LOCATION DIR="${xmlEsc(dirFor(t))}" FILE="${xmlEsc(fileFor(t))}" VOLUME=":" VOLUMEID="macintosh"/>`);
     L.push(`      <ALBUM>${xmlEsc(t.album || '')}</ALBUM>`);
     L.push(`      <INFO BITRATE="${t.bitrate ? Math.round(Number(t.bitrate)) : 320000}" GENRE="${xmlEsc(t.genre || '')}"/>`);
     L.push(`      <TEMPO BPM="${Number(t.bpm || 0).toFixed(6)}" BPM_QUALITY="100"/>`);
