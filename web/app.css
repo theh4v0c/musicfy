@@ -22,9 +22,13 @@
 [hidden] { display: none !important; }
 html { color-scheme: dark; }
 body { background: var(--bg); color: var(--fg); font-family: "Figtree", system-ui, sans-serif; height: 100dvh; overflow: hidden;
-  -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overscroll-behavior-y: contain; }
+  -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overscroll-behavior-y: contain;
+  /* long press is the app's context menu, not the browser's text/image selection */
+  -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 button { font-family: inherit; cursor: pointer; color: inherit; }
-img { -webkit-user-drag: none; }
+img { -webkit-user-drag: none; -webkit-touch-callout: none; user-select: none; pointer-events: auto; }
+/* keep fields selectable so typing and editing still work */
+input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 
 #app { display: grid; grid-template-columns: 272px 1fr; grid-template-rows: 1fr 88px; grid-template-areas: "side main" "player player"; height: 100dvh; }
 
