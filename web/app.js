@@ -1924,6 +1924,13 @@ async function renderSettings() {
     const f = document.getElementById('set-facts');
     if (f) f.innerHTML = `<div><b>${st.tracks}</b> tracks</div><div><b>${(st.owned_bytes / 1e9).toFixed(2)} GB</b> on disk</div><div><b>${st.listens}</b> plays recorded</div>`;
   }).catch(() => {});
+  // keep the fade checkbox and its length select in agreement
+  const fadeCb = document.getElementById('set-fade');
+  const fadeSel = document.getElementById('set-fadems');
+  if (fadeCb && fadeSel) {
+    fadeCb.onchange = () => { fadeSel.value = fadeCb.checked ? (fadeSel.value === '0' ? '350' : fadeSel.value) : '0'; };
+    fadeSel.onchange = () => { fadeCb.checked = fadeSel.value !== '0'; };
+  }
   document.getElementById('set-save').onclick = async () => {
     const body = {
       display_name: document.getElementById('set-name').value.trim(),
@@ -1935,7 +1942,9 @@ async function renderSettings() {
       preferred_format: document.getElementById('set-format').value,
       normalize_loudness: document.getElementById('set-normalize').checked,
       target_loudness: Number(document.getElementById('set-target').value),
-      fade_on_play_ms: Number(document.getElementById('set-fadems').value),
+      fade_on_play_ms: document.getElementById('set-fade').checked
+        ? (Number(document.getElementById('set-fadems').value) || 350)
+        : 0,
       autoplay_next: document.getElementById('set-autoplay').checked,
       prefetch_ahead: Number(document.getElementById('set-buffer').value),
       taste_genres: document.getElementById('set-taste-genres').value.trim(),
