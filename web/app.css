@@ -31,7 +31,7 @@ img { -webkit-user-drag: none; }
 /* ============ sidebar ============ */
 .sidebar { grid-area: side; background: var(--bg-elev); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
 .brand { font-weight: 800; letter-spacing: .18em; font-size: 15px; padding: 22px 22px 18px; }
-.brand::after { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--acc); margin-left: 6px; }
+.brand::after { content: none; }
 .snav { display: flex; flex-direction: column; gap: 2px; padding: 0 12px; }
 /* settings sits with the other entries on the rail, and at the far right on the phone bar */
 .bn-btn[data-nav="settings"] { margin-left: auto; }
@@ -666,7 +666,10 @@ html, body { overflow-x: hidden; max-width: 100%; }
 
 /* collapsible sidebar (desktop): collapsed is an icon-only rail */
 .brand-row { display: flex; align-items: center; justify-content: space-between; padding: 20px 16px 14px 22px; }
-.brand { padding: 0; }
+.brand { padding: 0;
+  background: linear-gradient(90deg, #ff9a4a, #ff5c39 55%, #ff3d6e);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent; -webkit-text-fill-color: transparent; }
 .side-icon { background: none; border: none; color: var(--fg-mute); padding: 6px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; }
 .side-icon:hover { color: var(--fg); background: var(--bg-elev2); }
 #app.side-collapsed { grid-template-columns: 68px 1fr; }

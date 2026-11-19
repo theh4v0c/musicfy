@@ -699,7 +699,7 @@ function heroBanner(kicker, title, sub) {
 
 async function renderHome() {
   setNav('home'); state.playlistId = null; renderSidebar();
-  $('view-title').textContent = 'MUSICFY';
+  $('view-title').textContent = 'Home';
   const v = $('view');
   v.innerHTML = `
     <div class="hero-greet">Good ${greetPart()}.</div>
