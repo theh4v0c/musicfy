@@ -341,6 +341,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .vol { width: 100px; accent-color: var(--fg); height: 3px; }
 
 /* context menu + toasts */
+#ctx-bg { position: fixed; inset: 0; z-index: 59; background: transparent; touch-action: none; }
 .ctx { position: fixed; z-index: 60; background: var(--bg-elev2); border: 1px solid var(--line); border-radius: 10px; padding: 6px; min-width: 220px; box-shadow: 0 16px 50px rgba(0,0,0,.6); display: none; }
 .ctx.open { display: block; }
 .ctx button { display: block; width: 100%; text-align: left; background: none; border: none; padding: 9px 12px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--fg-soft); }

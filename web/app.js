@@ -164,11 +164,11 @@ function ctxRename(t) {
       <label>Album<input id="rn-album" value="${esc(t.album || '')}"></label>
       <div class="ctx-row"><button class="btn btn-primary" id="rn-save">Save</button><button class="btn btn-ghost" id="rn-cancel">Cancel</button></div>
     </div>`;
-  m.classList.add('open'); showBack();
+  m.classList.add('open'); markCtxOpen();
   m.style.left = Math.max(8, innerWidth / 2 - 160) + 'px';
   m.style.top = '12%';
   m.onclick = null;
-  m.querySelector('#rn-cancel').onclick = () => m.classList.remove('open');
+  m.querySelector('#rn-cancel').onclick = () => closeCtx(true);
   m.querySelector('#rn-save').onclick = async () => {
     const body = {
       title: m.querySelector('#rn-title').value.trim(),
@@ -178,7 +178,7 @@ function ctxRename(t) {
     try {
       const r = await api(`/api/tracks/${t.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       if (r.error) return toast(r.error, 6000);
-      m.classList.remove('open');
+      closeCtx(true);
       state.allTracks = null;
       bustCache();
       toast('Renamed', 4000);
@@ -234,54 +234,54 @@ function closeCtx(force = false) {
   el.classList.remove('open');
   el.onclick = null;
   el.style.transform = '';
-
+  const bg = $('ctx-bg');
+  if (bg) bg.hidden = true;
 }
+// every sheet sits above a full screen transparent backdrop; the backdrop is the only
+// thing that dismisses it, so an outside tap can neither miss nor hit the page below
 let ctxOpenedAt = 0;
-let ctxTouchOpen = false;   // this sheet was opened by a long press
-let ctxReleaseIgnored = false;
 function markCtxOpen() {
   ctxOpenedAt = Date.now();
-  ctxTouchOpen = Date.now() - lastTouchAt < 2500;
-  ctxReleaseIgnored = false;
+  const bg = $('ctx-bg');
+  if (bg) bg.hidden = false;
 }
-// close on any press outside the menu, in the capture phase so nothing can swallow it
+// safety net for browsers that still emit a click on the lift of a long press: the menu
+// has just appeared under the finger, so a click in the first 350ms is not a real choice
+$('ctx').addEventListener('click', (e) => {
+  if (Date.now() - ctxOpenedAt < 350) { e.stopImmediatePropagation(); e.preventDefault(); }
+}, true);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCtx(); });
 
-// Touch devices fire touchstart before the browser synthesises mouse events. When a long
-// press opens the sheet, ignore the single release that follows, then close on the next tap.
 let lastTouchAt = 0;
-document.addEventListener('touchstart', (e) => {
-  lastTouchAt = Date.now();
-  const el = $('ctx');
-  if (!el || !el.classList.contains('open')) return;
-  if (Date.now() - ctxOpenedAt < 150) return;
-  if (el.contains(e.target)) return;
-  closeCtx(true);
-}, { capture: true, passive: true });
-document.addEventListener('mousedown', (e) => {
-  const el = $('ctx');
-  if (!el || !el.classList.contains('open')) return;
-  if (el.contains(e.target)) return;
-  if (ctxTouchOpen && !ctxReleaseIgnored) { ctxReleaseIgnored = true; return; }
-  closeCtx(true);
-}, true);
-// the lift that opens a touch menu can dispatch a click on the item now under the finger
-// (the menu appeared where the finger is). Swallow clicks landing right after opening.
-document.addEventListener('click', (e) => {
-  const el = $('ctx');
-  if (!el || !el.classList.contains('open')) return;
-  if (Date.now() - ctxOpenedAt < 450) { e.stopPropagation(); e.preventDefault(); }
-}, true);
-
+document.addEventListener('touchstart', () => { lastTouchAt = Date.now(); }, { capture: true, passive: true });
+// iOS still raises contextmenu during a long press. It must not re-open or reposition a
+// sheet that the long press already opened, so only a real mouse right click uses it.
 document.addEventListener('contextmenu', (e) => {
+  // a long press owns its own gesture; iOS still raises contextmenu for it
+  if (Date.now() - lastTouchAt < 1500) { e.preventDefault(); e.stopPropagation(); return; }
   const row = e.target.closest('.trow, .tcard');
   if (!row) return;
   e.preventDefault();
   const el = $('ctx');
-  if (el && el.classList.contains('open')) return; // long-press timer already opened it
+  if (el && el.classList.contains('open')) return;
   const t = findTrack(row);
   if (t) openCtx(t, e.clientX, e.clientY);
-});
+}, true);
+
+// backdrop dismissal: pointer/touch down, so the closing tap can never leak through
+(() => {
+  const bg = $('ctx-bg');
+  if (!bg) return;
+  const dismiss = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeCtx(true);
+  };
+  bg.addEventListener('touchstart', dismiss, { passive: false });
+  bg.addEventListener('mousedown', dismiss);
+  bg.addEventListener('click', dismiss);
+})();
+
 $('ctx').addEventListener('click', async (e) => {
   const act = e.target.closest('button')?.dataset.act;
   if (!act || !ctxTarget) return;
@@ -485,7 +485,7 @@ function openAddPl(t) {
   m.style.transform = 'translate(-50%,-50%)';
   m.onclick = async (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    m.classList.remove('open'); m.style.transform = ''; m.onclick = null;
+    closeCtx(true); m.style.transform = ''; m.onclick = null;
     if (b.dataset.newpl) {
       const name = prompt('Playlist name:'); if (!name) return;
       const np = await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
@@ -679,7 +679,7 @@ function openPlaylistMenu(p, x, y) {
   m.onclick = async (e) => {
     const b = e.target.closest('button'); if (!b) return;
     const act = b.dataset.act;
-    m.classList.remove('open'); m.onclick = null;
+    closeCtx(true); m.onclick = null;
     if (act === 'pl-play') { playPlaylist(p.id); return; }
     if (act === 'pl-cover') { uploadPlaylistCover(p.id); return; }
     if (act === 'pl-m3u') { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.m3u`; return; }
@@ -732,7 +732,7 @@ function openCardMenu(title, actions, x, y) {
     const b = e.target.closest('button[data-ci]');
     if (!b) return;
     const a = actions[Number(b.dataset.ci)];
-    m.classList.remove('open');
+    closeCtx(true);
     m.onclick = null;
     try { await a.run(); } catch { toast('That did not work', 4000); }
   };
@@ -749,25 +749,46 @@ function bindContext(el, fn) {
 
 let activeLongPressTimer = null;
 function longPress(el, fn, holdMs = 500) {
-  let t = null, fired = false, ox = 0, oy = 0;
+  let t = null, fired = false, ox = 0, oy = 0, suppressUntil = 0;
+  const cancel = () => { clearTimeout(t); t = null; activeLongPressTimer = null; };
   const start = (e) => {
     const p = (e.touches && e.touches[0]) || e;
     ox = p.clientX || 0; oy = p.clientY || 0;
     fired = false;
-    clearTimeout(activeLongPressTimer);
-    t = setTimeout(() => { fired = true; activeLongPressTimer = null; fn(); }, holdMs);
+    cancel();
+    t = setTimeout(() => {
+      t = null;
+      fired = true;
+      try { navigator.vibrate && navigator.vibrate(8); } catch {}
+      fn();
+    }, holdMs);
     activeLongPressTimer = t;
   };
   const move = (e) => {
+    if (!t) return;
     const p = (e.touches && e.touches[0]) || e;
-    // any real movement means the finger is scrolling, not holding
-    if (Math.abs((p.clientX || 0) - ox) > 8 || Math.abs((p.clientY || 0) - oy) > 8) { clearTimeout(t); activeLongPressTimer = null; }
+    // any real movement means the finger is scrolling, not holding (a resting thumb drifts
+    // a little, so only a deliberate drag cancels)
+    if (Math.abs((p.clientX || 0) - ox) > 14 || Math.abs((p.clientY || 0) - oy) > 14) cancel();
+  };
+  // the lift that opened the sheet must not also produce a click on whatever is now under
+  // the finger (usually a menu item). cancel the gesture at source, on this element.
+  const end = (e) => {
+    if (fired) {
+      suppressUntil = Date.now() + 700;
+      fired = false;
+      if (e.cancelable) e.preventDefault();
+      e.stopPropagation();
+    }
+    cancel();
   };
   el.addEventListener('touchstart', start, { passive: true });
   el.addEventListener('touchmove', move, { passive: true });
-  el.addEventListener('touchend', () => { clearTimeout(t); activeLongPressTimer = null; }, { passive: true });
-  el.addEventListener('touchcancel', () => { clearTimeout(t); activeLongPressTimer = null; }, { passive: true });
-  el.addEventListener('click', (e) => { if (fired) { e.stopPropagation(); e.preventDefault(); fired = false; } }, true);
+  el.addEventListener('touchend', end, { passive: false });
+  el.addEventListener('touchcancel', () => { fired = false; cancel(); }, { passive: true });
+  el.addEventListener('click', (e) => {
+    if (fired || Date.now() < suppressUntil) { fired = false; e.stopPropagation(); e.preventDefault(); }
+  }, true);
 }
 // a long press must never fire while the page is scrolling
 window.addEventListener('scroll', () => { if (activeLongPressTimer) { clearTimeout(activeLongPressTimer); activeLongPressTimer = null; } }, true);
@@ -907,7 +928,7 @@ function openLadderCtx(c, x, y) {
   m.onclick = async (e) => {
     const b = e.target.closest('button'); if (!b) return;
     const act = b.dataset.act;
-    m.classList.remove('open'); m.onclick = null;
+    closeCtx(true); m.onclick = null;
     if (act === 'l-play') { window.__ladderPlay ? window.__ladderPlay(c) : null; }
     if (act === 'l-add') { openAddPlStream(c); }
     if (act === 'l-dl') {
@@ -931,7 +952,7 @@ function openAddPlStream(c) {
   m.style.left = '50%'; m.style.top = '45%'; m.style.transform = 'translate(-50%,-50%)';
   m.onclick = async (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    m.classList.remove('open'); m.style.transform = ''; m.onclick = null;
+    closeCtx(true); m.style.transform = ''; m.onclick = null;
     await api(`/api/playlists/${encodeURIComponent(b.dataset.pl)}/tracks`, {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ stream: { rung: c.rung, id: c.id, url: c.url || '', title: c.title, artist: c.artist || '', album: c.album || '', duration: c.duration || null } }),
@@ -3817,7 +3838,7 @@ function openAddPlIds(ids) {
   m.style.left = '50%'; m.style.top = '45%'; m.style.transform = 'translate(-50%,-50%)';
   m.onclick = async (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    m.classList.remove('open'); m.style.transform = ''; m.onclick = null;
+    closeCtx(true); m.style.transform = ''; m.onclick = null;
     await addTracksToPlaylist(b.dataset.pl, ids);
     clearSelection();
   };
@@ -3889,7 +3910,6 @@ async function uploadPlaylistCover(pid) {
   });
 }
 
-document.addEventListener('scroll', () => { const m = $('ctx'); if (m && m.classList.contains('open')) m.classList.remove('open'); }, true);
 document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') { if (e.key === 'Escape') e.target.blur(); return; }
   if (e.key === ' ') { e.preventDefault(); togglePlay(); }
