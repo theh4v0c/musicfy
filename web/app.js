@@ -633,10 +633,7 @@ async function renderHome() {
     <div class="hero-sub">${state.playlists.length} playlists</div>
     <div class="quicktiles" id="quick"></div>
     <div id="rotation-slot"></div>
-    <div class="sec-title">Fresh in your library <small>NEWEST FIRST</small></div>
-    <div class="row-scroller" id="fresh-row"></div>
-    <div class="sec-title" id="newart-title" hidden>New artists <small>NEVER PLAYED</small></div>
-    <div class="artist-chips" id="newart-row"></div>
+    <div id="discover-home"></div>
     <div class="sec-title">Recently played <small id="recent-hint"></small></div>
     <div class="row-scroller" id="recent-row"></div>
     <div class="sec-title">Your playlists <small>${state.playlists.length} TOTAL</small></div>
@@ -644,28 +641,42 @@ async function renderHome() {
   drawQuick();
   const g = $('home-grid');
   for (const p of state.playlists) g.appendChild(pcard(p));
-  drawDiscover();
+  renderDiscoverInto($('discover-home'));
   const rec = await loadRecentlyPlayed();
   drawRecents(rec);
   drawRotation(rec);
 }
 
-async function drawDiscover() {
-  const row = $('fresh-row'); if (!row) return;
+// discovery rails: newest, more-from-artists-you-play, and unfiled tracks
+async function renderDiscoverInto(host) {
+  if (!host) return;
   try {
     const d = await api('/api/discover', { nocache: true });
-    if (!$('fresh-row')) return;
-    for (const t of (d.recent || [])) row.appendChild(trackCard(t, d.recent, 'Fresh in your library'));
-    const wrap = $('newart-row'); const title = $('newart-title');
-    if (wrap && title && d.newArtists && d.newArtists.length) {
-      title.hidden = false;
-      for (const a of d.newArtists) {
-        const b = document.createElement('button');
-        b.className = 'chip-card sm';
-        b.innerHTML = `<b>${esc(a.artist)}</b><span>${a.n} never played</span>`;
-        b.onclick = () => renderArtist(a.artist);
-        wrap.appendChild(b);
-      }
+    if (!document.body.contains(host)) return;
+    const rails = [
+      ['Fresh in your library', 'NEWEST FIRST', d.recent, 'Fresh in your library'],
+      ['More from artists you play', 'NOT YET HEARD', d.deeper, 'More from artists you play'],
+      ['Not in any playlist', 'UNFILED', d.unplaylisted, 'Not in any playlist'],
+    ];
+    const seen = new Set();
+    for (const [title, tag, list, origin] of rails) {
+      const fresh = (list || []).filter((t) => t && t.id != null && !seen.has(t.id)).slice(0, 12);
+      if (!fresh.length) continue;
+      fresh.forEach((t) => seen.add(t.id));
+      const h = document.createElement('div');
+      h.className = 'sec-title';
+      h.innerHTML = `${esc(title)} <small>${esc(tag)}</small>`;
+      host.appendChild(h);
+      const row = document.createElement('div');
+      row.className = 'row-scroller';
+      for (const t of fresh) row.appendChild(trackCard(t, fresh, origin));
+      host.appendChild(row);
+    }
+    if (!host.querySelector('.tcard')) {
+      const e = document.createElement('div');
+      e.className = 'empty';
+      e.textContent = 'Nothing to surface yet. Add tracks or play a few, and this fills in.';
+      host.appendChild(e);
     }
   } catch {}
 }
@@ -1016,11 +1027,11 @@ async function renderLibrary() {
       <button class="btn btn-ghost" id="cache-clear">Clear cache</button>
     </div>
     <div class="lib-actions">
-      <button class="btn btn-ghost" id="hist-import">Import from history</button>
+      <button class="btn btn-ghost" id="hist-import">Playlist from most-played</button>
       <button class="btn btn-ghost" id="meta-repair">Repair metadata</button>
       <span class="pill" id="rung-health">RUNGS -</span>
-      <label class="pill" id="auto-dl-wrap" title="Download a track automatically after this many plays. 0 disables.">
-        AUTO DOWNLOAD <input id="auto-dl" class="mini-num" type="number" min="0" max="20" value="2">
+      <label class="pill" id="auto-dl-wrap" title="Save a track to disk automatically after it is played this many times. 0 turns it off.">
+        AUTO-SAVE AFTER <input id="auto-dl" class="mini-num" type="number" min="0" max="20" value="2"> PLAYS
       </label>
     </div>
     <div class="sec-title" style="margin-top:0">Playlists <small>${state.playlists.length} TOTAL</small></div>${orderControls()}<div class="pgrid" id="lib-grid"></div>`;
@@ -1580,7 +1591,7 @@ async function renderAskAi() {
         <button class="ask-ex">tracks in Dm between 120 and 130 bpm</button>
       </div>
       <div class="ladder-state" id="ai-state"></div>
-    </div><div id="ai-res"></div>`;
+    </div><div id="ai-res"></div><div id="ask-discover"></div>`;
   const box = $('ai-q');
   const out = $('ai-res');
   const stateEl = $('ai-state');
@@ -1670,6 +1681,7 @@ async function renderAskAi() {
   box.onkeydown = (e) => { if (e.key === 'Enter') run(box.value); };
   v.querySelectorAll('.ask-ex').forEach((b) => b.onclick = () => { box.value = b.textContent; run(box.value); });
   box.focus();
+  renderDiscoverInto($('ask-discover'));
 }
 
 async function renderSearch() {

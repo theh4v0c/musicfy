@@ -2530,19 +2530,25 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, rows);
     }
 
-    // discovery: what is new in the library, and which artists you have never played
+    // discovery: real signals, not "never played = new". A bulk import would fool that.
     if (u.pathname === '/api/discover') {
       const owned = `EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')`;
-      const recent = db.prepare(`SELECT t.*, 1 AS owned, f.bitrate, r.rung, r.quality
+      const sel = `SELECT t.*, 1 AS owned, f.bitrate, r.rung, r.quality
         FROM tracks t
         LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
-        LEFT JOIN resolutions r ON r.track_id=t.id
-        WHERE ${owned} ORDER BY t.added_at DESC LIMIT 12`).all();
-      const newArtists = db.prepare(`SELECT t.artist, COUNT(*) n
-        FROM tracks t WHERE t.artist IS NOT NULL AND t.artist != '' AND ${owned}
-          AND NOT EXISTS (SELECT 1 FROM listens l JOIN tracks t2 ON t2.id=l.track_id WHERE lower(t2.artist)=lower(t.artist))
-        GROUP BY t.artist ORDER BY n DESC LIMIT 10`).all();
-      return json(res, 200, { recent, newArtists });
+        LEFT JOIN resolutions r ON r.track_id=t.id`;
+      const recent = db.prepare(`${sel} WHERE ${owned} ORDER BY t.added_at DESC LIMIT 12`).all();
+      // more from artists you actually play: their owned tracks you have not heard yet
+      const deeper = db.prepare(`${sel} WHERE ${owned}
+        AND t.artist IN (SELECT t2.artist FROM listens l JOIN tracks t2 ON t2.id=l.track_id
+                         WHERE t2.artist IS NOT NULL AND t2.artist != '' GROUP BY t2.artist)
+        AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id)
+        ORDER BY (SELECT COUNT(*) FROM listens l WHERE l.track_id=t.id) ASC, t.added_at DESC LIMIT 40`).all();
+      // owned but in no playlist: the part of the library you have not filed anywhere
+      const unplaylisted = db.prepare(`${sel} WHERE ${owned}
+        AND t.id NOT IN (SELECT track_id FROM playlist_tracks)
+        ORDER BY t.added_at DESC LIMIT 40`).all();
+      return json(res, 200, { recent, deeper, unplaylisted });
     }
 
     // track cover: embedded art served from cover cache
