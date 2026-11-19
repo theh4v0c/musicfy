@@ -24,6 +24,7 @@ const identity = require('./identity');
 const archive = require('./archive');
 const spotify = require('./spotify');
 const exporter = require('./export');
+const tagwrite = require('./tagwrite');
 const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = '/opt/musicfy';
@@ -153,6 +154,31 @@ function weatherWord(code) {
   if (c <= 82) return 'showery';
   if (c <= 86) return 'snowy';
   return 'stormy';
+}
+
+// metadata to write into a track's file: Traktor PRIV + standard ID3. MP3 only.
+function trackTagMeta(db, tid) {
+  const t = db.prepare('SELECT id,title,artist,album,genre,bpm,key,key_scale,duration,beat_grid FROM tracks WHERE id=?').get(tid);
+  if (!t) return { error: 'no track' };
+  const f = db.prepare("SELECT path, bitrate FROM files WHERE track_id=? AND tier='owned' LIMIT 1").get(tid);
+  if (!f || !fs.existsSync(f.path)) return { error: 'no owned audio' };
+  if (path.extname(f.path).toLowerCase() !== '.mp3') return { error: 'tags are written to MP3 only', path: f.path };
+  let grid = [];
+  try { grid = JSON.parse(t.beat_grid || '[]'); } catch {}
+  const cues = [];
+  if (grid.length) {
+    cues.push({ name: 'Grid', index: 0, type: 4, start: grid[0] * 1000, length: 0, repeats: -1, hotcue: 0 });
+    for (let i = 0; i < Math.min(8, grid.length); i++) {
+      cues.push({ name: `Cue ${i + 1}`, index: i + 1, type: 0, start: grid[i] * 1000, length: 0, repeats: -1, hotcue: i + 1 });
+    }
+  }
+  const plays = db.prepare('SELECT COUNT(*) c FROM listens WHERE track_id=?').get(tid).c;
+  return { path: f.path, meta: {
+    title: t.title, artist: t.artist, album: t.album, genre: t.genre,
+    bpm: t.bpm || undefined, key: t.key ? `${t.key}${t.key_scale === 'minor' ? 'm' : ''}` : undefined,
+    lengthMs: Math.round((t.duration || 0) * 1000), bitrate: f.bitrate ? Math.round(Number(f.bitrate)) : undefined,
+    playCount: plays, cuePoints: cues,
+  } };
 }
 const uidOf = (a, al, t) =>
   `${(a || '').toLowerCase().trim()}|${(al || '').toLowerCase().trim()}|${(t || '').toLowerCase().trim()}`
@@ -2348,6 +2374,31 @@ const server = http.createServer(async (req, res) => {
         console.log('[crate analyze]', pid, `${done}/${ids.length}`);
       })();
       return json(res, 202, { started: true, count: ids.length });
+    }
+
+    // write DJ tags into the file (Traktor PRIV + TBPM/TKEY). dryRun=1 previews, no write.
+    const mTagOne = u.pathname.match(/^\/api\/tracks\/(\d+)\/tags$/);
+    if (mTagOne && req.method === 'POST') {
+      const tid = Number(mTagOne[1]);
+      const dryRun = u.searchParams.get('dryRun') === '1';
+      const plan = trackTagMeta(db, tid);
+      if (plan.error) return json(res, 400, plan);
+      try { return json(res, 200, tagwrite.writeTags(plan.path, plan.meta, { dryRun })); }
+      catch (e) { return json(res, 500, { error: e.message }); }
+    }
+    const mTagPl = u.pathname.match(/^\/api\/playlists\/([^/]+)\/tags$/);
+    if (mTagPl && req.method === 'POST') {
+      const pid = decodeURIComponent(mTagPl[1]);
+      const dryRun = u.searchParams.get('dryRun') === '1';
+      const rows = db.prepare(`SELECT t.id FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id WHERE pt.playlist_id=? ORDER BY pt.position`).all(pid);
+      const out = [];
+      for (const { id } of rows) {
+        const plan = trackTagMeta(db, id);
+        if (plan.error) { out.push({ id, skipped: plan.error }); continue; }
+        try { out.push({ id, ...tagwrite.writeTags(plan.path, plan.meta, { dryRun }) }); }
+        catch (e) { out.push({ id, error: e.message }); }
+      }
+      return json(res, 200, { dryRun, count: out.length, results: out });
     }
 
     // re-download every track that lost its file, using the metadata we kept

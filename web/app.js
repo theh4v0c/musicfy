@@ -202,6 +202,7 @@ function openCtx(t, x, y) {
     ${(hasAudio(t) && Number(t.bitrate || 0) > 0 && Number(t.bitrate) < 180000) ? '<button data-act="upgrade">Find higher quality</button>' : ''}
     ${hasAudio(t) ? '<button data-act="tofile">Download to device</button>' : ''}
     ${hasAudio(t) ? `<button data-act="analyze">${t.bpm ? 'Re-analyze' : 'Analyze'} BPM &amp; key</button>` : ''}
+    ${hasAudio(t) ? '<button data-act="tags">Write Traktor tags</button>' : ''}
     <button data-act="addpl">Add to playlist</button>
     ${state.view === 'playlist' && state.playlistId ? '<button data-act="rmpl">Remove from this playlist</button>' : ''}
     ${(!t.ladder && t.id) ? '<button data-act="rename">Rename track</button>' : ''}
@@ -268,6 +269,20 @@ $('ctx').addEventListener('click', async (e) => {
       toast(`Analysed · ${bpmTxt} · ${keyTxt}`, 6000);
       state.allTracks = null; afterWrite(); refreshView();
     } catch { pp.done(); toast('Analysis failed', 5000); }
+    return;
+  }
+  if (act === 'tags') {
+    try {
+      const dry = await api(`/api/tracks/${t.id}/tags?dryRun=1`, { method: 'POST', nocache: true });
+      if (dry.error) return toast(dry.error, 6000);
+      const ok = confirm(`Write Traktor + ID3 tags into the file?\n\n${dry.file}\nFrames: ${(dry.frames || []).join(', ')}\n\nA .mf.bak backup is kept once.`);
+      if (!ok) return;
+      const pp = progressPill('Writing tags…');
+      const r = await api(`/api/tracks/${t.id}/tags`, { method: 'POST' });
+      pp.done();
+      if (r.error) return toast(r.error, 6000);
+      toast('Tags written. Open the file in Traktor to see BPM, key and cues.', 5000);
+    } catch { toast('Could not write tags', 4000); }
     return;
   }
     if (act === 'upgrade') {
@@ -578,6 +593,7 @@ function openPlaylistMenu(p, x, y) {
     <button data-act="pl-rb">Export for Rekordbox (.xml)</button>
     <button data-act="pl-tr">Export for Traktor (.nml)</button>
     <button data-act="pl-usb">Export for CDJ USB</button>
+    <button data-act="pl-tags">Write Traktor tags (crate)</button>
     <button data-act="pl-zip">Download to device (zip)</button>
     <button data-act="pl-delete">Delete playlist</button>`;
   m.classList.add('open');
@@ -594,6 +610,19 @@ function openPlaylistMenu(p, x, y) {
     if (act === 'pl-rb') { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/rekordbox.xml`; return; }
     if (act === 'pl-tr') { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/traktor.nml`; return; }
     if (act === 'pl-usb') { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/pioneer.zip`; return; }
+    if (act === 'pl-tags') {
+      try {
+        const dry = await api(`/api/playlists/${encodeURIComponent(p.id)}/tags?dryRun=1`, { method: 'POST' });
+        const ok = (dry.results || []).filter((r) => !r.skipped && !r.error).length;
+        if (!ok) { toast('No MP3s to tag in this crate', 4000); return; }
+        if (!confirm(`Write Traktor + ID3 tags into ${ok} file(s)?\n\nA .mf.bak backup is kept once per file.`)) return;
+        const pp = progressPill(`Tagging ${ok} files…`);
+        const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/tags`, { method: 'POST' });
+        pp.done();
+        toast(`Tagged ${r.count} files`, 5000);
+      } catch { toast('Could not write tags', 4000); }
+      return;
+    }
     if (act === 'pl-zip') { toast('Building the zip, this can take a minute', 6000); window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/zip`; return; }
     if (act === 'pl-rename') {
       const name = prompt('Rename playlist:', p.name); if (!name) return;
