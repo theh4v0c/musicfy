@@ -188,7 +188,7 @@ function ctxRename(t) {
 }
 
 function openCtx(t, x, y) {
-  ctxOpenedAt = Date.now();
+  markCtxOpen();
   ctxTarget = t;
   const m = $('ctx');
   const liked = isLiked(t);
@@ -228,19 +228,33 @@ function closeCtx(force = false) {
 
 }
 let ctxOpenedAt = 0;
+let ctxTouchOpen = false;   // this sheet was opened by a long press
+let ctxReleaseIgnored = false;
+function markCtxOpen() {
+  ctxOpenedAt = Date.now();
+  ctxTouchOpen = Date.now() - lastTouchAt < 900;
+  ctxReleaseIgnored = false;
+}
 // close on any press outside the menu, in the capture phase so nothing can swallow it
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCtx(); });
 
-// desktop dismissal: a real mouse press outside the sheet closes it. Touch devices also
-// synthesise mouse events after a tap, so those are ignored for a moment after a real touch.
+// Touch devices fire touchstart before the browser synthesises mouse events. When a long
+// press opens the sheet, ignore the single release that follows, then close on the next tap.
 let lastTouchAt = 0;
-document.addEventListener('touchstart', () => { lastTouchAt = Date.now(); }, { capture: true, passive: true });
-document.addEventListener('mousedown', (e) => {
-  if (!ctx.classList.contains('open')) return;
+document.addEventListener('touchstart', (e) => {
+  lastTouchAt = Date.now();
+  const el = $('ctx');
+  if (!el || !el.classList.contains('open')) return;
   if (Date.now() - ctxOpenedAt < 150) return;
-  if (Date.now() - lastTouchAt < 800) return;
-  if (ctx.contains(e.target)) return;
-  closeCtx();
+  if (el.contains(e.target)) return;
+  closeCtx(true);
+}, { capture: true, passive: true });
+document.addEventListener('mousedown', (e) => {
+  const el = $('ctx');
+  if (!el || !el.classList.contains('open')) return;
+  if (el.contains(e.target)) return;
+  if (ctxTouchOpen && !ctxReleaseIgnored) { ctxReleaseIgnored = true; return; }
+  closeCtx(true);
 }, true);
 
 document.addEventListener('contextmenu', (e) => {
@@ -442,7 +456,7 @@ function progressPill(text) {
 
 /* ============ add to playlist ============ */
 function openAddPl(t) {
-  ctxOpenedAt = Date.now();
+  markCtxOpen();
   const m = $('ctx');
   m.innerHTML = `<div class="ctx-title">Add to playlist</div>` +
     state.playlists.map(p => `<button data-pl="${esc(p.id)}">${esc(p.name)}</button>`).join('') +
@@ -629,7 +643,7 @@ function renderSlibItems() {
 
 /* playlist context menu: play, rename, delete */
 function openPlaylistMenu(p, x, y) {
-  ctxOpenedAt = Date.now();
+  markCtxOpen();
   const m = $('ctx');
   m.innerHTML = `<div class="ctx-title">${esc(p.name)}</div>
     <button data-act="pl-play">Play</button>
@@ -860,7 +874,7 @@ async function renderExternalInto(host) {
 /* the algorithm, visible: radio built from what you actually played */
 /* right click menu for a ladder candidate: stream it, keep it in a playlist, or download it */
 function openLadderCtx(c, x, y) {
-  ctxOpenedAt = Date.now();
+  markCtxOpen();
   const m = $('ctx');
   m.innerHTML = `<div class="ctx-title">${esc((c.title || '').slice(0, 40))}</div>
     <button data-act="l-play">Play now</button>
@@ -889,7 +903,7 @@ function openLadderCtx(c, x, y) {
 
 /* add a stream-only entry to a playlist: present immediately, resolved on play */
 function openAddPlStream(c) {
-  ctxOpenedAt = Date.now();
+  markCtxOpen();
   const m = $('ctx');
   m.innerHTML = `<div class="ctx-title">Add "${esc((c.title || '').slice(0, 28))}" to</div>` +
     state.playlists.map((p) => `<button data-pl="${esc(p.id)}">${esc(p.name)}</button>`).join('');
@@ -3766,7 +3780,7 @@ document.addEventListener('click', (e) => {
 
 /* add many tracks to a playlist, with a picker */
 function openAddPlIds(ids) {
-  ctxOpenedAt = Date.now();
+  markCtxOpen();
   const m = $('ctx');
   m.innerHTML = `<div class="ctx-title">Add ${ids.length} to playlist</div>` +
     state.playlists.map((p) => `<button data-pl="${esc(p.id)}">${esc(p.name)}</button>`).join('');
