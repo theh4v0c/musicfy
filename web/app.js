@@ -685,6 +685,42 @@ async function renderDiscoverInto(host) {
   } catch {}
 }
 
+// Ask discovery: music in the same lane that is NOT in the library, with a one-tap fetch
+async function renderExternalInto(host) {
+  if (!host) return;
+  host.innerHTML = '';
+  try {
+    const d = await api('/api/discover/outside', { nocache: true });
+    if (!document.body.contains(host)) return;
+    if (!d.songs || !d.songs.length) return;
+    const h = document.createElement('div');
+    h.className = 'sec-title';
+    h.innerHTML = `Outside your library <small>${esc(d.seed || 'similar')} · NOT OWNED</small>`;
+    host.appendChild(h);
+    const row = document.createElement('div');
+    row.className = 'row-scroller';
+    for (const s of d.songs) {
+      const card = document.createElement('div');
+      card.className = 'tcard';
+      card.innerHTML = `<div class="tcard-art ph">${esc((s.artist || '?').charAt(0))}</div>
+        <div class="tcard-name">${esc(s.title)}</div>
+        <div class="tcard-sub">${esc(s.artist)}</div>
+        <button class="tcard-play" title="Add to library" aria-label="Add to library">${IC.download}</button>`;
+      card.querySelector('.tcard-play').onclick = async (e) => {
+        e.stopPropagation();
+        try {
+          await api('/api/ladder/download', { method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ rung: 'search', title: s.title, artist: s.artist, duration: s.duration }) });
+          toast(`Fetching ${s.title}`, 4000);
+          openDownloads();
+        } catch { toast('Could not start', 3000); }
+      };
+      row.appendChild(card);
+    }
+    host.appendChild(row);
+  } catch {}
+}
+
 /* the algorithm, visible: radio built from what you actually played */
 /* right click menu for a ladder candidate: stream it, keep it in a playlist, or download it */
 function openLadderCtx(c, x, y) {
@@ -1685,7 +1721,26 @@ async function renderAskAi() {
   box.onkeydown = (e) => { if (e.key === 'Enter') run(box.value); };
   v.querySelectorAll('.ask-ex').forEach((b) => b.onclick = () => { box.value = b.textContent; run(box.value); });
   box.focus();
-  renderDiscoverInto($('ask-discover'));
+  renderExternalInto($('ask-discover'));
+  // dynamic examples: derived from what you actually play, not a fixed list
+  api('/api/recommend?days=30&limit=1').then((rec) => {
+    const p = (rec && rec.profile) || {};
+    const hint = v.querySelector('.ask-hint');
+    if (!hint) return;
+    const ex = [];
+    if (p.topFamily && p.avgBpm) ex.push(`${p.topFamily} between ${Math.max(0, p.avgBpm - 3)} and ${p.avgBpm + 3} bpm`);
+    if (p.topFamily) ex.push(`${p.topFamily} I never played`);
+    if (p.avgBpm) ex.push(`tracks around ${p.avgBpm} bpm`);
+    ex.push('tracks I have not played in months');
+    hint.innerHTML = '';
+    for (const label of ex.slice(0, 4)) {
+      const b = document.createElement('button');
+      b.className = 'ask-ex';
+      b.textContent = label;
+      b.onclick = () => { box.value = label; run(label); };
+      hint.appendChild(b);
+    }
+  }).catch(() => {});
 }
 
 async function renderSearch() {

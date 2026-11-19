@@ -2552,6 +2552,34 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { recent, deeper, unplaylisted });
     }
 
+    // discovery outside the library: same genre, not already owned
+    if (u.pathname === '/api/discover/outside') {
+      const fam = db.prepare(`SELECT genre_family FROM tracks WHERE genre_family IS NOT NULL AND genre_family != ''
+        GROUP BY genre_family ORDER BY COUNT(*) DESC LIMIT 1`).get();
+      const topArtist = db.prepare(`SELECT t.artist, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
+        WHERE t.artist IS NOT NULL AND t.artist != '' GROUP BY t.artist ORDER BY n DESC LIMIT 1`).get();
+      const seed = (fam && fam.genre_family) || (topArtist && topArtist.artist) || '';
+      if (!seed) return json(res, 200, { seed: '', songs: [] });
+      let data = null;
+      try { data = await identity.catalog(seed, { songs: 40, albums: 0, artists: 0 }); } catch {}
+      const results = (data && data.songs) || [];
+      const norm = (a, t) => `${(a || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}`;
+      const inLib = new Set(db.prepare('SELECT dup_key FROM tracks').all().map((r) => r.dup_key));
+      const seedArtist = (topArtist && topArtist.artist) || '';
+      const seen = new Set();
+      const outside = [];
+      for (const s of results) {
+        if (!s.title || !s.artist) continue;
+        const k = norm(s.artist, s.title);
+        if (inLib.has(k) || seen.has(k)) continue;
+        if (seedArtist && s.artist.toLowerCase() === seedArtist.toLowerCase()) continue;
+        seen.add(k);
+        outside.push({ title: s.title, artist: s.artist, album: s.album || '', duration: s.duration || null, artwork: s.artwork || null });
+        if (outside.length >= 20) break;
+      }
+      return json(res, 200, { seed, songs: outside });
+    }
+
     // track cover: embedded art served from cover cache
     const mCover = u.pathname.match(/^\/api\/cover\/(\d+)$/);
     if (mCover) {
