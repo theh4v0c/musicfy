@@ -246,6 +246,9 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .mode-tab { background: none; border: 1px solid var(--line); color: var(--fg-mute); border-radius: 99px; padding: 7px 16px; font-size: 12px; font-weight: 600; }
 .mode-tab.on { color: var(--fg); border-color: var(--fg-soft); background: var(--bg-elev2); }
 .ladder-state { margin-top: 10px; }
+.ladder-state.thinking { color: var(--muted, #8a8782); }
+.ladder-state.thinking::after { content: ''; display: inline-block; width: .5em; height: .5em; margin-left: .5em; border-radius: 50%; background: currentColor; animation: mf-pulse 1s ease-in-out infinite; vertical-align: middle; }
+@keyframes mf-pulse { 0%, 100% { opacity: .2; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.15); } }
 .pill.ok { color: var(--ok); border-color: var(--ok); }
 .pill.warn { color: var(--fg-mute); border-color: var(--line); }
 .lrow { grid-template-columns: 34px 46px 1fr 110px 70px 56px 34px; }

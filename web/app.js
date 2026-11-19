@@ -398,6 +398,8 @@ async function startRadio(t) {
 function setNav(v) {
   state.view = v;
   document.querySelectorAll('[data-nav]').forEach(b => b.classList.toggle('on', b.dataset.nav === v));
+  // the library size is only useful where you manage the library; everywhere else it is noise
+  const pill = $('pill'); if (pill) pill.hidden = !(v === 'library' || v === 'settings');
 }
 function nav(v, push = true) {
   const qd = $('queue-drawer'); if (qd) qd.hidden = true;
@@ -1547,13 +1549,15 @@ async function renderAskAi() {
 
   const run = async (text) => {
     if (!text.trim()) return;
-    stateEl.textContent = 'Thinking...';
+    stateEl.textContent = 'Searching…';
+    stateEl.classList.add('thinking');
     out.innerHTML = '';
     const agentish = /\b(create|make|build|download|find|search|show|list|how many)\b/i.test(text);
     try {
       if (agentish) {
         const a = await api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: text }), nocache: true });
-        stateEl.textContent = `${String(a.plan.intent).replace('_', ' ')} | ${a.source === 'llm' ? 'planned by model' : 'planned locally'}`;
+        stateEl.classList.remove('thinking');
+        stateEl.textContent = `${String(a.plan.intent).replace(/_/g, ' ')} · ${a.source === 'llm' ? 'planned by model' : 'planned locally'}`;
         const said = document.createElement('div');
         said.className = 'ai-said';
         said.textContent = a.spoken || '';
@@ -1603,13 +1607,25 @@ async function renderAskAi() {
         return;
       }
       const d = await api('/api/ask', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: text }), nocache: true });
-      stateEl.textContent = `${d.count} tracks, ${d.source === 'llm' ? 'model' : 'local'} parsing`;
+      stateEl.classList.remove('thinking');
+      const f = d.filters || {};
+      const bits = [];
+      if (f.key) bits.push(`key ${f.key}${f.scale ? ' ' + f.scale : ''}`);
+      if (f.bpm && (f.bpm.min != null || f.bpm.max != null)) bits.push(`${f.bpm.min ?? ''}–${f.bpm.max ?? ''} BPM`);
+      if (f.genre) bits.push(f.genre);
+      if (f.artist) bits.push(f.artist);
+      if (f.text) bits.push(`“${f.text}”`);
+      stateEl.textContent = d.count
+        ? `${d.count} track${d.count === 1 ? '' : 's'}${bits.length ? ' · ' + bits.join(' · ') : ''}`
+        : 'No tracks matched — try “tracks in Dm between 120 and 130 bpm”.';
+      if (!d.count) return;
       const wrap = document.createElement('div');
       const tracks = d.results.map((r) => ({ ...r, rung: r.owned ? 'local' : null }));
       tracks.forEach((t, i) => { registerRow(t); wrap.appendChild(trow(t, i, tracks)); });
       out.appendChild(wrap);
-    } catch {
-      stateEl.textContent = 'Could not answer that';
+    } catch (e) {
+      stateEl.classList.remove('thinking');
+      stateEl.textContent = 'That did not go through — try a plain phrase like “tracks in Dm between 120 and 130 bpm”.';
     }
   };
 
@@ -2099,7 +2115,7 @@ async function renderSearch() {
             paintRows();
           };
           const streamIt = () => {
-            if (c.rung === 'yt-dlp') {
+            if (c.rung === 'yt-dlp' || c.rung === 'ytmusic' || c.rung === 'ytmusic-album') {
               audio.src = `/api/ladder/stream/youtube/${c.id}`;
               audio.play().catch(() => toast('stream refused'));
               paintLadder();
@@ -2116,6 +2132,10 @@ async function renderSearch() {
                 audio.play().catch(() => {});
                 paintLadder(`${label} · ${(f.format || '').toUpperCase()}`);
               }).catch(() => toast('archive lookup failed'));
+            } else if (c.url) {
+              audio.src = `/api/ladder/stream/generic?u=${encodeURIComponent(c.url)}`;
+              audio.play().catch(() => toast('stream refused'));
+              paintLadder();
             } else {
               toast('no play path for this source');
             }

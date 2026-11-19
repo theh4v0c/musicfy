@@ -39,6 +39,9 @@ const db = new DatabaseSync(DB_PATH);
 db.exec(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
 try { db.exec('ALTER TABLE jobs ADD COLUMN progress REAL DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE jobs ADD COLUMN updated_at INTEGER'); } catch {}
+// repair: millisecond timestamps written into seconds columns (rendered as year 58853)
+try { db.prepare('UPDATE tracks SET added_at=CAST(added_at/1000 AS INTEGER) WHERE added_at > 100000000000').run(); } catch {}
+try { db.prepare('UPDATE tracks SET updated_at=CAST(updated_at/1000 AS INTEGER) WHERE updated_at > 100000000000').run(); } catch {}
 db.prepare("UPDATE jobs SET state='error', detail='interrupted by restart', finished_at=? WHERE state='running'").run(Math.floor(Date.now() / 1000));
 db.prepare("UPDATE jobs SET state='skipped' WHERE state='error' AND detail IN ('requeued','already owned','retried')").run();
 
