@@ -1171,17 +1171,20 @@ async function renderLibrary() {
   v.innerHTML = `${heroBanner('LIBRARY', 'Your Library', 'Everything you own, and every playlist.')}<div class="lib-actions">
       <button class="btn btn-primary" id="lib-upload">Upload track</button>
       <button class="btn btn-ghost" id="lib-newpl">New playlist</button>
-      <span class="pill" id="cache-pill">CACHE -</span>
-      <button class="btn btn-ghost" id="cache-clear">Clear cache</button>
-    </div>
-    <div class="lib-actions">
       <button class="btn btn-ghost" id="hist-import">Playlist from most-played</button>
       <button class="btn btn-ghost" id="meta-repair">Repair metadata</button>
-      <span class="pill" id="rung-health">RUNGS -</span>
-      <label class="pill" id="auto-dl-wrap" title="Save a track to disk automatically after it is played this many times. 0 turns it off.">
-        AUTO-SAVE AFTER <input id="auto-dl" class="mini-num" type="number" min="0" max="20" value="2"> PLAYS
-      </label>
     </div>
+    <details class="advanced">
+      <summary>Advanced &amp; maintenance</summary>
+      <div class="lib-actions">
+        <span class="meta-line" id="cache-pill">cache -</span>
+        <button class="btn btn-ghost" id="cache-clear">Clear cache</button>
+        <span class="meta-line" id="rung-health">sources -</span>
+        <label class="auto-save" title="Save a track to disk automatically after it is played this many times. 0 turns it off.">
+          Auto-save after <input id="auto-dl" class="mini-num" type="number" min="0" max="20" value="2"> plays
+        </label>
+      </div>
+    </details>
     <div class="sec-title" style="margin-top:0">Playlists <small>${state.playlists.length} TOTAL</small></div>${orderControls()}<div class="pgrid" id="lib-grid"></div>`;
   const g = $('lib-grid');
   const liked = document.createElement('div');
@@ -1194,7 +1197,8 @@ async function renderLibrary() {
   bindOrderControls(() => renderLibrary());
   const paintCache = () => {
     const s = cacheSize();
-    $('cache-pill').textContent = `CACHE ${(s.bytes / 1024).toFixed(0)} KB - ${s.keys} ITEMS`;
+    const el = $('cache-pill');
+    if (el) el.textContent = `${(s.bytes / 1024).toFixed(0)} KB cached · ${s.keys} items`;
   };
   paintCache();
   $('lib-upload').onclick = () => pickFile('audio/*', uploadTrack);
@@ -1226,9 +1230,11 @@ async function renderLibrary() {
     } catch { toast('repair failed'); }
   };
   const paintRungs = () => api('/api/health/rungs').then((h) => {
-    const parts = Object.entries(h.rungs || {}).map(([k, v]) => `${k.toUpperCase()} ${v.ok ? 'OK' : 'DOWN'}`);
-    $('rung-health').textContent = parts.length ? parts.join(' | ') : 'RUNGS -';
-    $('rung-health').classList.toggle('warn', Object.values(h.rungs || {}).some((v) => !v.ok));
+    const el = $('rung-health');
+    if (!el) return;
+    const parts = Object.entries(h.rungs || {}).map(([k, v]) => `${k} ${v.ok ? 'ok' : 'down'}`);
+    el.textContent = parts.length ? `sources: ${parts.join(', ')}` : 'sources: -';
+    el.classList.toggle('warn', Object.values(h.rungs || {}).some((v) => !v.ok));
   }).catch(() => {});
   paintRungs();
   api('/api/settings').then((s) => { $('auto-dl').value = s.auto_download_plays; }).catch(() => {});
@@ -1370,9 +1376,7 @@ async function renderSongs(push = true) {
         <button class="mode-tab" data-f="owned">Owned</button>
         <button class="mode-tab" data-f="mirror">No audio yet</button>
       </div>
-      <span class="pill" id="songs-stats">...</span>
-      <span class="pill" id="hist-stats">NO HISTORY</span>
-      <button class="btn btn-ghost" id="hist-scan">Rescan history</button>
+      <span class="meta-line" id="songs-stats"></span>
     </div>
     <div class="thead" id="songs-thead">
       <div class="th" data-key="pos">#</div><div></div>
@@ -1573,28 +1577,12 @@ async function renderSongs(push = true) {
     return true;
   };
 
-  api('/api/stats').then((s) => {
-    $('songs-stats').textContent = `${s.tracks} TRACKS · ${(s.owned_bytes / 1073741824).toFixed(1)}G ON DISK`;
-  }).catch(() => { $('songs-stats').textContent = `${all.length} TRACKS`; });
-
-  const paintHistory = (h) => {
-    if (!h || !h.plays) { $('hist-stats').textContent = 'NO HISTORY'; return; }
-    const from = h.first ? new Date(h.first).getFullYear() : '';
-    const to = h.last ? new Date(h.last).getFullYear() : '';
-    $('hist-stats').textContent = `${h.plays.toLocaleString()} PLAYS ${from}-${to}`;
-  };
-  api('/api/history/stats').then(paintHistory).catch(() => {});
-  $('hist-scan').onclick = async () => {
-    $('hist-scan').disabled = true;
-    toast('Scanning history folder');
-    try {
-      const r = await api('/api/history/scan', { method: 'POST' });
-      const added = r.stats ? r.stats.new_plays : 0;
-      toast(added ? `${added} new plays imported` : 'No new history files');
-      paintHistory(await api('/api/history/stats'));
-    } catch (e) { toast('Scan failed'); }
-    finally { $('hist-scan').disabled = false; }
-  };
+  const statsEl = $('songs-stats');
+  if (statsEl) {
+    api('/api/stats').then((s) => {
+      statsEl.textContent = `${s.tracks} tracks · ${(s.owned_bytes / 1073741824).toFixed(1)} GB on disk`;
+    }).catch(() => { statsEl.textContent = `${all.length} tracks`; });
+  }
 
   const draw = () => {
     if (state.genreFilter) { renderGenreView($("songs-list"), all, 60); return; }

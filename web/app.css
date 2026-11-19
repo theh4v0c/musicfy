@@ -647,3 +647,13 @@ html, body { overflow-x: hidden; max-width: 100%; }
 /* three export buttons in a crate: wrap instead of overflow */
 .crate-acts { flex-wrap: wrap; }
 .crate-btn { flex: 1 1 30%; min-width: 46px; font-size: 10.5px; padding: 7px 4px; }
+
+/* quiet meta text + collapsible maintenance, instead of diagnostic pills */
+.meta-line { color: var(--fg-mute); font-size: 12px; }
+.advanced { margin: 4px 0 20px; }
+.advanced summary { cursor: pointer; color: var(--fg-mute); font-size: 12.5px; list-style: none; padding: 6px 0; }
+.advanced summary::-webkit-details-marker { display: none; }
+.advanced summary::before { content: '\25B8 '; }
+.advanced[open] summary::before { content: '\25BE '; }
+.advanced .lib-actions { margin-top: 8px; }
+.auto-save { display: inline-flex; align-items: center; gap: 8px; color: var(--fg-mute); font-size: 12.5px; }
