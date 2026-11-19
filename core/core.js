@@ -38,6 +38,7 @@ fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 const db = new DatabaseSync(DB_PATH);
 db.exec(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
 try { db.exec('ALTER TABLE jobs ADD COLUMN progress REAL DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE jobs ADD COLUMN updated_at INTEGER'); } catch {}
 db.prepare("UPDATE jobs SET state='error', detail='interrupted by restart', finished_at=? WHERE state='running'").run(Math.floor(Date.now() / 1000));
 db.prepare("UPDATE jobs SET state='skipped' WHERE state='error' AND detail IN ('requeued','already owned','retried')").run();
 
@@ -640,6 +641,12 @@ function verifyFiles({ requeue = true } = {}) {
   for (const f of rows) {
     if (!fs.existsSync(f.path)) missing.push(f);
   }
+  // audio lives on a removable mount; if it is not up, every path "misses" and the old
+  // code deleted the whole library. Refuse to act when the loss looks like a mount, not files.
+  if (rows.length >= 10 && missing.length > rows.length * 0.2) {
+    console.error('[files] refusing to prune: mount looks offline', `${missing.length}/${rows.length} missing`);
+    return { checked: rows.length, missing: missing.length, queued: 0, tracks: [], aborted: 'mount offline' };
+  }
   for (const f of missing) db.prepare('DELETE FROM files WHERE id=?').run(f.id);
   let queued = 0;
   if (requeue) {
@@ -694,7 +701,7 @@ function pumpDownloads() {
       continue;
     }
     activeDownloads += 1;
-    db.prepare("UPDATE jobs SET state='running' WHERE payload LIKE ?").run(`%${item.jobId}%`);
+    db.prepare("UPDATE jobs SET state='running', updated_at=? WHERE payload LIKE ?").run(now(), `%${item.jobId}%`);
     try {
       startLadderDownload(item.jobId, item.payload, () => { activeDownloads -= 1; pumpDownloads(); });
     } catch (e) {
@@ -735,7 +742,7 @@ function startLadderDownload(jobId, b, onDone) {
     if (typeof onDone === 'function') { try { onDone(); } catch {} }
   };
   const setProgress = (pct) => {
-    db.prepare('UPDATE jobs SET progress=? WHERE payload LIKE ?').run(Math.max(0, Math.min(99, pct)), `%${jobId}%`);
+    db.prepare('UPDATE jobs SET progress=?, updated_at=? WHERE payload LIKE ?').run(Math.max(0, Math.min(99, pct)), now(), `%${jobId}%`);
   };
   const watch = (child) => {
     const onChunk = (buf) => {
@@ -766,6 +773,8 @@ function startLadderDownload(jobId, b, onDone) {
     }
     spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration,bit_rate:format_tags=title,artist', '-of', 'json', fp]).on('exit', () => {});
     execFile('ffprobe', ['-v', 'error', '-show_entries', 'format=duration,bit_rate:format_tags=title,artist', '-of', 'json', fp], { timeout: 20000 }, (err, stdout) => {
+      // never let a throw here strand the job in 'running' and leak a concurrency slot
+      try {
       let dur = null, br = null, t = b.title || files[0], a = b.artist || '';
       try { const f = JSON.parse(stdout).format; dur = Number(f.duration); br = Number(f.bit_rate); t = f.tags?.title || t; a = f.tags?.artist || a; } catch {}
       const dest = path.join(OWNED, 'web', files[0].replace(/[/\\]/g, '_'));
@@ -790,7 +799,9 @@ function startLadderDownload(jobId, b, onDone) {
         // the source was a clip: try a plain search for the full version once
         if (!b.retried) {
           try {
-            enqueueDownload(b.jobId + '-r', { trackId: b.trackId, rung: 'search', title: b.title, artist: b.artist, duration: declared });
+            // jobId is the enclosing argument; b has no jobId, so b.jobId was "undefined",
+            // which built a shared web/undefined dir and matched zero rows in every UPDATE.
+            enqueueDownload(jobId + '-r', { trackId: b.trackId, rung: 'search', title: b.title, artist: b.artist, duration: declared, retried: true });
           } catch {}
           return finish('unavailable', `truncated audio: ${Math.round(dur)}s of ${Math.round(declared)}s, retrying by search`);
         }
@@ -822,6 +833,9 @@ function startLadderDownload(jobId, b, onDone) {
       const done = () => finish('done', `track ${tid}`);
       if (!haveArt && b.thumb) saveThumb(b.thumb, tid).then(done).catch(done);
       else done();
+      } catch (e) {
+        finish('error', String((e && e.message) || e).slice(0, 160));
+      }
     });
   };
 
@@ -1006,6 +1020,12 @@ const json = (res, code, obj) => { res.writeHead(code, { 'content-type': 'applic
 
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
+  // a throw inside a req.on('end') callback escapes the async try below and strands the
+  // socket with no response. Wrap every 'end' listener so a bad body answers 400, never hangs.
+  const _on = req.on.bind(req);
+  req.on = (ev, fn) => _on(ev, ev === 'end'
+    ? (...a) => { try { return fn(...a); } catch (e) { try { if (!res.headersSent) json(res, 400, { error: String((e && e.message) || e) }); else res.end(); } catch {} } }
+    : fn);
   try {
     if (u.pathname === '/health') return json(res, 200, { ok: true, uptime: process.uptime() });
 
@@ -2304,7 +2324,7 @@ const server = http.createServer(async (req, res) => {
           const key = `${(r.artist || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${r.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}`;
           let row = db.prepare('SELECT id FROM tracks WHERE dup_key=?').get(key);
           if (!row) {
-            const t2 = Date.now();
+            const t2 = now();
             const ins = db.prepare(`INSERT INTO tracks (uid,dup_key,title,artist,album,format,added_at,updated_at)
               VALUES (?,?,?,?,?,?,?,?)`).run(key, key, r.title, r.artist || '', '', 'import', t2, t2);
             row = { id: Number(ins.lastInsertRowid) };
@@ -2681,9 +2701,12 @@ const server = http.createServer(async (req, res) => {
       const t = db.prepare('SELECT title, artist FROM tracks WHERE id=?').get(tid);
       const name = `${t && t.artist ? t.artist + ' - ' : ''}${(t && t.title) || 'track'}`.replace(/[\/:*?"<>|]+/g, '_').slice(0, 120);
       const ext = path.extname(f.path) || '.mp3';
+      // header values must be latin-1; non-ASCII titles (Ōsé, Erdoğan) 500'd before
+      const asciiName = `${name}${ext}`.replace(/[^\x20-\x7E]+/g, '_');
+      const utf8Name = encodeURIComponent(`${name}${ext}`);
       res.writeHead(200, {
         'content-type': 'application/octet-stream',
-        'content-disposition': `attachment; filename="${name}${ext}"`,
+        'content-disposition': `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`,
         'content-length': fs.statSync(f.path).size,
       });
       return fs.createReadStream(f.path).pipe(res);
@@ -2850,6 +2873,11 @@ const server = http.createServer(async (req, res) => {
         const r = range.match(/bytes=(\d*)-(\d*)/);
         let start = r && r[1] ? Number(r[1]) : 0;
         let end = r && r[2] ? Number(r[2]) : st.size - 1;
+        // a bad range must not produce a negative content-length and wedge the socket
+        if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start > end || start >= st.size) {
+          res.writeHead(416, { ...head, 'content-range': `bytes */${st.size}` });
+          return res.end();
+        }
         end = Math.min(end, st.size - 1);
         res.writeHead(206, { ...head, 'content-range': `bytes ${start}-${end}/${st.size}`, 'content-length': end - start + 1 });
         fs.createReadStream(f.path, { start, end }).pipe(res);
@@ -2893,18 +2921,22 @@ process.on('unhandledRejection', (e) => {
 try { migrate(); } catch (e) { console.error('[migrate]', e.message); }
 checkDependencies();
 
-// a download that stops reporting progress is dead weight: kill and retry it
+// a download that stops reporting progress is dead weight: reap it and free its slot
 const STUCK_MS = Number(process.env.MUSICFY_STUCK_MS || 45 * 60 * 1000);
 setInterval(() => {
   try {
-    const rows = db.prepare("SELECT id, COALESCE(progress,0) p, COALESCE(updated_at, created_at, 0) u FROM jobs WHERE state='running'").all();
+    const rows = db.prepare("SELECT id, COALESCE(updated_at, created_at, 0) u FROM jobs WHERE state='running'").all();
+    let reaped = 0;
     for (const r of rows) {
       const seen = Number(r.u) * (Number(r.u) > 1e12 ? 1 : 1000);
       if (Date.now() - seen < STUCK_MS) continue;
-      db.prepare("UPDATE jobs SET state='queued', progress=0 WHERE id=?").run(r.id);
-      console.error('[jobs] requeued stuck job', r.id);
+      // mark failed AND release the concurrency slot, otherwise 3 zombies starve the queue
+      db.prepare("UPDATE jobs SET state='error', detail='stuck, no progress', finished_at=? WHERE id=?").run(now(), r.id);
+      reaped += 1;
+      console.error('[jobs] reaped stuck job', r.id);
     }
-  } catch {}
+    if (reaped) { activeDownloads = Math.max(0, activeDownloads - reaped); pumpDownloads(); }
+  } catch (e) { console.error('[jobs] reaper failed:', e.message); }
 }, 60000);
 
 server.listen(PORT, '0.0.0.0', () => log('boot', `core listening on ${PORT}`));
