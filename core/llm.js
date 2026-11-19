@@ -97,7 +97,12 @@ function saveConfig(patch) {
   const file = '/opt/musicfy/data/llm.json';
   let c = {};
   try { c = JSON.parse(require('node:fs').readFileSync(file, 'utf8')); } catch {}
-  for (const k of ['base_url', 'api_key', 'model']) if (patch[k]) c[k] = patch[k];
+  for (const k of ['base_url', 'api_key', 'model']) {
+    if (patch[k] === undefined) continue;
+    // an empty api_key clears it: never keep a stored key when base_url changes
+    if (k === 'api_key' && !patch[k]) { delete c.api_key; continue; }
+    c[k] = patch[k];
+  }
   require('node:fs').writeFileSync(file, JSON.stringify(c, null, 2), { mode: 0o600 });
   if (cached) cached = null;
   return c;

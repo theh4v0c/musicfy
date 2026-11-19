@@ -265,6 +265,31 @@ function httpGet(url) {
   });
 }
 
+// block links to the LAN, loopback and cloud metadata; the generic streamer/download
+// otherwise lets any caller make the Pi fetch arbitrary internal URLs (SSRF)
+function isPrivateHost(host) {
+  const h = String(host || '').toLowerCase();
+  if (!h) return true;
+  if (h === 'localhost' || h.endsWith('.local') || h.endsWith('.internal')) return true;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) {
+    const p = h.split('.').map(Number);
+    if (p[0] === 0 || p[0] === 10 || p[0] === 127) return true;
+    if (p[0] === 192 && p[1] === 168) return true;
+    if (p[0] === 172 && p[1] >= 16 && p[1] <= 31) return true;
+    if (p[0] === 169 && p[1] === 254) return true;
+    if (p[0] === 100 && p[1] >= 64 && p[1] <= 127) return true; // CGNAT
+  }
+  return false;
+}
+function safeRemoteUrl(u) {
+  try {
+    const url = new URL(String(u));
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    if (isPrivateHost(url.hostname)) return null;
+    return url.toString();
+  } catch { return null; }
+}
+
 function download(url, dest) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest + '.part');
@@ -591,7 +616,9 @@ function checkDependencies() {
 }
 
 function plCoverFile(pid) {
-  return path.join(COVER_DIR, `pl-${String(pid).replace(/^sp-/, '')}.jpg`);
+  // allow only safe characters: decodeURIComponent + path.join otherwise allows ../ traversal
+  const safe = String(pid).replace(/^sp-/, '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 80) || 'unknown';
+  return path.join(COVER_DIR, `pl-${safe}.jpg`);
 }
 
 // normalise any uploaded image to a 600px jpeg in the cover cache
@@ -1112,6 +1139,9 @@ async function resolveBest(seed, cap = 1800) {
 // ---------- HTTP ----------
 const json = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
 
+const AUTH_TOKEN = String(process.env.MUSICFY_TOKEN || '');
+const ALLOWED_ORIGINS = String(process.env.MUSICFY_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
+
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
   // a throw inside a req.on('end') callback escapes the async try below and strands the
@@ -1120,6 +1150,54 @@ const server = http.createServer(async (req, res) => {
   req.on = (ev, fn) => _on(ev, ev === 'end'
     ? (...a) => { try { return fn(...a); } catch (e) { try { if (!res.headersSent) json(res, 400, { error: String((e && e.message) || e) }); else res.end(); } catch {} } }
     : fn);
+
+  // --- optional shared-secret auth (inert unless MUSICFY_TOKEN is set) ---
+  if (AUTH_TOKEN) {
+    const cookie = (req.headers.cookie || '').match(/(?:^|;\s*)mf_auth=([^;]+)/);
+    const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    const qtoken = u.searchParams.get('token') || '';
+    const authed = (cookie && cookie[1] === AUTH_TOKEN) || bearer === AUTH_TOKEN || qtoken === AUTH_TOKEN;
+    if (!authed) {
+      if (u.pathname.startsWith('/api/')) return json(res, 401, { error: 'unauthorized' });
+      res.writeHead(401, { 'content-type': 'text/plain; charset=utf-8' });
+      return res.end('unauthorized');
+    }
+    if (qtoken && qtoken === AUTH_TOKEN) {
+      u.searchParams.delete('token');
+      const clean = u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '');
+      res.writeHead(302, { 'set-cookie': `mf_auth=${AUTH_TOKEN}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000`, location: clean });
+      return res.end();
+    }
+  }
+
+  // --- CSRF: cross-site form POSTs carry an Origin that does not match this host ---
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    const origin = req.headers.origin;
+    if (origin) {
+      let oh = '';
+      try { oh = new URL(origin).hostname.toLowerCase(); } catch { oh = ''; }
+      const hosts = [req.headers.host, req.headers['x-forwarded-host']]
+        .filter(Boolean).map((s) => String(s).split(':')[0].toLowerCase());
+      if (!oh || (!hosts.includes(oh) && !ALLOWED_ORIGINS.includes(origin))) {
+        return json(res, 403, { error: 'cross-origin request blocked' });
+      }
+    }
+  }
+
+  // --- body cap: uploads get 64 MB, every other write gets 4 MB ---
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    const isUpload = u.pathname === '/api/upload/track' || /\/cover$/.test(u.pathname);
+    const cap = isUpload ? 64 * 1024 * 1024 : 4 * 1024 * 1024;
+    let bytes = 0;
+    req.on('data', (c) => {
+      bytes += c.length;
+      if (bytes > cap) {
+        try { if (!res.headersSent) json(res, 413, { error: 'body too large' }); } catch {}
+        try { req.destroy(); } catch {}
+      }
+    });
+  }
+
   try {
     if (u.pathname === '/health') return json(res, 200, { ok: true, uptime: process.uptime() });
 
@@ -1143,7 +1221,7 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/api/search/ladder') {
       const q = (u.searchParams.get('q') || '').trim();
       if (q.length < 2) return json(res, 400, { error: 'query too short' });
-      const cacheKey = `${q}|${u.searchParams.get('limit') || ''}`;
+      const cacheKey = `${q}|${u.searchParams.get('limit') || ''}|${u.searchParams.get('durCap') || ''}|${u.searchParams.get('seedDur') || ''}`;
       const cachedLadder = ladderCache.get(cacheKey);
       if (cachedLadder && cachedLadder.exp > Date.now()) {
         return json(res, 200, { ...cachedLadder.payload, cached: true });
@@ -1455,8 +1533,8 @@ const server = http.createServer(async (req, res) => {
 
     // generic resolver for bandcamp and other yt-dlp supported pages
     if (u.pathname === '/api/ladder/stream/generic') {
-      const target = u.searchParams.get('u') || '';
-      if (!/^https:\/\//.test(target)) return json(res, 400, { error: 'absolute https url required' });
+      const target = safeRemoteUrl(u.searchParams.get('u') || '');
+      if (!target) return json(res, 400, { error: 'absolute public https url required' });
       try {
         const loc = await ytdlp.streamUrlFor(target);
         res.writeHead(302, { location: loc });
@@ -1501,6 +1579,8 @@ const server = http.createServer(async (req, res) => {
       req.on('end', async () => {
         try {
           const b = JSON.parse(body);
+          const rawUrl = b.url || b.file || '';
+          if (/^https?:\/\//i.test(rawUrl) && !safeRemoteUrl(rawUrl)) return json(res, 400, { error: 'blocked url' });
           const jobId = crypto.randomUUID();
           db.prepare('INSERT INTO jobs (kind,payload,state,created_at) VALUES (?,?,?,?)')
             .run('ladder-download', JSON.stringify({ jobId, ...b }), 'running', now());
@@ -1520,9 +1600,8 @@ const server = http.createServer(async (req, res) => {
 
     const mJob = u.pathname.match(/^\/api\/jobs\/([\w-]+)$/);
     if (mJob) {
-      const j = db.prepare('SELECT * FROM jobs WHERE payload LIKE ? OR created_at>? LIMIT 1').get(`%${mJob[1]}%`, 0);
-      const row = db.prepare('SELECT id,kind,payload,state,detail,created_at,finished_at FROM jobs ORDER BY id DESC LIMIT 50').all();
-      const target = row.find((r) => (JSON.parse(r.payload || '{}').jobId === mJob[1]));
+      const target = db.prepare('SELECT id,kind,payload,state,detail,created_at,finished_at FROM jobs WHERE payload LIKE ? ORDER BY id DESC LIMIT 1')
+        .get(`%${mJob[1]}%`);
       if (!target) return json(res, 404, { error: 'unknown job' });
       return json(res, 200, { id: mJob[1], kind: target.kind, state: target.state, detail: target.detail });
     }
@@ -1565,7 +1644,7 @@ const server = http.createServer(async (req, res) => {
             added += r.changes || 0;
           }
           if (info.cover) {
-            const dest = path.join(COVER_DIR, `pl-${info.id}.jpg`);
+            const dest = plCoverFile(info.id);
             https.get(info.cover, (r) => { if (r.statusCode === 200) { const w = fs.createWriteStream(dest); r.pipe(w); } else { r.resume(); } }).on('error', () => {});
           }
           json(res, 200, { playlist: pid, name: info.title, tracks: pos, added });
@@ -1995,7 +2074,7 @@ const server = http.createServer(async (req, res) => {
         try { s = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
         const cfg = llm.config() || {};
         return json(res, 200, {
-          settings: s,
+          settings: { ...s, auto_download_plays: Number(setting('auto_download_plays', '2')) },
           llm: { configured: !!llm.config(), base_url: cfg.base_url || '', model: cfg.model || '', has_key: !!cfg.api_key },
         });
       }
@@ -2008,18 +2087,25 @@ const server = http.createServer(async (req, res) => {
           try { s = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
           for (const k of ['display_name', 'email', 'country', 'timezone', 'llm_base_url', 'llm_model', 'llm_api_key',
             'download_root', 'preferred_format', 'autoplay_next', 'show_stream_rows',
-            'normalize_loudness', 'target_loudness', 'crossfade_ms', 'fade_on_play',
+            'normalize_loudness', 'target_loudness', 'crossfade_ms', 'fade_on_play', 'fade_on_play_ms', 'prefetch_ahead',
             'taste_genres', 'taste_artists', 'taste_context', 'taste_avoid', 'city', 'latitude', 'longitude']) {
             if (b[k] !== undefined) s[k] = b[k];
           }
           fs.mkdirSync('/opt/musicfy/data', { recursive: true });
           fs.writeFileSync(file, JSON.stringify(s, null, 2), { mode: 0o600 });
+          // auto-download threshold lives in the DB settings table, not settings.json
+          if (b.auto_download_plays !== undefined) setSetting('auto_download_plays', Math.max(0, Math.min(50, Number(b.auto_download_plays) || 0)));
           // a model change takes effect immediately
-          if (b.llm_base_url || b.llm_model || b.llm_api_key) {
+          if (b.llm_base_url !== undefined || b.llm_model !== undefined || b.llm_api_key !== undefined) {
             try {
-              llm.saveConfig({ base_url: b.llm_base_url || (llm.config() || {}).base_url,
-                model: b.llm_model || (llm.config() || {}).model,
-                api_key: b.llm_api_key || (llm.config() || {}).api_key });
+              const cur = llm.config() || {};
+              const baseChanged = b.llm_base_url !== undefined && b.llm_base_url !== cur.base_url;
+              llm.saveConfig({
+                base_url: b.llm_base_url !== undefined ? b.llm_base_url : cur.base_url,
+                model: b.llm_model !== undefined ? b.llm_model : cur.model,
+                // changing the endpoint without a new key must not reuse the old key
+                api_key: b.llm_api_key !== undefined ? b.llm_api_key : (baseChanged ? '' : cur.api_key),
+              });
             } catch {}
           }
           return json(res, 200, { ok: true, settings: s });
@@ -2095,8 +2181,9 @@ const server = http.createServer(async (req, res) => {
 
     // what arrived most recently, newest first
     if (u.pathname === '/api/library/recent-downloads') {
-      const rows = db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.genre_family, f.mtime
+      const rows = db.prepare(`SELECT t.*, 1 AS owned, f.bitrate, r.rung, r.quality, f.mtime
         FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned'
+        LEFT JOIN resolutions r ON r.track_id=t.id
         ORDER BY COALESCE(f.mtime, 0) DESC LIMIT 60`).all();
       return json(res, 200, rows);
     }
@@ -2828,9 +2915,7 @@ const server = http.createServer(async (req, res) => {
         if (!fs.existsSync(cf)) await extractCover(row.track_id, row.path);
         if (fs.existsSync(cf)) { res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' }); return res.end(fs.readFileSync(cf)); }
       }
-      // mirrored playlists have no audio yet: fall back to the playlist art saved at import time
-      const plArt = path.join(COVER_DIR, `pl-${pid.replace(/^sp-/, '')}.jpg`);
-      if (fs.existsSync(plArt)) { res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' }); return res.end(fs.readFileSync(plArt)); }
+      // no playlist context here: nothing to fall back to
       res.writeHead(204); return res.end();
     }
 
@@ -2987,7 +3072,7 @@ const server = http.createServer(async (req, res) => {
         if (fs.existsSync(cf)) { res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' }); return res.end(fs.readFileSync(cf)); }
       }
       // mirrored playlists have no audio yet: use the playlist art saved at import time
-      const plArt = path.join(COVER_DIR, `pl-${pid.replace(/^sp-/, '')}.jpg`);
+      const plArt = plCoverFile(pid);
       if (fs.existsSync(plArt)) { res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' }); return res.end(fs.readFileSync(plArt)); }
       // nothing to derive from: return a generated tile so the card is never blank
       const pl = db.prepare('SELECT name FROM playlists WHERE id=?').get(pid);

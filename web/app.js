@@ -978,8 +978,10 @@ function drawQuick() {
 
 async function drawRecents(rec) {
   const row = $('recent-row');
-  if (!rec || !rec.length) { $('recent-hint').textContent = 'PLAY SOMETHING AND IT LANDS HERE'; return; }
-  $('recent-hint').textContent = '';
+  const hint = $('recent-hint');
+  if (!row || !hint) return; // the view changed while we were waiting
+  if (!rec || !rec.length) { hint.textContent = 'PLAY SOMETHING AND IT LANDS HERE'; return; }
+  hint.textContent = '';
   for (const t of rec) row.appendChild(trackCard(t, rec, 'Recently played'));
 }
 
@@ -1044,10 +1046,12 @@ async function openPlaylist(pid, push = true) {
     </div>
     <div id="tlist"></div>`;
   const list = await api(`/api/playlists/${encodeURIComponent(pid)}`);
+  const plnEl = $('pln'); const pldurEl = $('pldur');
+  if (!plnEl || !pldurEl) return; // navigated away
   state._currentList = list;
-  $('pln').textContent = list.length;
+  plnEl.textContent = list.length;
   const totalS = list.reduce((a, t) => a + (t.duration || 0), 0);
-  $('pldur').textContent = list.length ? `${Math.round(totalS / 60)} min` : '';
+  pldurEl.textContent = list.length ? `${Math.round(totalS / 60)} min` : '';
   state.sort = { key: 'pos', dir: 1 };
   const renderRows = () => {
     let sorted = [...list];
@@ -1180,12 +1184,13 @@ async function renderLiked() {
       </div></div>
     <div id="liklist"></div>`;
   const list = await api('/api/likes/full');
+  const liknEl = $('likn'); const el = $('liklist');
+  if (!liknEl || !el) return; // navigated away
   state._currentList = list;
-  $('likn').textContent = list.length;
-  const el = $('liklist');
+  liknEl.textContent = list.length;
   if (!list.length) { el.innerHTML = `<div class="empty">Nothing liked yet. Heart something from any playlist.</div>`; return; }
   list.forEach((t, i) => { registerRow(t); el.appendChild(trow(t, i, list)); });
-  $('lik-play').onclick = () => playList(list, 0, false, 'Liked Songs');
+  const lp = $('lik-play'); if (lp) lp.onclick = () => playList(list, 0, false, 'Liked Songs');
 }
 
 const PL_ORDERS = [
@@ -1310,7 +1315,7 @@ async function renderLibrary() {
     el.classList.toggle('warn', Object.values(h.rungs || {}).some((v) => !v.ok));
   }).catch(() => {});
   paintRungs();
-  api('/api/settings').then((s) => { $('auto-dl').value = s.auto_download_plays; }).catch(() => {});
+  api('/api/settings', { nocache: true }).then((d) => { const v = d && d.settings ? d.settings.auto_download_plays : d.auto_download_plays; if (v != null) $('auto-dl').value = v; }).catch(() => {});
   $('auto-dl').onchange = (e) => {
     const v = Math.max(0, Math.min(20, Number(e.target.value) || 0));
     api('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ auto_download_plays: v }) })
@@ -1473,6 +1478,7 @@ async function renderSongs(push = true) {
   let browse = null;
 
   const chips = $('songs-chips');
+  if (!chips) return; // view changed while the library was loading
   const paintChips = () => {
     const artists = new Set(all.map((t) => t.artist).filter(Boolean));
     const albums = new Set(all.map((t) => t.album).filter(Boolean));
@@ -1688,19 +1694,22 @@ async function renderSongs(push = true) {
       more.onclick = () => { limit = list.length; draw(); };
       el.appendChild(more);
     }
-    $('songs-thead').querySelectorAll('.th').forEach((th) => {
+    const sth = $('songs-thead');
+    if (sth) sth.querySelectorAll('.th').forEach((th) => {
       th.classList.toggle('sorted', th.dataset.key === sort.key);
       th.classList.toggle('desc', th.dataset.key === sort.key && sort.dir === -1);
     });
   };
 
-  $('songs-q').oninput = (e) => { query = e.target.value.trim(); browse = null; state.genreFilter = null; limit = 60; draw(); };
+  const sq = $('songs-q');
+  if (sq) sq.oninput = (e) => { query = e.target.value.trim(); browse = null; state.genreFilter = null; limit = 60; draw(); };
   document.querySelectorAll('#songs-filter .mode-tab').forEach((b) => b.onclick = () => {
     filter = b.dataset.f;
     document.querySelectorAll('#songs-filter .mode-tab').forEach((x) => x.classList.toggle('on', x === b));
     draw();
   });
-  $('songs-thead').querySelectorAll('.th').forEach((th) => th.onclick = () => {
+  const sth2 = $('songs-thead');
+  if (sth2) sth2.querySelectorAll('.th').forEach((th) => th.onclick = () => {
     const k = th.dataset.key; if (!k) return;
     sort = sort.key === k ? { key: k, dir: -sort.dir } : { key: k, dir: 1 };
     draw();
@@ -2054,7 +2063,8 @@ async function renderSearch() {
     const c = ls.querySelector('.chk'); if (c) c.textContent = state.longSets ? '✓' : '';
   };
   paintLS();
-  $('long-sets').onclick = () => {
+  const lsBtn = $('long-sets');
+  if (lsBtn) lsBtn.onclick = () => {
     state.longSets = !state.longSets;
     paintLS();
     if (q.value.trim()) draw();
@@ -2663,7 +2673,7 @@ function trow(t, i, list) {
       ? `<div class="trbadge rung-${esc(shortRung(t.rung).cls)}"><b>${esc(shortRung(t.rung).label)}</b> ${esc(t.quality || '')}</div>`
       : t.streamable
         ? `<div class="trbadge rung-yt" title="Plays from the source when you press play."><b>STREAM</b></div>`
-        : `<div class="trbadge rung-mirror" title="Metadata only. Press the download icon to get the audio."><b>NO AUDIO</b></div>`}
+        : `<div class="trbadge rung-mirror" title="Metadata only. Press the download icon to get the audio."><b>Not downloaded</b></div>`}
     <div class="tdur">${fmt(t.duration)}</div>
     ${hasAudio(t)
       ? `<button class="tmore" title="More options">${IC.dots}</button>`
@@ -2898,11 +2908,12 @@ async function renderArtist(name, push = true) {
   let list = [];
   try { list = await api(`/api/group/artist/${encodeURIComponent(name)}`); } catch {}
   state._currentList = list;
-  $('g-n').textContent = list.length;
-  const el = $('g-list');
-  if (!list.length) { el.innerHTML = `<div class="empty">No owned tracks for this artist yet. Search the web and download some.</div>`; return; }
-  list.forEach((t, i) => { registerRow(t); el.appendChild(trow(t, i, list)); });
-  $('g-play').onclick = () => playList(list, 0, false, name);
+  const gnA = $('g-n'); const elA = $('g-list');
+  if (!gnA || !elA) return;
+  gnA.textContent = list.length;
+  if (!list.length) { elA.innerHTML = `<div class="empty">No owned tracks for this artist yet. Search the web and download some.</div>`; return; }
+  list.forEach((t, i) => { registerRow(t); elA.appendChild(trow(t, i, list)); });
+  const gpA = $('g-play'); if (gpA) gpA.onclick = () => playList(list, 0, false, name);
 }
 
 /* album page: all owned tracks for one album */
@@ -2931,11 +2942,12 @@ async function renderAlbum(name, push = true) {
   let list = [];
   try { list = await api(`/api/group/album/${encodeURIComponent(name)}`); } catch {}
   state._currentList = list;
-  $('g-n').textContent = list.length;
-  const el = $('g-list');
-  if (!list.length) { el.innerHTML = `<div class="empty">No owned tracks for this album.</div>`; return; }
-  list.forEach((t, i) => { registerRow(t); el.appendChild(trow(t, i, list)); });
-  $('g-play').onclick = () => playList(list, 0, false, name);
+  const gnB = $('g-n'); const elB = $('g-list');
+  if (!gnB || !elB) return;
+  gnB.textContent = list.length;
+  if (!list.length) { elB.innerHTML = `<div class="empty">No owned tracks for this album.</div>`; return; }
+  list.forEach((t, i) => { registerRow(t); elB.appendChild(trow(t, i, list)); });
+  const gpB = $('g-play'); if (gpB) gpB.onclick = () => playList(list, 0, false, name);
   $('g-dl').onclick = async () => {
     const btn = $('g-dl');
     btn.disabled = true;
