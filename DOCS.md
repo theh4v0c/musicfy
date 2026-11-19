@@ -327,7 +327,10 @@ Measured on this box: 36 seconds per track for 10 to 11 minute club tracks, whic
 threaded, or about an hour with three workers. Memory is small, one process peaks around
 300 MB. The song list shows BPM and key once analysed.
 
-Endpoints: `POST /api/analyze/run?limit=&workers=` and `GET /api/analyze/status`.
+Endpoints: `POST /api/analyze/run?limit=&workers=` (batch) and `GET /api/analyze/status`.
+`POST /api/analyze/track/:id` analyses a single track on demand, so only the tracks you actually
+play live (electronic) need BPM and key, and only those feed a Rekordbox export. The row context
+menu has an "Analyze BPM & key" action for this.
 
 Essentia itself does not install here: there is no aarch64 wheel for Python 3.11 and the
 source build fails after six minutes. librosa covers BPM, key, loudness and energy without
@@ -355,6 +358,10 @@ at mirror time, and finally generates an SVG letter tile so a card is never blan
 
 ## Incident log
 
+**2026-11-19, dead download queue and year 58853.** The transcode ingest did `fs.statSync(dest).size` unguarded; when ffmpeg produced no file the throw landed inside the `execFile` callback, so `finish()` (and the concurrency-slot release) never ran. Three jobs froze at 99% for 6.4 hours with no child process, and 49 sat behind them. The recovery watchdog was dead code: it queried `jobs.updated_at`, a column that never existed, and the `catch {}` swallowed the error every 60 seconds. Separately, the WNL playlist import wrote `Date.now()` (milliseconds) into the seconds-column `added_at`/`updated_at`, so 182 rows rendered as `Aug 16, 58853`.
+
+Fixed: the `execFile` callback is wrapped so a throw always calls `finish('error')`; a real `jobs.updated_at` column is written on every progress tick and the watchdog reaps stuck jobs and releases their slot; the import uses `now()`; a boot migration divides any `>1e12` timestamp back to seconds.
+
 **2026-11-12, self-inflicted library loss.** A new repair endpoint used `execFileSync` without
 importing it. Every ffprobe attempt threw, the code read that as "unreadable", classified all
 335 owned files as broken and deleted them along with their file rows. 331 downloads were
@@ -376,6 +383,8 @@ Guards added so this cannot repeat:
 - Every download now refuses truncated audio at ingest: if the finished file is shorter than
   60 percent of the declared duration it is discarded and the job errors out.
 - `POST /api/maintenance/repair-duration` is the supported way to sweep broken files.
+- `verifyFiles()` (boot + `POST /api/maintenance/verify-files`) now aborts when more than 20% of
+  file rows are missing, so a down removable mount can never be read as "every file is gone".
 
 ## Backups
 

@@ -186,6 +186,7 @@ function openCtx(t, x, y) {
     ${hasAudio(t) ? '<button data-act="cover">Change cover</button>' : ''}
     ${(hasAudio(t) && Number(t.bitrate || 0) > 0 && Number(t.bitrate) < 180000) ? '<button data-act="upgrade">Find higher quality</button>' : ''}
     ${hasAudio(t) ? '<button data-act="tofile">Download to device</button>' : ''}
+    ${hasAudio(t) ? `<button data-act="analyze">${t.bpm ? 'Re-analyze' : 'Analyze'} BPM &amp; key</button>` : ''}
     <button data-act="addpl">Add to playlist</button>
     ${state.view === 'playlist' && state.playlistId ? '<button data-act="rmpl">Remove from this playlist</button>' : ''}
     ${(!t.ladder && t.id) ? '<button data-act="rename">Rename track</button>' : ''}
@@ -241,6 +242,18 @@ $('ctx').addEventListener('click', async (e) => {
   if (act === 'like') toggleLike(t);
   if (act === 'addpl') openAddPl(t);
   if (act === 'radiostart') startRadio(t);
+  if (act === 'analyze') {
+    toast('Analyzing BPM and key…', 8000);
+    try {
+      const r = await api(`/api/analyze/track/${t.id}`, { method: 'POST', nocache: true });
+      if (r.error) return toast(r.error, 6000);
+      const bpmTxt = r.bpm ? `${Math.round(r.bpm)} BPM` : 'BPM n/a';
+      const keyTxt = r.key ? `${r.key}${r.key_scale === 'minor' ? 'm' : ''}` : 'key n/a';
+      toast(`Analysed · ${bpmTxt} · ${keyTxt}`, 6000);
+      state.allTracks = null; afterWrite(); refreshView();
+    } catch { toast('Analysis failed', 5000); }
+    return;
+  }
     if (act === 'upgrade') {
       closeCtx();
       try {

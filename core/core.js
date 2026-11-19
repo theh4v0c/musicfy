@@ -1987,6 +1987,21 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // name an auto-playlist from what it actually contains, not a week number
+    function recommendName(profile, picks) {
+      const fam = profile && profile.topFamily ? String(profile.topFamily).replace(/_/g, ' ') : null;
+      const bpm = profile && profile.avgBpm ? `${profile.avgBpm} BPM` : null;
+      const keyCount = {};
+      for (const p of picks || []) {
+        if (!p.key) continue;
+        const k = `${p.key}${p.key_scale === 'minor' ? 'm' : ''}`;
+        keyCount[k] = (keyCount[k] || 0) + 1;
+      }
+      const key = Object.entries(keyCount).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+      const parts = [fam, key, bpm].filter(Boolean);
+      return parts.length ? parts.join(' · ') : 'Your rotation';
+    }
+
     // recommendations driven by current listening
     if (u.pathname === '/api/recommend') {
       const days = Math.min(Number(u.searchParams.get('days') || 30), 365);
@@ -2002,16 +2017,16 @@ const server = http.createServer(async (req, res) => {
         const now2 = new Date();
         const jan1 = new Date(Date.UTC(now2.getUTCFullYear(), 0, 1));
         const week = Math.ceil((((now2 - jan1) / 86400000) + jan1.getUTCDay() + 1) / 7);
-        const name = `For you W${String(week).padStart(2, '0')}`;
+        const days = Math.min(Number(b.days || 30), 365);
+        const out = recommend.build(db, { days, limit: Math.min(Number(b.limit || 25), 100), excludePlaylisted: true });
+        const inAnyPlaylist = new Set(db.prepare('SELECT DISTINCT track_id id FROM playlist_tracks').all().map((r) => r.id));
+        const picks = out.picks.filter((p) => !inAnyPlaylist.has(p.id));
+        const name = `${recommendName(out.profile, picks)} · W${String(week).padStart(2, '0')}`;
         const existing = db.prepare('SELECT id FROM playlists WHERE name=?').get(name);
         if (existing) {
           const n = db.prepare('SELECT COUNT(*) c FROM playlist_tracks WHERE playlist_id=?').get(existing.id).c;
           return json(res, 200, { created: null, existing: { id: existing.id, name, tracks: n }, reason: 'this week already has a list' });
         }
-        const days = Math.min(Number(b.days || 30), 365);
-        const out = recommend.build(db, { days, limit: Math.min(Number(b.limit || 25), 100), excludePlaylisted: true });
-        const inAnyPlaylist = new Set(db.prepare('SELECT DISTINCT track_id id FROM playlist_tracks').all().map((r) => r.id));
-        const picks = out.picks.filter((p) => !inAnyPlaylist.has(p.id));
         if (!picks.length) return json(res, 200, { created: null, reason: 'nothing new to add this week' });
         const pid = `rec-${Date.now().toString(36)}`;
         db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)').run(pid, name, 'recommend', now(), now());
@@ -2031,7 +2046,7 @@ const server = http.createServer(async (req, res) => {
         const limit = Math.min(Number(b.limit || 25), 100);
         const out = recommend.build(db, { days, limit });
         if (!out.picks.length) return json(res, 200, { created: null, reason: 'not enough listening history yet' });
-        const name = String(b.name || `For you ${new Date().toISOString().slice(0, 10)}`).slice(0, 80);
+        const name = String(b.name || `${recommendName(out.profile, out.picks)} · ${new Date().toISOString().slice(0, 10)}`).slice(0, 80);
         const pid = `rec-${Date.now().toString(36)}`;
         db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)')
           .run(pid, name, 'recommend', now(), now());
@@ -2161,6 +2176,15 @@ const server = http.createServer(async (req, res) => {
     }
     if (u.pathname === '/api/analyze/status') {
       return json(res, 200, analyser.status(db));
+    }
+    // analyse a single track on demand (only the ones you play live need BPM/key)
+    const mAnalyzeOne = u.pathname.match(/^\/api\/analyze\/track\/(\d+)$/);
+    if (mAnalyzeOne && req.method === 'POST') {
+      const tid = Number(mAnalyzeOne[1]);
+      try {
+        const r = await analyser.runOne(db, tid);
+        return json(res, r.error ? 400 : 200, r);
+      } catch (e) { return json(res, 500, { error: e.message }); }
     }
 
     // re-download every track that lost its file, using the metadata we kept
