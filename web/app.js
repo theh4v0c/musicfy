@@ -297,9 +297,22 @@ $('ctx').addEventListener('click', async (e) => {
     if (act === 'upgrade') {
       closeCtx();
       try {
-        await api(`/api/tracks/${t.id}/download`, { method: 'POST' });
-        toast('Looking for a better copy. It is only replaced if the new file is better.', 7000);
-        openDownloads();
+        const r = await api(`/api/tracks/${t.id}/download`, { method: 'POST' });
+        if (!r.job) { toast('Could not queue an upgrade', 4000); return; }
+        const pp = progressPill(`Checking for a better copy of ${(t.title || 'track').slice(0, 40)}…`);
+        const j = await pollJob(r.job, (job) => { if (job && job.progress) pp.update(`Checking… ${Math.round(job.progress)}%`); });
+        pp.done();
+        if (!j) { toast('Upgrade is still running in the background', 6000); return; }
+        if (j.state === 'done' && /kept the higher quality/i.test(j.detail || '')) {
+          toast('No better copy found — your current file is the best available', 7000);
+          return;
+        }
+        if (j.state === 'done') {
+          toast('Upgraded to a better copy', 6000);
+          bustCache(); state.allTracks = null; refreshView();
+          return;
+        }
+        toast(`No better copy: ${(j.detail || j.state || 'unavailable').slice(0, 80)}`, 7000);
       } catch { toast('Could not queue an upgrade', 4000); }
       return;
     }
@@ -2922,6 +2935,19 @@ async function waitForJob(jobId, title, trackId = null, tries = 90) {
   }
   toast('Download is still running in the background', 7000);
   return false;
+}
+
+// poll a job and return its final row (with .detail), so the caller can report the outcome
+async function pollJob(jobId, onTick, tries = 150) {
+  for (let i = 0; i < tries; i += 1) {
+    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      const j = await api(`/api/jobs/${encodeURIComponent(jobId)}`);
+      if (onTick) { try { onTick(j); } catch {} }
+      if (['done', 'error', 'unavailable', 'cancelled', 'skipped'].includes(j.state)) return j;
+    } catch {}
+  }
+  return null;
 }
 
 /* artist page: all owned tracks for one artist */
