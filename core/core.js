@@ -264,6 +264,13 @@ function httpGet(url) {
     }).on('error', reject);
   });
 }
+// external lookups must never hold a request open indefinitely
+function httpGetTimed(url, ms = 6000) {
+  return Promise.race([
+    httpGet(url),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ]);
+}
 
 // block links to the LAN, loopback and cloud metadata; the generic streamer/download
 // otherwise lets any caller make the Pi fetch arbitrary internal URLs (SSRF)
@@ -2170,16 +2177,44 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.method === 'POST') {
         let body = ''; req.on('data', c => body += c);
-        req.on('end', () => {
+        req.on('end', async () => {
           let b = {};
           try { b = JSON.parse(body || '{}'); } catch {}
           let s = {};
           try { s = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
-          for (const k of ['display_name', 'email', 'country', 'timezone', 'llm_base_url', 'llm_model', 'llm_api_key',
+          for (const k of ['display_name', 'email', 'country', 'llm_base_url', 'llm_model', 'llm_api_key',
             'download_root', 'preferred_format', 'autoplay_next', 'show_stream_rows',
             'normalize_loudness', 'target_loudness', 'crossfade_ms', 'fade_on_play', 'fade_on_play_ms', 'prefetch_ahead',
-            'taste_genres', 'taste_artists', 'taste_context', 'taste_avoid', 'city', 'latitude', 'longitude']) {
+            'taste_genres', 'taste_artists', 'taste_context', 'taste_avoid']) {
             if (b[k] !== undefined) s[k] = b[k];
+          }
+          // a time zone must be a real IANA name or the greeting silently falls back to UTC
+          if (b.timezone !== undefined) {
+            const tz = String(b.timezone).trim();
+            if (!tz) delete s.timezone;
+            else {
+              try { new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date()); s.timezone = tz; }
+              catch { /* keep the previous, valid zone */ }
+            }
+          }
+          // a city is resolved to coordinates and time zone, so the greeting and weather are local
+          if (b.city !== undefined) {
+            const q = String(b.city).trim();
+            if (!q) { delete s.city; delete s.latitude; delete s.longitude; }
+            else {
+              s.city = q;
+              try {
+                const g = JSON.parse(await httpGetTimed(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=en&format=json`));
+                const hit = (g.results || [])[0];
+                if (hit) {
+                  s.city = hit.name || q;
+                  s.country = hit.country_code || s.country || '';
+                  s.latitude = hit.latitude;
+                  s.longitude = hit.longitude;
+                  if (hit.timezone) s.timezone = hit.timezone;
+                }
+              } catch {}
+            }
           }
           fs.mkdirSync('/opt/musicfy/data', { recursive: true });
           fs.writeFileSync(file, JSON.stringify(s, null, 2), { mode: 0o600 });
@@ -2215,16 +2250,22 @@ const server = http.createServer(async (req, res) => {
       try { hour = Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz }).format(new Date())); } catch {}
       if (hour === 24) hour = 0;
       const part = hour < 5 ? 'night' : hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
-      const lat = Number(s.latitude) || -23.5505;
-      const lon = Number(s.longitude) || -46.6333;
-      const city = String(s.city || 'São Paulo');
+      const lat = Number(s.latitude);
+      const lon = Number(s.longitude);
+      const city = String(s.city || '');
       let weather = null;
-      try {
-        const w = await httpGet(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code`);
-        const cur = (JSON.parse(w) || {}).current || {};
-        weather = { temp: Math.round(Number(cur.temperature_2m)), word: weatherWord(cur.weather_code) };
-      } catch {}
-      let line = weather ? `${weather.temp}°C and ${weather.word} in ${city}.` : `In ${city}.`;
+      if (city && Number.isFinite(lat) && Number.isFinite(lon)) {
+        try {
+          const w = await httpGetTimed(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code`);
+          const cur = (JSON.parse(w) || {}).current || {};
+          weather = { temp: Math.round(Number(cur.temperature_2m)), word: weatherWord(cur.weather_code) };
+        } catch {}
+      }
+      let line;
+      if (city && weather) line = `${weather.temp}°C and ${weather.word} in ${city}.`;
+      else if (city) line = `In ${city}.`;
+      else if (weather) line = `${weather.temp}°C and ${weather.word} outside.`;
+      else line = 'Ready when you are.';
       if (weather) {
         if (/rain|snow|storm|fog/i.test(weather.word)) line += ' A stay-in and dig night.';
         else if (hour >= 22 || hour < 5) line += ' Late-night session?';
@@ -2779,17 +2820,44 @@ const server = http.createServer(async (req, res) => {
     // queue a whole album, or only the tracks that are missing audio
     if (u.pathname === '/api/albums/download' && req.method === 'POST') {
       let body = ''; req.on('data', c => body += c);
-      req.on('end', () => {
+      req.on('end', async () => {
         let b = {};
         try { b = JSON.parse(body || '{}'); } catch {}
         const name = String(b.name || '').trim();
         if (!name) return json(res, 400, { error: 'album name required' });
+        // tracks already known for this album but without audio
         const tracks = db.prepare(`SELECT t.id, t.title, t.artist, t.duration FROM tracks t
           WHERE lower(COALESCE(t.album,''))=lower(?)
           AND NOT EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')`).all(name);
         let queued = 0;
         for (const t of tracks) if (enqueueTrackDownload(t)) queued += 1;
-        return json(res, 200, { queued, total: tracks.length });
+
+        // an album in the library is usually partial: the rows for the tracks you never
+        // got are not in the database at all, so ask the catalogue for the full tracklist
+        // and queue whatever is missing instead of claiming the album is complete
+        let total = db.prepare(`SELECT COUNT(*) c FROM tracks WHERE lower(COALESCE(album,''))=lower(?)`).get(name).c;
+        let found = 0;
+        const nt = (v) => String(v || '').toLowerCase().replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+        try {
+          const artistRow = db.prepare(`SELECT artist FROM tracks WHERE lower(COALESCE(album,''))=lower(?)
+            AND artist IS NOT NULL AND artist != '' GROUP BY artist ORDER BY COUNT(*) DESC LIMIT 1`).get(name);
+          const artist = artistRow ? artistRow.artist : '';
+          const list = await identity.albumTracklist(name, artist);
+          if (list && list.length) {
+            total = Math.max(total, list.length);
+            const have = new Set(db.prepare(`SELECT title FROM tracks WHERE lower(COALESCE(album,''))=lower(?)`).all(name).map((r) => nt(r.title)));
+            for (const s of list) {
+              const key = nt(s.title);
+              if (!key || have.has(key)) continue;
+              have.add(key);
+              const tid = upsertTrack({ title: s.title, artist: s.artist || artist, album: name, duration: s.duration || null, format: 'catalogue' });
+              if (db.prepare("SELECT 1 FROM files WHERE track_id=? AND tier='owned' LIMIT 1").get(tid)) continue;
+              const row = db.prepare('SELECT id, title, artist, duration FROM tracks WHERE id=?').get(tid);
+              if (row && enqueueTrackDownload(row)) { queued += 1; found += 1; }
+            }
+          }
+        } catch {}
+        return json(res, 200, { queued, total, found });
       });
       return;
     }

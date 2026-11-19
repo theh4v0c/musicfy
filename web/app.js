@@ -1897,6 +1897,15 @@ async function renderSettings() {
         <label>Display name<input id="set-name" value="${esc(s.display_name || '')}" placeholder="Your name"></label>
         <label>Email<input id="set-email" value="${esc(s.email || '')}" placeholder="you@example.com"></label>
         <label>Timezone<input id="set-tz" value="${esc(s.timezone || '')}" placeholder="America/Sao_Paulo"></label>
+        <p class="set-note">IANA name, e.g. America/Sao_Paulo. Setting a city below fills it in automatically.</p>
+      </section>
+      <section class="set-card">
+        <h2>Location</h2>
+        <p class="set-note">Used by the greeting and its weather line. Type a city and the coordinates and time zone are looked up for you.</p>
+        <label>City<input id="set-city" value="${esc(s.city || '')}" placeholder="Brasília"></label>
+        <div class="set-facts" id="set-geo">${s.latitude && s.longitude
+          ? `<div><b>${esc(s.city || '')}</b>${s.country ? ` · ${esc(s.country)}` : ''}</div><div>${Number(s.latitude).toFixed(3)}, ${Number(s.longitude).toFixed(3)}</div><div>${esc(s.timezone || '')}</div>`
+          : '<div>No city set</div>'}</div>
       </section>
       <section class="set-card">
         <h2>Taste</h2>
@@ -1977,6 +1986,7 @@ async function renderSettings() {
       display_name: document.getElementById('set-name').value.trim(),
       email: document.getElementById('set-email').value.trim(),
       timezone: document.getElementById('set-tz').value.trim(),
+      city: document.getElementById('set-city').value.trim(),
       llm_base_url: document.getElementById('set-llm-url').value.trim(),
       llm_model: document.getElementById('set-llm-model').value.trim(),
       download_root: document.getElementById('set-root').value.trim(),
@@ -1996,9 +2006,19 @@ async function renderSettings() {
     const key = document.getElementById('set-llm-key').value.trim();
     if (key) body.llm_api_key = key;
     try {
-      await api('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-      document.getElementById('set-msg').textContent = 'Saved';
-      state.settings = { ...(state.settings || {}), ...body };
+      const r = await api('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      const saved = r.settings || {};
+      // the server may have resolved the city into coordinates and a time zone
+      if (saved.timezone) document.getElementById('set-tz').value = saved.timezone;
+      if (saved.city !== undefined) document.getElementById('set-city').value = saved.city || '';
+      const geo = document.getElementById('set-geo');
+      if (geo) {
+        geo.innerHTML = saved.latitude && saved.longitude
+          ? `<div><b>${esc(saved.city || '')}</b>${saved.country ? ` · ${esc(saved.country)}` : ''}</div><div>${Number(saved.latitude).toFixed(3)}, ${Number(saved.longitude).toFixed(3)}</div><div>${esc(saved.timezone || '')}</div>`
+          : '<div>No city set</div>';
+      }
+      document.getElementById('set-msg').textContent = saved.city && !saved.latitude ? 'Saved, but that city was not found' : 'Saved';
+      state.settings = { ...(state.settings || {}), ...body, ...saved };
       applyLoudnessGain(state.current);
       if (body.display_name) state.profileName = body.display_name;
     } catch { document.getElementById('set-msg').textContent = 'Could not save'; }

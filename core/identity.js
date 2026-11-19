@@ -170,7 +170,7 @@ async function catalog(query, { songs = 40, albums = 12, artists = 6 } = {}) {
 
 // the ordered tracklist of one album, from iTunes, so album pages can sort by track number
 async function albumTracklist(name, artist) {
-  const key = 'albtrk:' + norm(name) + '|' + norm(artist || '');
+  const key = 'albtrk2:' + norm(name) + '|' + norm(artist || '');
   const c = load();
   if (c[key] && Date.now() - c[key].at < 30 * 24 * 3600 * 1000) return c[key].list || null;
   await throttle();
@@ -189,7 +189,12 @@ async function albumTracklist(name, artist) {
       const look = await getJson(`https://itunes.apple.com/lookup?id=${best.a.collectionId}&entity=song&limit=200`);
       const songs = (look.results || []).filter((r) => r.wrapperType === 'track' && r.trackName);
       list = songs.sort((x, y) => (x.trackNumber || 0) - (y.trackNumber || 0))
-        .map((r) => ({ title: r.trackName, trackNumber: r.trackNumber || 0 }));
+        .map((r) => ({
+          title: r.trackName,
+          trackNumber: r.trackNumber || 0,
+          duration: r.trackTimeMillis ? Math.round(r.trackTimeMillis / 1000) : null,
+          artist: r.artistName || null,
+        }));
     }
   } catch {}
   c[key] = { at: Date.now(), list };
