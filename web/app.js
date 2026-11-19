@@ -212,9 +212,18 @@ function openCtx(t, x, y) {
     ${(!t.ladder && t.id) ? '<button data-act="deltrack">Delete from library</button>' : ''}
     <button data-act="radiostart">Start track radio</button>`;
   m.classList.add('open');
+  placeCtx(x, y);
+}
+// keep the sheet fully on screen, even when it is taller than the space below the finger
+function placeCtx(x, y) {
+  const m = $('ctx');
+  if (!m) return;
   const r = m.getBoundingClientRect();
-  m.style.left = Math.min(x, innerWidth - r.width - 8) + 'px';
-  m.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
+  const maxH = Math.max(160, innerHeight - 24);
+  m.style.maxHeight = maxH + 'px';
+  const h = m.getBoundingClientRect().height;
+  m.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
+  m.style.top = Math.max(8, Math.min(y, innerHeight - h - 8)) + 'px';
 }
 function showBack() {}
 function closeCtx(force = false) {
@@ -666,9 +675,7 @@ function openPlaylistMenu(p, x, y) {
     <button data-act="pl-zip">Download to device (zip)</button>
     <button data-act="pl-delete">Delete playlist</button>`;
   m.classList.add('open');
-  const r = m.getBoundingClientRect();
-  m.style.left = Math.min(x, innerWidth - r.width - 8) + 'px';
-  m.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
+  placeCtx(x, y);
   m.onclick = async (e) => {
     const b = e.target.closest('button'); if (!b) return;
     const act = b.dataset.act;
@@ -715,12 +722,12 @@ function openPlaylistMenu(p, x, y) {
 // wires both gesture and mouse: long press on a phone, right click on a desktop
 // simple action list for cards: desktop right click or phone long press
 function openCardMenu(title, actions, x, y) {
+  markCtxOpen();
   const m = $('ctx');
   m.innerHTML = `<div class="ctx-title">${esc(title)}</div>` +
     actions.map((a, i) => `<button data-ci="${i}">${esc(a.label)}</button>`).join('');
   m.classList.add('open');
-  m.style.left = (x || Math.max(8, innerWidth / 2 - 150)) + 'px';
-  m.style.top = (y || innerHeight / 2 - 120) + 'px';
+  placeCtx(x, y);
   m.onclick = async (e) => {
     const b = e.target.closest('button[data-ci]');
     if (!b) return;
@@ -896,9 +903,7 @@ function openLadderCtx(c, x, y) {
     <button data-act="l-add">Add to playlist (stream)</button>
     <button data-act="l-dl">Download to library</button>`;
   m.classList.add('open');
-  const r = m.getBoundingClientRect();
-  m.style.left = Math.min(x, innerWidth - r.width - 8) + 'px';
-  m.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
+  placeCtx(x, y);
   m.onclick = async (e) => {
     const b = e.target.closest('button'); if (!b) return;
     const act = b.dataset.act;

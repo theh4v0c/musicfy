@@ -111,7 +111,7 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 .plhead-name { font-size: clamp(28px, 4vw, 52px); font-weight: 800; letter-spacing: -.02em; line-height: 1.02; margin: 8px 0 10px; }
 .plhead-meta { color: var(--fg-soft); font-size: 13px; }
 .plhead-meta b { color: var(--fg); }
-.plhead-actions { display: flex; gap: 12px; margin-top: 18px; }
+.plhead-actions { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
 .btn { border: none; border-radius: 99px; padding: 12px 26px; font-size: 14px; font-weight: 700; }
 .btn-primary { background: var(--acc); color: #fff; }
 .btn-primary:hover { filter: brightness(1.1); }
@@ -577,7 +577,11 @@ html, body { overflow-x: hidden; max-width: 100%; }
   .view { padding: 18px 16px 130px; }
   .bottomnav { display: flex; }
   .mini:not([hidden]) { display: flex; }
-  .plhead { flex-direction: column; align-items: flex-start; gap: 18px; }
+  .plhead { flex-direction: column; align-items: stretch; gap: 18px; }
+  .plhead > div { width: 100%; min-width: 0; }
+  .plhead-name { overflow-wrap: anywhere; }
+  .plhead-actions { gap: 8px; }
+  .plhead-actions .btn { padding: 10px 18px; font-size: 13px; }
   .plhead-art { width: 148px; height: 148px; }
   .thead { display: none; }
   .trow { grid-template-columns: 30px 46px 1fr 40px 30px; }
