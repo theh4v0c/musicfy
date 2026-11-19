@@ -2843,8 +2843,8 @@ function trow(t, i, list) {
   if (art && t.artist) art.onclick = (e) => { e.stopPropagation(); renderArtist(t.artist); };
   const keyBtn = el.querySelector('.keychip');
   if (keyBtn) keyBtn.onclick = (e) => { e.stopPropagation(); state._keySort = (state._keySort || 0) + 1; sortSongsByKey(); };
-  const alb = el.querySelector('.talbum .alink');
-  if (t.album) alb.onclick = (e) => { e.stopPropagation(); renderAlbum(t.album); };
+  const albLinks = el.querySelectorAll('.talbum .alink, .talbum-line .alink');
+  if (t.album) albLinks.forEach((a) => { a.onclick = (e) => { e.stopPropagation(); renderAlbum(t.album); }; });
   el.tabIndex = 0;
   el.setAttribute('role', 'row');
   el.onkeydown = (e) => {
