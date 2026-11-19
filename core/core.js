@@ -2012,6 +2012,32 @@ const server = http.createServer(async (req, res) => {
       const limit = Math.min(Number(u.searchParams.get('limit') || 40), 100);
       return json(res, 200, recommend.build(db, { days, limit }));
     }
+    // Flow: one-tap infinite mix. discovery=0 (safe rotation) .. 100 (all unheard), genre optional.
+    if (u.pathname === '/api/flow') {
+      const genre = (u.searchParams.get('genre') || '').trim().toLowerCase();
+      const discovery = Math.max(0, Math.min(100, Number(u.searchParams.get('discovery') || 30)));
+      const out = recommend.build(db, { days: 30, limit: 200 });
+      let picks = out.picks;
+      if (genre) picks = picks.filter((p) => `${p.genre_family || ''} ${p.genre || ''}`.toLowerCase().includes(genre));
+      if (!picks.length) return json(res, 200, { count: 0, tracks: [], profile: out.profile });
+      const unheard = picks.filter((p) => !p.plays);
+      const known = picks.filter((p) => p.plays);
+      const nNew = Math.round(picks.length * discovery / 100);
+      const mix = [...unheard.slice(0, nNew), ...known.slice(0, Math.max(0, picks.length - nNew))];
+      // interleave so the mix does not run all-new then all-known
+      const order = mix.sort(() => Math.random() - 0.5).slice(0, 50);
+      const ids = order.map((p) => p.id);
+      if (!ids.length) return json(res, 200, { count: 0, tracks: [], profile: out.profile });
+      const ph = ids.map(() => '?').join(',');
+      const rows = db.prepare(`SELECT t.*, 1 AS owned, f.bitrate, r.rung, r.quality
+        FROM tracks t
+        LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
+        LEFT JOIN resolutions r ON r.track_id=t.id
+        WHERE t.id IN (${ph})`).all(...ids);
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      const tracks = ids.map((id) => byId.get(id)).filter(Boolean);
+      return json(res, 200, { count: tracks.length, tracks, profile: out.profile, discovery, genre: genre || null });
+    }
     // one playlist per week, excluding anything already in a playlist
     if (u.pathname === '/api/recommend/weekly' && req.method === 'POST') {
       let body = ''; req.on('data', c => body += c);

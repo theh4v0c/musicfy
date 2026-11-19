@@ -61,6 +61,8 @@ img { -webkit-user-drag: none; }
 
 .hero-greet { font-size: 28px; font-weight: 800; margin-bottom: 6px; }
 .hero-sub { color: var(--fg-mute); font-size: 13px; margin-bottom: 24px; }
+.hero-actions { display: flex; align-items: center; gap: 12px; margin: -10px 0 18px; }
+.flow-hint { color: var(--fg-mute); font-size: 12px; }
 .sec-title small { max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
 .sec-title { font-size: 19px; font-weight: 800; margin: 30px 0 14px; display: flex; align-items: center; gap: 10px; }
 .sec-title small { font-family: var(--mono); font-size: 10px; color: var(--fg-mute); font-weight: 400; letter-spacing: .1em; }

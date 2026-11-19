@@ -636,6 +636,7 @@ async function renderHome() {
   v.innerHTML = `
     <div class="hero-greet">Good ${greetPart()}.</div>
     <div class="hero-sub">${state.playlists.length} playlists</div>
+    <div class="hero-actions"><button class="btn btn-primary" id="flow-btn">&#9654; Flow</button><span class="flow-hint">endless mix from what you play</span></div>
     <div class="quicktiles" id="quick"></div>
     <div id="rotation-slot"></div>
     <div id="discover-home"></div>
@@ -644,6 +645,16 @@ async function renderHome() {
     <div class="sec-title">Your playlists <small>${state.playlists.length} TOTAL</small></div>
     <div class="pgrid" id="home-grid"></div>`;
   drawQuick();
+  const fb = $('flow-btn');
+  if (fb) fb.onclick = async () => {
+    fb.disabled = true;
+    try {
+      const d = await api('/api/flow?discovery=30', { nocache: true });
+      if (!d.tracks || !d.tracks.length) { toast('Play a few tracks first so Flow can learn your taste'); return; }
+      playList(d.tracks, 0, false, 'Flow');
+    } catch { toast('Flow failed'); }
+    fb.disabled = false;
+  };
   const g = $('home-grid');
   for (const p of state.playlists) g.appendChild(pcard(p));
   renderDiscoverInto($('discover-home'));
