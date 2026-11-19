@@ -3813,10 +3813,12 @@ async function loadPlaylists() {
     try { primeFromCache(); } catch {}
     try { restoreQueue(); } catch {}
     try { const s = await api('/api/settings', { nocache: true }); state.settings = s.settings || {}; } catch { state.settings = {}; }
+    const bootView = state.view;
     await loadPlaylists();
-    syncLikes();
+    try { await syncLikes(); } catch {}
     paintPill();
-    renderHome();
+    // do not stomp a view the user opened while boot was loading playlists
+    if (state.view === bootView) renderHome();
   } catch (e) {
     $('view').innerHTML = `<div class="empty">core unreachable: ${esc(e.message)}</div>`;
   }
