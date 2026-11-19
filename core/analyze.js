@@ -8,7 +8,7 @@ const PY = '/opt/musicfy/essentia-venv/bin/python';
 const SCRIPT = '/opt/musicfy/core/analyze.py';
 
 function ensureColumns(db) {
-  for (const col of ['bpm REAL', 'key TEXT', 'key_scale TEXT', 'key_confidence REAL', 'loudness REAL', 'energy REAL', 'analyzed_at INTEGER']) {
+  for (const col of ['bpm REAL', 'key TEXT', 'key_scale TEXT', 'key_confidence REAL', 'loudness REAL', 'energy REAL', 'analyzed_at INTEGER', 'beat_grid TEXT']) {
     try { db.exec(`ALTER TABLE tracks ADD COLUMN ${col}`); } catch {}
   }
 }
@@ -40,7 +40,7 @@ async function run(db, { limit = 50, workers = 2, batch = 4 } = {}) {
 
   running.startedAt = running.startedAt || Date.now();
   const queue = files.filter((f) => fs.existsSync(f.path));
-  const upd = db.prepare(`UPDATE tracks SET bpm=?, key=?, key_scale=?, key_confidence=?, loudness=?, energy=?, analyzed_at=?
+  const upd = db.prepare(`UPDATE tracks SET bpm=?, key=?, key_scale=?, key_confidence=?, loudness=?, energy=?, beat_grid=?, analyzed_at=?
     WHERE id=?`);
 
   const worker = async () => {
@@ -53,7 +53,7 @@ async function run(db, { limit = 50, workers = 2, batch = 4 } = {}) {
         if (!r || !r.id) continue;
         if (r.error) { running.failed += 1; continue; }
         upd.run(r.bpm || null, r.key || null, r.key_scale || null, r.key_confidence || null,
-          r.loudness || null, r.energy || null, Math.floor(Date.now() / 1000), r.id);
+          r.loudness || null, r.energy || null, JSON.stringify(r.beat_grid || []), Math.floor(Date.now() / 1000), r.id);
         running.done += 1;
       }
       running.active -= 1;
@@ -83,10 +83,10 @@ async function runOne(db, trackId) {
   const r = rows.find((x) => x && x.id === f.id) || rows[0];
   if (!r) return { error: 'analysis failed' };
   if (r.error) return { error: String(r.error).slice(0, 160) };
-  db.prepare(`UPDATE tracks SET bpm=?, key=?, key_scale=?, key_confidence=?, loudness=?, energy=?, analyzed_at=?
+  db.prepare(`UPDATE tracks SET bpm=?, key=?, key_scale=?, key_confidence=?, loudness=?, energy=?, beat_grid=?, analyzed_at=?
     WHERE id=?`).run(r.bpm || null, r.key || null, r.key_scale || null, r.key_confidence || null,
-    r.loudness || null, r.energy || null, Math.floor(Date.now() / 1000), f.id);
-  return { id: f.id, bpm: r.bpm, key: r.key, key_scale: r.key_scale };
+    r.loudness || null, r.energy || null, JSON.stringify(r.beat_grid || []), Math.floor(Date.now() / 1000), f.id);
+  return { id: f.id, bpm: r.bpm, key: r.key, key_scale: r.key_scale, cues: (r.beat_grid || []).length };
 }
 
 module.exports = { run, status, ensureColumns, runOne };

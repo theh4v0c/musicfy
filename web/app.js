@@ -541,6 +541,8 @@ function openPlaylistMenu(p, x, y) {
     <button data-act="pl-rename">Rename</button>
     <button data-act="pl-cover">Change cover</button>
     <button data-act="pl-m3u">Export M3U</button>
+    <button data-act="pl-rb">Export for Rekordbox (.xml)</button>
+    <button data-act="pl-tr">Export for Traktor (.nml)</button>
     <button data-act="pl-zip">Download to device (zip)</button>
     <button data-act="pl-delete">Delete playlist</button>`;
   m.classList.add('open');
@@ -554,6 +556,8 @@ function openPlaylistMenu(p, x, y) {
     if (act === 'pl-play') { playPlaylist(p.id); return; }
     if (act === 'pl-cover') { uploadPlaylistCover(p.id); return; }
     if (act === 'pl-m3u') { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.m3u`; return; }
+    if (act === 'pl-rb') { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/rekordbox.xml`; return; }
+    if (act === 'pl-tr') { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/traktor.nml`; return; }
     if (act === 'pl-zip') { toast('Building the zip, this can take a minute', 6000); window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/zip`; return; }
     if (act === 'pl-rename') {
       const name = prompt('Rename playlist:', p.name); if (!name) return;

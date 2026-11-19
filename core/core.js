@@ -23,6 +23,7 @@ const recommend = require('./recommend');
 const identity = require('./identity');
 const archive = require('./archive');
 const spotify = require('./spotify');
+const exporter = require('./export');
 const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = '/opt/musicfy';
@@ -96,7 +97,7 @@ function backfillDupKeys() {
 backfillDupKeys();
 
 // columns for playlist entries that stream from a source instead of a local file
-for (const col of ['src_kind TEXT', 'src_id TEXT', 'src_url TEXT', 'isrc TEXT']) {
+for (const col of ['src_kind TEXT', 'src_id TEXT', 'src_url TEXT', 'isrc TEXT', 'beat_grid TEXT']) {
   try { db.exec(`ALTER TABLE tracks ADD COLUMN ${col}`); } catch {}
 }
 
@@ -2826,7 +2827,23 @@ const server = http.createServer(async (req, res) => {
       return res.end(lines.join('\n'));
     }
 
-    // endpoint index, useful for scripting
+    // export a playlist for DJ software (rekordbox XML / Traktor NML), cues from the beat grid
+    const mRb = u.pathname.match(/^\/api\/playlists\/([^/]+)\/export\/rekordbox\.xml$/);
+    if (mRb) {
+      const pid = decodeURIComponent(mRb[1]);
+      const body = exporter.rekordboxXml(db, pid);
+      const name = ((db.prepare('SELECT name FROM playlists WHERE id=?').get(pid) || {}).name || 'playlist').replace(/[^\w. -]+/g, '_').slice(0, 80);
+      res.writeHead(200, { 'content-type': 'application/xml; charset=utf-8', 'content-disposition': `attachment; filename="${name}.xml"`, 'cache-control': 'no-store' });
+      return res.end(body);
+    }
+    const mTr = u.pathname.match(/^\/api\/playlists\/([^/]+)\/export\/traktor\.nml$/);
+    if (mTr) {
+      const pid = decodeURIComponent(mTr[1]);
+      const body = exporter.traktorNml(db, pid);
+      const name = ((db.prepare('SELECT name FROM playlists WHERE id=?').get(pid) || {}).name || 'playlist').replace(/[^\w. -]+/g, '_').slice(0, 80);
+      res.writeHead(200, { 'content-type': 'application/xml; charset=utf-8', 'content-disposition': `attachment; filename="${name}.nml"`, 'cache-control': 'no-store' });
+      return res.end(body);
+    }
     if (u.pathname === '/api/docs') {
       return json(res, 200, {
         core: 'musicfy',

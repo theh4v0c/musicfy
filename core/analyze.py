@@ -37,8 +37,11 @@ def analyse(path):
     y, sr = librosa.load(path, sr=22050, mono=True)
     if y.size == 0:
         raise ValueError("empty audio")
-    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+    tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
     bpm = float(np.atleast_1d(tempo)[0])
+    beats = librosa.frames_to_time(np.atleast_1d(beat_frames), sr=sr).tolist()
+    # 4/4 assumed: every 4th beat is a downbeat. A real downbeat detector is a later pass.
+    downbeats = beats[::4] if beats else []
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
     key, scale, confidence = detect_key(chroma)
     rms = librosa.feature.rms(y=y)[0]
@@ -53,6 +56,8 @@ def analyse(path):
         "loudness": round(loudness, 2),
         "energy": round(energy, 3),
         "duration": round(float(len(y) / sr), 1),
+        "beat_grid": [round(float(x), 3) for x in downbeats],
+        "beats": [round(float(x), 3) for x in beats],
     }
 
 
