@@ -681,6 +681,13 @@ async function renderHome() {
     <div class="row-scroller" id="recent-row"></div>
     <div class="sec-title">Your playlists <small>${state.playlists.length} TOTAL</small></div>
     <div class="pgrid" id="home-grid"></div>`;
+  // personalised greeting: name from settings, time of day, live weather
+  api('/api/greeting', { nocache: true }).then((g) => {
+    const greet = v.querySelector('.hero-greet');
+    const sub = v.querySelector('.hero-sub');
+    if (greet) greet.textContent = g.name ? `Good ${g.part}, ${g.name}!` : `Good ${g.part}.`;
+    if (sub) sub.textContent = [g.fact, g.line].filter(Boolean).join(' · ');
+  }).catch(() => {});
   drawQuick();
   const fb = $('flow-btn');
   if (fb) fb.onclick = async () => {
@@ -1901,18 +1908,12 @@ async function renderAskAi() {
   v.querySelectorAll('.ask-ex').forEach((b) => b.onclick = () => { box.value = b.textContent; run(box.value); });
   box.focus();
   renderExternalInto($('ask-discover'));
-  // dynamic examples: derived from what you actually play, not a fixed list
-  api('/api/recommend?days=30&limit=1').then((rec) => {
-    const p = (rec && rec.profile) || {};
+  // dynamic examples: your top artist this week, your key, your tempo
+  api('/api/ask/suggest', { nocache: true }).then((d) => {
     const hint = v.querySelector('.ask-hint');
-    if (!hint) return;
-    const ex = [];
-    if (p.topFamily && p.avgBpm) ex.push(`${p.topFamily} between ${Math.max(0, p.avgBpm - 3)} and ${p.avgBpm + 3} bpm`);
-    if (p.topFamily) ex.push(`${p.topFamily} I never played`);
-    if (p.avgBpm) ex.push(`tracks around ${p.avgBpm} bpm`);
-    ex.push('tracks I have not played in months');
+    if (!hint || !d.prompts || !d.prompts.length) return;
     hint.innerHTML = '';
-    for (const label of ex.slice(0, 4)) {
+    for (const label of d.prompts.slice(0, 4)) {
       const b = document.createElement('button');
       b.className = 'ask-ex';
       b.textContent = label;

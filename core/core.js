@@ -142,6 +142,18 @@ function harmonicOrder(tracks) {
   }
   return [...order, ...rest];
 }
+function weatherWord(code) {
+  const c = Number(code);
+  if (!Number.isFinite(c)) return 'clear';
+  if (c === 0) return 'clear';
+  if (c <= 3) return 'cloudy';
+  if (c <= 48) return 'foggy';
+  if (c <= 67) return 'rainy';
+  if (c <= 77) return 'snowy';
+  if (c <= 82) return 'showery';
+  if (c <= 86) return 'snowy';
+  return 'stormy';
+}
 const uidOf = (a, al, t) =>
   `${(a || '').toLowerCase().trim()}|${(al || '').toLowerCase().trim()}|${(t || '').toLowerCase().trim()}`
     .replace(/\s+/g, ' ');
@@ -216,7 +228,8 @@ async function ingestWnlFolder(folder, name) {
 
 function httpGet(url) {
   return new Promise((resolve, reject) => {
-    http.get(url, (res) => {
+    const mod = url.startsWith('https:') ? https : http;
+    mod.get(url, (res) => {
       if (res.statusCode !== 200) { res.resume(); return reject(new Error(`HTTP ${res.statusCode} ${url}`)); }
       const chunks = [];
       res.on('data', c => chunks.push(c));
@@ -1962,7 +1975,7 @@ const server = http.createServer(async (req, res) => {
           for (const k of ['display_name', 'email', 'country', 'timezone', 'llm_base_url', 'llm_model', 'llm_api_key',
             'download_root', 'preferred_format', 'autoplay_next', 'show_stream_rows',
             'normalize_loudness', 'target_loudness', 'crossfade_ms', 'fade_on_play',
-            'taste_genres', 'taste_artists', 'taste_context', 'taste_avoid']) {
+            'taste_genres', 'taste_artists', 'taste_context', 'taste_avoid', 'city', 'latitude', 'longitude']) {
             if (b[k] !== undefined) s[k] = b[k];
           }
           fs.mkdirSync('/opt/musicfy/data', { recursive: true });
@@ -1979,6 +1992,71 @@ const server = http.createServer(async (req, res) => {
         });
         return;
       }
+    }
+
+    // personalised greeting: name from settings, time of day, live weather
+    if (u.pathname === '/api/greeting') {
+      let s = {};
+      try { s = JSON.parse(fs.readFileSync('/opt/musicfy/data/settings.json', 'utf8')); } catch {}
+      const rawName = String(s.display_name || '').trim().split(/\s+/)[0] || '';
+      const name = rawName ? rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase() : '';
+      const tz = s.timezone || 'UTC';
+      let hour = new Date().getHours();
+      try { hour = Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz }).format(new Date())); } catch {}
+      if (hour === 24) hour = 0;
+      const part = hour < 5 ? 'night' : hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
+      const lat = Number(s.latitude) || -23.5505;
+      const lon = Number(s.longitude) || -46.6333;
+      const city = String(s.city || 'São Paulo');
+      let weather = null;
+      try {
+        const w = await httpGet(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code`);
+        const cur = (JSON.parse(w) || {}).current || {};
+        weather = { temp: Math.round(Number(cur.temperature_2m)), word: weatherWord(cur.weather_code) };
+      } catch {}
+      let line = weather ? `${weather.temp}°C and ${weather.word} in ${city}.` : `In ${city}.`;
+      if (weather) {
+        if (/rain|snow|storm|fog/i.test(weather.word)) line += ' A stay-in and dig night.';
+        else if (hour >= 22 || hour < 5) line += ' Late-night session?';
+        else if (hour < 12) line += ' Easy start.';
+        else if (hour >= 18) line += ' Golden hour.';
+      }
+      // a music fact pulled from the listening profile, rotated by the hour so it changes
+      const plays = db.prepare('SELECT COUNT(*) c FROM listens').get().c;
+      const topTrack = db.prepare(`SELECT t.title, t.artist, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
+        GROUP BY l.track_id ORDER BY n DESC LIMIT 1`).get();
+      const topArtist = db.prepare(`SELECT t.artist, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
+        WHERE t.artist IS NOT NULL AND t.artist != '' GROUP BY t.artist ORDER BY n DESC LIMIT 1`).get();
+      const tracks = db.prepare('SELECT COUNT(*) c FROM tracks').get().c;
+      const artists = db.prepare("SELECT COUNT(DISTINCT artist) c FROM tracks WHERE artist IS NOT NULL AND artist != ''").get().c;
+      const addedWeek = db.prepare('SELECT COUNT(*) c FROM tracks WHERE added_at >= ?').get(now() - 7 * 86400).c;
+      const facts = [];
+      if (topTrack && topTrack.n >= 3) facts.push(`You have played “${topTrack.title}” ${topTrack.n} times.`);
+      if (topArtist) facts.push(`Your most played artist is ${topArtist.artist}.`);
+      if (addedWeek) facts.push(`${addedWeek} new track${addedWeek === 1 ? '' : 's'} landed this week.`);
+      facts.push(`${plays.toLocaleString()} plays across ${tracks} tracks.`);
+      const fact = facts[Math.abs(hour) % facts.length];
+      return json(res, 200, { name, part, hour, weather, city, line, fact, stats: { plays, tracks, artists, addedWeek } });
+    }
+
+    // dynamic Ask suggestions from what you actually play this week
+    if (u.pathname === '/api/ask/suggest') {
+      const week = now() - 7 * 86400;
+      const topArtist = db.prepare(`SELECT t.artist, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
+        WHERE l.played_at>=? AND t.artist IS NOT NULL AND t.artist!='' GROUP BY t.artist ORDER BY n DESC LIMIT 1`).get(week);
+      const keyRow = db.prepare(`SELECT t.key k, t.key_scale s, COUNT(*) n FROM tracks t
+        JOIN files f ON f.track_id=t.id AND f.tier='owned'
+        WHERE t.key IS NOT NULL AND t.key!='' GROUP BY t.key, t.key_scale ORDER BY n DESC LIMIT 1`).get();
+      const fam = db.prepare(`SELECT genre_family f, COUNT(*) n FROM tracks WHERE genre_family IS NOT NULL AND genre_family!='' GROUP BY genre_family ORDER BY n DESC LIMIT 1`).get();
+      const bpmRow = db.prepare(`SELECT AVG(bpm) a FROM tracks WHERE bpm IS NOT NULL AND bpm>0`).get();
+      const prompts = [];
+      if (topArtist) prompts.push(`more from ${topArtist.artist}`);
+      if (keyRow) prompts.push(`tracks in ${keyRow.k}${keyRow.s === 'minor' ? 'm' : ''} I have not played`);
+      if (fam) prompts.push(`${fam.f} I never played`);
+      if (bpmRow && bpmRow.a) prompts.push(`tracks around ${Math.round(bpmRow.a)} bpm`);
+      prompts.push('tracks I have not played in months');
+      const seen = new Set();
+      return json(res, 200, { prompts: prompts.filter((p) => !seen.has(p) && seen.add(p)).slice(0, 4) });
     }
 
     // what arrived most recently, newest first
