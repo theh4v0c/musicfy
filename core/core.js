@@ -2807,6 +2807,96 @@ const server = http.createServer(async (req, res) => {
         return json(res, r.error ? 400 : 200, r);
       } catch (e) { return json(res, 500, { error: e.message }); }
     }
+    // ---------- bulk crate/album maintenance ----------
+    function playlistTrackIds(pid) {
+      return db.prepare(`SELECT t.id FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
+        LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
+        WHERE pt.playlist_id=? ORDER BY pt.position`).all(pid).map((r) => r.id);
+    }
+    function albumTrackIds(name) {
+      return db.prepare('SELECT id FROM tracks WHERE lower(COALESCE(album,\'\'))=lower(?) ORDER BY id').all(name).map((r) => r.id);
+    }
+    async function repairTracks(ids) {
+      let fixed = 0, checked = 0;
+      for (const id of ids) {
+        checked += 1;
+        try {
+          const p = await repair.propose(db, id);
+          if (p && p.changed) { repair.apply(db, id, p.after); fixed += 1; }
+        } catch {}
+      }
+      return { checked, fixed };
+    }
+    async function coverTracks(ids) {
+      const rows = db.prepare(`SELECT t.id, t.album, t.artist, t.title FROM tracks t WHERE t.id IN (${ids.map(() => '?').join(',') || 'NULL'})`).all(...ids);
+      const groups = new Map();
+      for (const r of rows) {
+        const key = String(r.album || `single:${r.id}`).toLowerCase();
+        if (!groups.has(key)) groups.set(key, { album: r.album || '', artist: r.artist || '', ids: [] });
+        groups.get(key).ids.push(r.id);
+      }
+      let albums = 0, tracks = 0;
+      for (const g of groups.values()) {
+        let url = g.album ? await covers.artworkForAlbum(g.album, g.artist).catch(() => null) : null;
+        if (!url) url = await covers.artworkFor(g.artist, g.album || '').catch(() => null);
+        if (!url) continue;
+        const buf = await fetchBuffer(url);
+        if (!buf || !buf.length) continue;
+        for (const id of g.ids) {
+          try { await saveImageCover(buf, coverFile(id)); db.prepare('UPDATE tracks SET has_art=1 WHERE id=?').run(id); tracks += 1; } catch {}
+        }
+        albums += 1;
+      }
+      return { albums, tracks };
+    }
+    function upgradeTracks(ids) {
+      let queued = 0, checked = 0;
+      for (const id of ids) {
+        const t = db.prepare(`SELECT t.id,t.title,t.artist,t.duration,f.bitrate FROM tracks t
+          LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1) WHERE t.id=?`).get(id);
+        if (!t) continue;
+        checked += 1;
+        if (Number(t.bitrate || 0) > 0 && Number(t.bitrate) >= 180000) continue;
+        if (enqueueTrackDownload(t)) queued += 1;
+      }
+      return { checked, queued };
+    }
+
+    const mPlRepair = u.pathname.match(/^\/api\/playlists\/([^/]+)\/repair$/);
+    if (mPlRepair && req.method === 'POST') {
+      const ids = playlistTrackIds(decodeURIComponent(mPlRepair[1]));
+      (async () => { const r = await repairTracks(ids); console.log('[crate repair]', r); })();
+      return json(res, 202, { started: true, count: ids.length });
+    }
+    const mPlCovers = u.pathname.match(/^\/api\/playlists\/([^/]+)\/covers$/);
+    if (mPlCovers && req.method === 'POST') {
+      const ids = playlistTrackIds(decodeURIComponent(mPlCovers[1]));
+      (async () => { const r = await coverTracks(ids); console.log('[crate covers]', r); })();
+      return json(res, 202, { started: true, count: ids.length });
+    }
+    const mPlUpgrade = u.pathname.match(/^\/api\/playlists\/([^/]+)\/upgrade$/);
+    if (mPlUpgrade && req.method === 'POST') {
+      const r = upgradeTracks(playlistTrackIds(decodeURIComponent(mPlUpgrade[1])));
+      return json(res, 202, { started: true, ...r });
+    }
+    const mAlRepair = u.pathname.match(/^\/api\/albums\/([^/]+)\/repair$/);
+    if (mAlRepair && req.method === 'POST') {
+      const ids = albumTrackIds(decodeURIComponent(mAlRepair[1]));
+      (async () => { const r = await repairTracks(ids); console.log('[album repair]', r); })();
+      return json(res, 202, { started: true, count: ids.length });
+    }
+    const mAlCovers = u.pathname.match(/^\/api\/albums\/([^/]+)\/covers$/);
+    if (mAlCovers && req.method === 'POST') {
+      const ids = albumTrackIds(decodeURIComponent(mAlCovers[1]));
+      (async () => { const r = await coverTracks(ids); console.log('[album covers]', r); })();
+      return json(res, 202, { started: true, count: ids.length });
+    }
+    const mAlUpgrade = u.pathname.match(/^\/api\/albums\/([^/]+)\/upgrade$/);
+    if (mAlUpgrade && req.method === 'POST') {
+      const r = upgradeTracks(albumTrackIds(decodeURIComponent(mAlUpgrade[1])));
+      return json(res, 202, { started: true, ...r });
+    }
+
     // analyse only the unanalyzed tracks in one playlist (a crate), in the background
     const mCrateAnalyze = u.pathname.match(/^\/api\/playlists\/([^/]+)\/analyze$/);
     if (mCrateAnalyze && req.method === 'POST') {

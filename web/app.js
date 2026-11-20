@@ -688,6 +688,9 @@ function openPlaylistMenu(p, x, y) {
     <button data-act="pl-play">Play</button>
     <button data-act="pl-rename">Rename</button>
     <button data-act="pl-cover">Change cover</button>
+    <button data-act="pl-repair">Fix metadata (crate)</button>
+    <button data-act="pl-fixcovers">Fix album covers (crate)</button>
+    <button data-act="pl-upgrade">Find higher quality (crate)</button>
     <button data-act="pl-m3u">Export M3U</button>
     <button data-act="pl-rb">Export for Rekordbox (.xml)</button>
     <button data-act="pl-tr">Export for Traktor (.nml)</button>
@@ -703,6 +706,18 @@ function openPlaylistMenu(p, x, y) {
     closeCtx(true); m.onclick = null;
     if (act === 'pl-play') { playPlaylist(p.id); return; }
     if (act === 'pl-cover') { uploadPlaylistCover(p.id); return; }
+    if (act === 'pl-repair') {
+      try { const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/repair`, { method: 'POST' }); toast(`Fixing metadata for ${r.count} tracks in the background`, 7000); setTimeout(() => { bustCache(); state.allTracks = null; }, 6000); } catch { toast('Could not start metadata repair', 4000); }
+      return;
+    }
+    if (act === 'pl-fixcovers') {
+      try { const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/covers`, { method: 'POST' }); toast(`Updating covers for ${r.count} tracks in the background`, 7000); setTimeout(() => { state.artV = Date.now(); }, 6000); } catch { toast('Could not start cover repair', 4000); }
+      return;
+    }
+    if (act === 'pl-upgrade') {
+      try { const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/upgrade`, { method: 'POST' }); toast(r.queued ? `${r.queued} higher quality downloads queued` : 'No low-bitrate tracks to upgrade', 6000); if (r.queued) openDownloads(); } catch { toast('Could not queue upgrades', 4000); }
+      return;
+    }
     if (act === 'pl-m3u') { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.m3u`; return; }
     if (act === 'pl-rb') { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/rekordbox.xml`; return; }
     if (act === 'pl-tr') { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/traktor.nml`; return; }
@@ -3412,6 +3427,9 @@ async function renderAlbum(name, push = true) {
           <button class="btn btn-primary" id="g-play">${IC.play}&nbsp; Play</button>
           <button class="btn btn-ghost" id="g-dl">Download album</button>
           <button class="btn btn-ghost" id="g-pick">Choose tracks</button>
+          <button class="btn btn-ghost" id="g-repair">Fix metadata</button>
+          <button class="btn btn-ghost" id="g-covers">Fix cover</button>
+          <button class="btn btn-ghost" id="g-upgrade">Find higher quality</button>
         </div>
       </div></div>
     <div id="g-list"></div>`;
@@ -3437,6 +3455,15 @@ async function renderAlbum(name, push = true) {
     } catch { toast('Could not queue the album', 4000); }
     btn.textContent = label;
     btn.disabled = false;
+  };
+  $('g-repair').onclick = async () => {
+    try { const r = await api(`/api/albums/${encodeURIComponent(name)}/repair`, { method: 'POST' }); toast(`Fixing metadata for ${r.count} tracks in the background`, 7000); setTimeout(() => { bustCache(); state.allTracks = null; refreshView(); }, 6000); } catch { toast('Could not start metadata repair', 4000); }
+  };
+  $('g-covers').onclick = async () => {
+    try { const r = await api(`/api/albums/${encodeURIComponent(name)}/covers`, { method: 'POST' }); toast(`Updating covers for ${r.count} tracks in the background`, 7000); setTimeout(() => { state.artV = Date.now(); refreshView(); }, 6000); } catch { toast('Could not start cover repair', 4000); }
+  };
+  $('g-upgrade').onclick = async () => {
+    try { const r = await api(`/api/albums/${encodeURIComponent(name)}/upgrade`, { method: 'POST' }); toast(r.queued ? `${r.queued} higher quality downloads queued` : 'No low-bitrate tracks to upgrade', 6000); if (r.queued) openDownloads(); } catch { toast('Could not queue upgrades', 4000); }
   };
   $('g-pick').onclick = async () => {
     state.albumPick = !state.albumPick;
