@@ -2167,6 +2167,111 @@ function playPreview(t, btn) {
   previewAudio.play().catch(() => { stopPreview(); toast('No preview for this one', 3000); });
 }
 
+function renderActionCard(a, out, stateEl) {
+  if (stateEl) stateEl.textContent = '';
+  const card = document.createElement('div');
+  card.className = 'ask-action';
+  const head = document.createElement('div');
+  head.className = 'ask-action-head';
+  head.innerHTML = `<div><div class="ask-action-kicker">ON DECK</div><b>${esc(a.action.title)}</b></div><span>${esc(a.action.summary || '')}</span>`;
+  card.appendChild(head);
+  const meta = document.createElement('div');
+  meta.className = 'ask-action-meta';
+  meta.textContent = a.action.reason || '';
+  card.appendChild(meta);
+  const tracks = a.action.tracks || [];
+  const list = document.createElement('div');
+  list.className = 'ask-preview';
+  tracks.slice(0, 20).forEach((t) => {
+    const row = document.createElement('div');
+    row.className = 'ask-preview-row';
+    const art = document.createElement('div');
+    art.className = 'apr-art';
+    if (t.cover) art.style.backgroundImage = `url("${t.cover}")`;
+    const play = document.createElement('button');
+    play.className = 'apr-play';
+    play.type = 'button';
+    play.innerHTML = IC.play;
+    play.title = t.preview ? 'Preview' : 'No preview for this one';
+    play.disabled = !t.preview;
+    const preview = (e) => { if (e) e.stopPropagation(); toggleSuggestionPreview(t, row, { owned: t.owned }); };
+    play.onclick = preview;
+    const title = document.createElement('span');
+    title.className = 'apr-title';
+    title.textContent = t.title || '';
+    const artist = document.createElement('span');
+    artist.className = 'apr-artist';
+    artist.textContent = t.artist || '';
+    const meta = document.createElement('div');
+    meta.className = 'apr-meta';
+    meta.append(title, artist);
+    const tag = document.createElement('span');
+    const kind = t.owned ? 'local' : t.source === 'online' ? 'new' : 'missing';
+    tag.className = `apr-tag ${t.owned ? 'on' : t.source === 'online' ? 'new' : ''}`;
+    tag.textContent = kind;
+    row.append(play, art, meta, tag);
+    row.style.cursor = 'pointer';
+    row.onclick = (e) => { if (!e.target.closest('button')) preview(e); };
+    list.appendChild(row);
+  });
+  if (tracks.length > 20) {
+    const more = document.createElement('div');
+    more.className = 'ask-preview-more';
+    more.textContent = `+${tracks.length - 20} more`;
+    list.appendChild(more);
+  }
+  card.appendChild(list);
+  const safety = document.createElement('div');
+  safety.className = 'ask-action-safety';
+  safety.textContent = 'Nothing is saved until you pick one.';
+  card.appendChild(safety);
+  const acts = document.createElement('div');
+  acts.className = 'ask-action-btns';
+  const missing = tracks.filter((t) => !t.owned).length;
+  const confirm = async (btn, alsoDownload) => {
+    stopPreview();
+    btn.disabled = true;
+    try {
+      const r = await api(`/api/agent/action/${a.action.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirm: true, download: !!alsoDownload }), nocache: true });
+      card.remove();
+      if (stateEl) stateEl.textContent = 'Done';
+      if (r.spoken) toast(r.spoken, 5000);
+      if (r.data && r.data.playlist) { afterWrite(); await loadPlaylists(); openPlaylist(r.data.playlist.id, false); }
+      if (r.data && r.data.queued) openDownloads();
+    } catch { btn.disabled = false; toast('That draft went stale, ask again', 5000); }
+  };
+  if (a.action.kind === 'playlist' && missing > 0) {
+    const both = document.createElement('button');
+    both.className = 'btn btn-primary';
+    both.textContent = `Create + download ${missing}`;
+    const only = document.createElement('button');
+    only.className = 'btn btn-ghost';
+    only.textContent = 'Playlist only';
+    both.onclick = () => confirm(both, true);
+    only.onclick = () => confirm(only, false);
+    acts.append(both, only);
+  } else {
+    const ok = document.createElement('button');
+    ok.className = 'btn btn-primary';
+    ok.textContent = a.action.kind === 'playlist' ? 'Create playlist' : a.action.kind === 'album' ? 'Download album' : 'Download missing';
+    ok.onclick = () => confirm(ok, a.action.kind !== 'playlist');
+    acts.append(ok);
+  }
+  const no = document.createElement('button');
+  no.className = 'btn btn-ghost';
+  no.textContent = 'Cancel';
+  no.onclick = async () => {
+    stopPreview();
+    try { await api(`/api/agent/action/${a.action.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cancel: true }), nocache: true }); } catch {}
+    card.remove();
+    if (stateEl) stateEl.textContent = 'Cancelled';
+  };
+  acts.append(no);
+  card.appendChild(acts);
+  out.appendChild(card);
+  try { card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {}
+}
+
 async function runAssistant(text, out, stateEl, box) {
     if (!text.trim()) return;
     stopPreview();
@@ -2186,111 +2291,7 @@ async function runAssistant(text, out, stateEl, box) {
           said.textContent = a.spoken || '';
           out.appendChild(said);
         }
-        if (a.action) {
-          stateEl.textContent = '';
-          const card = document.createElement('div');
-          card.className = 'ask-action';
-          const head = document.createElement('div');
-          head.className = 'ask-action-head';
-          head.innerHTML = `<div><div class="ask-action-kicker">ON DECK</div><b>${esc(a.action.title)}</b></div><span>${esc(a.action.summary || '')}</span>`;
-          card.appendChild(head);
-          const meta = document.createElement('div');
-          meta.className = 'ask-action-meta';
-          meta.textContent = a.action.reason || '';
-          card.appendChild(meta);
-          const tracks = a.action.tracks || [];
-          const list = document.createElement('div');
-          list.className = 'ask-preview';
-          tracks.slice(0, 20).forEach((t) => {
-            const row = document.createElement('div');
-            row.className = 'ask-preview-row';
-            const art = document.createElement('div');
-            art.className = 'apr-art';
-            if (t.cover) art.style.backgroundImage = `url("${t.cover}")`;
-            const play = document.createElement('button');
-            play.className = 'apr-play';
-            play.type = 'button';
-            play.innerHTML = IC.play;
-            play.title = t.preview ? 'Preview' : 'No preview for this one';
-            play.disabled = !t.preview;
-            const preview = (e) => { if (e) e.stopPropagation(); toggleSuggestionPreview(t, row, { owned: t.owned }); };
-            play.onclick = preview;
-            const title = document.createElement('span');
-            title.className = 'apr-title';
-            title.textContent = t.title || '';
-            const artist = document.createElement('span');
-            artist.className = 'apr-artist';
-            artist.textContent = t.artist || '';
-            const meta = document.createElement('div');
-            meta.className = 'apr-meta';
-            meta.append(title, artist);
-            const tag = document.createElement('span');
-            const kind = t.owned ? 'local' : t.source === 'online' ? 'new' : 'missing';
-            tag.className = `apr-tag ${t.owned ? 'on' : t.source === 'online' ? 'new' : ''}`;
-            tag.textContent = kind;
-            row.append(play, art, meta, tag);
-            row.style.cursor = 'pointer';
-            row.onclick = (e) => { if (!e.target.closest('button')) preview(e); };
-            list.appendChild(row);
-          });
-          if (tracks.length > 20) {
-            const more = document.createElement('div');
-            more.className = 'ask-preview-more';
-            more.textContent = `+${tracks.length - 20} more`;
-            list.appendChild(more);
-          }
-          card.appendChild(list);
-          const safety = document.createElement('div');
-          safety.className = 'ask-action-safety';
-          safety.textContent = 'Nothing is saved until you pick one.';
-          card.appendChild(safety);
-          const acts = document.createElement('div');
-          acts.className = 'ask-action-btns';
-          const missing = tracks.filter((t) => !t.owned).length;
-          const confirm = async (btn, alsoDownload) => {
-            stopPreview();
-            btn.disabled = true;
-            try {
-              const r = await api(`/api/agent/action/${a.action.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirm: true, download: !!alsoDownload }), nocache: true });
-              card.remove();
-              stateEl.textContent = 'Done';
-              if (r.spoken) toast(r.spoken, 5000);
-              if (r.data && r.data.playlist) { afterWrite(); await loadPlaylists(); openPlaylist(r.data.playlist.id, false); }
-              if (r.data && r.data.queued) openDownloads();
-            } catch { btn.disabled = false; toast('That draft went stale, ask again', 5000); }
-          };
-          if (a.action.kind === 'playlist' && missing > 0) {
-            const both = document.createElement('button');
-            both.className = 'btn btn-primary';
-            both.textContent = `Create + download ${missing}`;
-            const only = document.createElement('button');
-            only.className = 'btn btn-ghost';
-            only.textContent = 'Playlist only';
-            both.onclick = () => confirm(both, true);
-            only.onclick = () => confirm(only, false);
-            acts.append(both, only);
-          } else {
-            const ok = document.createElement('button');
-            ok.className = 'btn btn-primary';
-            ok.textContent = a.action.kind === 'playlist' ? 'Create playlist' : a.action.kind === 'album' ? 'Download album' : 'Download missing';
-            ok.onclick = () => confirm(ok, a.action.kind !== 'playlist');
-            acts.append(ok);
-          }
-          const no = document.createElement('button');
-          no.className = 'btn btn-ghost';
-          no.textContent = 'Cancel';
-          no.onclick = async () => {
-            stopPreview();
-            try { await api(`/api/agent/action/${a.action.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cancel: true }), nocache: true }); } catch {}
-            card.remove();
-            stateEl.textContent = 'Cancelled';
-          };
-          acts.append(no);
-          card.appendChild(acts);
-          out.appendChild(card);
-          try { card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {}
-          return;
-        }
+        if (a.action) { renderActionCard(a, out, stateEl); return; }
         if (a.data && a.data.album) {
           const alb = document.createElement('div');
           alb.className = 'ask-meta';
@@ -2710,7 +2711,8 @@ async function renderSearch() {
               { label: 'Download their latest album', run: async () => {
                   const r = await api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' },
                     body: JSON.stringify({ q: `download the latest album by ${a.name}` }) });
-                  toast(r.spoken || 'Queueing', 8000);
+                  if (r.action) renderActionCard(r, box, null);
+                  else toast(r.spoken || 'Queueing', 8000);
                 } },
             ], x, y));
             row.appendChild(card);
@@ -2725,14 +2727,17 @@ async function renderSearch() {
             const card = document.createElement('button');
             card.className = 'chip-card';
             card.innerHTML = `<b>${esc(al.name)}</b><span>${esc(al.artist || '')}${al.year ? ' · ' + al.year : ''}</span>`;
-            card.onclick = () => { q.value = `${al.artist} ${al.name}`; draw(); };
             const queueAlbum = () => {
-              toast(`Queueing "${al.name}"`, 4000);
+              toast(`Checking "${al.name}"`, 3000);
               api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({ q: `download the album ${al.name} by ${al.artist}` }) })
-                .then((r) => { toast(r.spoken || 'Queueing album', 9000); if (r.data && r.data.queued) openDownloads(); })
+                .then((r) => {
+                  if (r.action) renderActionCard(r, box, null);
+                  else { toast(r.spoken || 'Queueing album', 9000); if (r.data && r.data.queued) openDownloads(); }
+                })
                 .catch(() => toast('Could not queue that album', 4000));
             };
+            card.onclick = queueAlbum;
             card.oncontextmenu = (e) => { e.preventDefault(); queueAlbum(); };
             longPress(card, queueAlbum);
             row.appendChild(card);
