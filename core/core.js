@@ -490,6 +490,13 @@ function soundcloudFallbackDownload(b, dir, finish, ingestDownloaded, setProgres
     .catch((e) => finish('error', `soundcloud resolve: ${String(e.message).slice(0, 120)}`));
 }
 
+function tasteAvoid() {
+  try {
+    const s = JSON.parse(fs.readFileSync('/opt/musicfy/data/settings.json', 'utf8'));
+    return String(s.taste_avoid || '').split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
+  } catch { return []; }
+}
+
 // ---------- rung health ----------
 const rungHealth = { checkedAt: null, rungs: {} };
 async function probeRungs() {
@@ -2497,13 +2504,13 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/api/recommend') {
       const days = Math.min(Number(u.searchParams.get('days') || 30), 365);
       const limit = Math.min(Number(u.searchParams.get('limit') || 40), 100);
-      return json(res, 200, recommend.build(db, { days, limit }));
+      return json(res, 200, recommend.build(db, { days, limit, avoid: tasteAvoid() }));
     }
     // Flow: one-tap infinite mix. discovery=0 (safe rotation) .. 100 (all unheard), genre optional.
     if (u.pathname === '/api/flow') {
       const genre = (u.searchParams.get('genre') || '').trim().toLowerCase();
       const discovery = Math.max(0, Math.min(100, Number(u.searchParams.get('discovery') || 30)));
-      const out = recommend.build(db, { days: 30, limit: 200 });
+      const out = recommend.build(db, { days: 30, limit: 200, avoid: tasteAvoid() });
       let picks = out.picks;
       if (genre) picks = picks.filter((p) => `${p.genre_family || ''} ${p.genre || ''}`.toLowerCase().includes(genre));
       if (!picks.length) return json(res, 200, { count: 0, tracks: [], profile: out.profile });
@@ -2535,7 +2542,7 @@ const server = http.createServer(async (req, res) => {
         const jan1 = new Date(Date.UTC(now2.getUTCFullYear(), 0, 1));
         const week = Math.ceil((((now2 - jan1) / 86400000) + jan1.getUTCDay() + 1) / 7);
         const days = Math.min(Number(b.days || 30), 365);
-        const out = recommend.build(db, { days, limit: Math.min(Number(b.limit || 25), 100), excludePlaylisted: true });
+        const out = recommend.build(db, { days, limit: Math.min(Number(b.limit || 25), 100), excludePlaylisted: true, avoid: tasteAvoid() });
         const inAnyPlaylist = new Set(db.prepare('SELECT DISTINCT track_id id FROM playlist_tracks').all().map((r) => r.id));
         const picks = out.picks.filter((p) => !inAnyPlaylist.has(p.id));
         const name = `${recommendName(out.profile, picks)} · W${String(week).padStart(2, '0')}`;
@@ -2561,7 +2568,7 @@ const server = http.createServer(async (req, res) => {
         try { b = JSON.parse(body || '{}'); } catch {}
         const days = Math.min(Number(b.days || 30), 365);
         const limit = Math.min(Number(b.limit || 25), 100);
-        const out = recommend.build(db, { days, limit });
+        const out = recommend.build(db, { days, limit, avoid: tasteAvoid() });
         if (!out.picks.length) return json(res, 200, { created: null, reason: 'not enough listening history yet' });
         const name = String(b.name || `${recommendName(out.profile, out.picks)} · ${new Date().toISOString().slice(0, 10)}`).slice(0, 80);
         const pid = `rec-${Date.now().toString(36)}`;

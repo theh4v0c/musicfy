@@ -20,7 +20,7 @@ function harmonic(a, b) {
   return 0;
 }
 
-function build(db, { days = 30, limit = 40, excludePlaylisted = false } = {}) {
+function build(db, { days = 30, limit = 40, excludePlaylisted = false, avoid = [] } = {}) {
   const now = Math.floor(Date.now() / 1000);
   const since = now - days * 86400;
 
@@ -69,10 +69,15 @@ function build(db, { days = 30, limit = 40, excludePlaylisted = false } = {}) {
     ? new Set(db.prepare('SELECT DISTINCT track_id id FROM playlist_tracks').all().map((r) => r.id))
     : null;
 
+  const avoidList = avoid.map((w) => String(w).toLowerCase()).filter(Boolean);
   const scored = [];
   for (const p of pool) {
     if (!p.owned) continue;                                  // only recommend what can be played
     if (playlisted && playlisted.has(p.id)) continue;         // weekly list must surface something new
+    if (avoidList.length) {
+      const hay = `${p.artist || ''} ${p.title || ''} ${p.genre_family || ''}`.toLowerCase();
+      if (avoidList.some((w) => hay.includes(w))) continue;
+    }
     const playedRecently = recentWeight.get(p.id);
     if (playedRecently && playedRecently > 1) continue;       // do not just repeat the current rotation
     let score = 0;
@@ -82,6 +87,8 @@ function build(db, { days = 30, limit = 40, excludePlaylisted = false } = {}) {
     if (edge) { const v = (edge / maxEdge) * 34; score += v; reasons.push('played alongside your recent tracks'); }
 
     if (topFamily && p.genre_family === topFamily[0]) { score += 18; reasons.push(`same family as what you play now (${topFamily[0]})`); }
+    // a family you do not play is not a recommendation, it is a library row
+    else if (p.genre_family && !famCount[p.genre_family]) score -= 22;
     if (avgBpm && p.bpm) {
       const delta = Math.abs(p.bpm - avgBpm);
       if (delta <= 3) { score += 16; reasons.push('tempo matches your current rotation'); }

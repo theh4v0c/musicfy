@@ -2,6 +2,7 @@
 // Turns a plain request into a scored selection from the local library.
 // No model: style and mood are keyword presets, the ranking is numbers we already store.
 
+const fs = require('node:fs');
 const queryEngine = require('./query');
 
 const STYLES = [
@@ -129,6 +130,19 @@ function select(db, query, count) {
       (SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.track_id=t.id) npl
     FROM tracks t`).all();
 
+  let avoid = [];
+  try {
+    const s = JSON.parse(fs.readFileSync('/opt/musicfy/data/settings.json', 'utf8'));
+    avoid = String(s.taste_avoid || '').split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
+  } catch {}
+  const qLower = String(query || '').toLowerCase();
+  avoid = avoid.filter((w) => !qLower.includes(w));
+  if (avoid.length) {
+    rows = rows.filter((t) => {
+      const hay = `${t.artist || ''} ${t.title || ''} ${t.genre || ''} ${t.genre_family || ''}`.toLowerCase();
+      return !avoid.some((w) => hay.includes(w));
+    });
+  }
   if (ctx.genre) rows = rows.filter((t) => String(t.genre || '').toLowerCase() === String(ctx.genre).toLowerCase());
   if (ctx.family) rows = rows.filter((t) => String(t.genre_family || '').toLowerCase() === String(ctx.family).toLowerCase());
   if (!ctx.style && !ctx.mood && !ctx.reference && ctx.text.length) {
