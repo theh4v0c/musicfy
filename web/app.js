@@ -3370,7 +3370,7 @@ function setStatus(text) {
   // dedicated elements only: the artist line is not ours to rewrite. The mobile player
   // hides the bar, so it needs its own status or a stall there is completely silent.
   const value = String(text || '').replace(/\.{2,}$/, '');
-  for (const id of ['pb-status', 'np-status']) {
+  for (const id of ['pb-status', 'np-status', 'mini-status']) {
     const el = document.getElementById(id);
     if (!el) continue;
     el.textContent = value;
