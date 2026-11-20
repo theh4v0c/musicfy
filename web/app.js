@@ -885,6 +885,12 @@ async function renderHome() {
         : esc(salutation);
     }
     if (note) note.textContent = g.fact || g.sub || '';
+    // the greeting already counts this week's additions; the library list may not be
+    // loaded yet when the tiles first render
+    if (g.stats && Number.isFinite(Number(g.stats.addedWeek))) {
+      state._addedWeek = Number(g.stats.addedWeek);
+      drawQuick();
+    }
     if (place && g.city) place.textContent = g.city;
     if (g.last) {
       const bits = [];
@@ -1169,7 +1175,9 @@ function drawQuick() {
   // three readouts, not a grid of cards: the state of the library at a glance
   const tracks = state.allTracks || [];
   const weekAgo = Math.floor(Date.now() / 1000) - 7 * 86400;
-  const fresh = tracks.filter((t) => Number(t.added_at) >= weekAgo).length;
+  const fresh = state._addedWeek != null
+    ? state._addedWeek
+    : tracks.filter((t) => Number(t.added_at) >= weekAgo).length;
   const tiles = [
     { go: 'liked', n: state.liked.size, l: 'liked songs', s: 'your shortlist' },
     { go: 'fresh', n: fresh, l: 'new this week', s: 'in the library' },
