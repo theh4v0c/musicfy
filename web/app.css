@@ -779,3 +779,9 @@ html, body { overflow-x: hidden; max-width: 100%; }
   background: var(--acc); animation: pb-pulse 1.2s ease-in-out infinite; }
 @keyframes pb-pulse { 0%, 100% { opacity: .25; transform: scale(.75); } 50% { opacity: 1; transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .pb-status::before { animation: none; opacity: .8; } }
+
+/* Ask status: a label the size of the hint pills, not a second paragraph */
+#ai-state { margin: 12px 0 6px; font-size: 11px; line-height: 1.2; color: var(--fg-mute); letter-spacing: .02em; }
+#ai-state.thinking { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; display: flex; align-items: center; gap: 7px; }
+#ai-state.thinking::after { width: 5px; height: 5px; margin-left: 0; background: var(--acc); animation: pb-pulse 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { #ai-state.thinking::after { animation: none; opacity: .8; } }

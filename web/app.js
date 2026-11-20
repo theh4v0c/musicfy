@@ -2098,7 +2098,7 @@ async function renderAskAi() {
 
   const run = async (text) => {
     if (!text.trim()) return;
-    stateEl.textContent = 'Searching…';
+    stateEl.textContent = 'Searching';
     stateEl.classList.add('thinking');
     out.innerHTML = '';
     const agentish = /\b(create|make|build|download|find|search|show|list|how many)\b/i.test(text);
