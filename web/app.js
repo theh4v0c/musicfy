@@ -2167,36 +2167,14 @@ function playPreview(t, btn) {
   previewAudio.play().catch(() => { stopPreview(); toast('No preview for this one', 3000); });
 }
 
-async function renderAskAi() {
-  stopPreview();
-  closeInlinePreview();
-  setNav('search');
-  state.view = 'askai'; state.playlistId = null; state.genreFilter = null; renderSidebar();
-  $('view-title').textContent = 'Ask';
-  const v = $('view');
-  v.innerHTML = `${heroBanner('ASSISTANT', 'Ask', 'Search your library in plain language.')}${viewTabs('ask')}<div class="search-wrap">
-      <input class="search" id="ai-q" placeholder="Ask anything, for example: create a playlist of 10 ambient tracks" autocomplete="off">
-      <div class="ask-hint">
-        <button class="ask-ex">how much of my library has audio</button>
-        <button class="ask-ex">find techno tracks I never played</button>
-        <button class="ask-ex">create a playlist of 10 ambient tracks</button>
-        <button class="ask-ex">tracks in Dm between 120 and 130 bpm</button>
-      </div>
-      <div class="ladder-state" id="ai-state"></div>
-    </div><div id="ai-res"></div><div id="ask-discover"></div>`;
-  wireViewTabs(v);
-  const box = $('ai-q');
-  const out = $('ai-res');
-  const stateEl = $('ai-state');
-
-  const run = async (text) => {
+async function runAssistant(text, out, stateEl, box) {
     if (!text.trim()) return;
     stopPreview();
-    v.classList.add('asking');
+    $('view').classList.add('asking');
     stateEl.textContent = 'Searching';
     stateEl.classList.add('thinking');
     out.innerHTML = '';
-    const agentish = /\b(create|make|build|download|find|search|show|list|playlist|how many)\b/i.test(text);
+    const agentish = /\b(create|make|build|download|find|search|show|list|playlist|how many|how much|top rated|top \d)\b/i.test(text);
     try {
       if (agentish) {
         const a = await api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: text }), nocache: true });
@@ -2376,7 +2354,7 @@ async function renderAskAi() {
           const b = document.createElement('button');
           b.className = 'ask-ex';
           b.textContent = ex;
-          b.onclick = () => { box.value = ex; run(ex); };
+          b.onclick = () => { box.value = ex; runAssistant(ex, out, stateEl, box); };
           hint.appendChild(b);
         });
         out.appendChild(hint);
@@ -2397,7 +2375,7 @@ async function renderAskAi() {
           const find = document.createElement('button');
           find.className = 'btn btn-ghost';
           find.textContent = `Find ${label} online`;
-          find.onclick = () => { box.value = `create a playlist with 3 ${term} tracks`; run(box.value); };
+          find.onclick = () => { box.value = `create a playlist with 3 ${term} tracks`; runAssistant(box.value, out, stateEl, box); };
           out.appendChild(find);
         }
         return;
@@ -2411,7 +2389,30 @@ async function renderAskAi() {
       stateEl.classList.remove('thinking');
       stateEl.textContent = 'That did not go through — try a plain phrase like “tracks in Dm between 120 and 130 bpm”.';
     }
-  };
+  }
+
+async function renderAskAi() {
+  stopPreview();
+  closeInlinePreview();
+  setNav('search');
+  state.view = 'askai'; state.playlistId = null; state.genreFilter = null; renderSidebar();
+  $('view-title').textContent = 'Ask';
+  const v = $('view');
+  v.innerHTML = `${heroBanner('ASSISTANT', 'Ask', 'Search your library in plain language.')}<div class="search-wrap">
+      <input class="search" id="ai-q" placeholder="Ask anything, for example: create a playlist of 10 ambient tracks" autocomplete="off">
+      <div class="ask-hint">
+        <button class="ask-ex">how much of my library has audio</button>
+        <button class="ask-ex">find techno tracks I never played</button>
+        <button class="ask-ex">create a playlist of 10 ambient tracks</button>
+        <button class="ask-ex">tracks in Dm between 120 and 130 bpm</button>
+      </div>
+      <div class="ladder-state" id="ai-state"></div>
+    </div><div id="ai-res"></div><div id="ask-discover"></div>`;
+  const box = $('ai-q');
+  const out = $('ai-res');
+  const stateEl = $('ai-state');
+
+  const run = (text) => runAssistant(text, out, stateEl, box);
 
   box.onkeydown = (e) => { if (e.key === 'Enter') run(box.value); };
   v.querySelectorAll('.ask-ex').forEach((b) => b.onclick = () => { box.value = b.textContent; run(box.value); });
@@ -2447,8 +2448,13 @@ async function renderSearch() {
   setNav('search'); state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'Search';
   const v = $('view');
-  v.innerHTML = `${heroBanner('SEARCH', 'Search', 'Find artists, tracks and albums, or ask your own library.')}${viewTabs('search')}<div class="search-wrap">
-      <input class="search" id="q" placeholder="Artists, tracks, albums, or search the web" autocomplete="off">
+  v.innerHTML = `${heroBanner('SEARCH', 'Search', 'Search your library and the web, or ask for a playlist.')}<div class="search-wrap">
+      <input class="search" id="q" placeholder="Search tracks or ask: create a playlist of 10 ambient tracks" autocomplete="off">
+      <div class="ask-hint" id="search-hints">
+        <button class="ask-ex">tracks in Dm between 120 and 130 bpm</button>
+        <button class="ask-ex">create a playlist of 10 ambient tracks</button>
+        <button class="ask-ex">how much of my library has audio</button>
+      </div>
       <div class="mode-tabs" id="mode-tabs">
         <button class="mode-tab loc on" data-loc="lib"><span class="chk">✓</span>Library</button>
         <button class="mode-tab loc on" data-loc="web"><span class="chk">✓</span>Web sources</button>
@@ -2456,7 +2462,6 @@ async function renderSearch() {
       </div>
       <div class="ladder-state" id="ladder-state"></div>
     </div><div id="qres"></div><div id="search-discover"></div>`;
-  wireViewTabs(v);
   renderExternalInto($('search-discover'));
   const q = $('q'); q.focus();
   if (!state.allTracks) state.allTracks = await api('/api/tracks');
@@ -2480,9 +2485,17 @@ async function renderSearch() {
       draw();
     };
   });
-  document.querySelectorAll('.ask-ex').forEach(b => b.onclick = () => {
-    q.value = b.textContent;
+  const assistantish = /\b(create|make|build|download|playlist|how many|how much|top rated|top \d|what can|help)\b/i;
+  const submit = () => {
+    const text = q.value.trim();
+    if (!text) { draw(); return; }
+    if (assistantish.test(text)) { runAssistant(text, res, $('ladder-state'), q); q.focus(); return; }
+    $('view').classList.remove('asking');
     draw();
+  };
+  document.querySelectorAll('#search-hints .ask-ex').forEach((b) => b.onclick = () => {
+    q.value = b.textContent;
+    submit();
     q.focus();
   });
   const paintLS = () => {
@@ -2576,7 +2589,7 @@ async function renderSearch() {
   const drawAsk = async (text) => {
     res.innerHTML = `<div class="ladder-state">Thinking about "${esc(text)}"...</div>`;
     // verbs like create, find, download go to the agent; questions go to the query engine
-    const agentish = /\b(create|make|build|download|find|search|show|list|playlist|how many)\b/i.test(text);
+    const agentish = /\b(create|make|build|download|find|search|show|list|playlist|how many|how much|top rated|top \d)\b/i.test(text);
     if (agentish) {
       let a;
       try {
@@ -3044,7 +3057,13 @@ async function renderSearch() {
 
   // debounce ladder searches: only fire when typing pauses
   let deb = null;
-  q.oninput = () => { clearTimeout(deb); deb = setTimeout(draw, 350); };
+  q.oninput = () => {
+    clearTimeout(deb);
+    if (assistantish.test(q.value)) return;
+    $('view').classList.remove('asking');
+    deb = setTimeout(draw, 350);
+  };
+  q.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
   draw();
 }
 
