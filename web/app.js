@@ -3647,9 +3647,11 @@ async function renderDownloads() {
   if (!host) return;
   let d;
   try { d = await api('/api/downloads'); } catch { return; }
-  const all = (d.items || []).filter((i) => i.state === 'running' || i.state === 'queued' || i.state === 'error');
+  // 'unavailable' means no usable source was found: that has to stay visible, or the
+  // row simply disappears and the download looks like it did nothing
+  const all = (d.items || []).filter((i) => ['running', 'queued', 'error', 'unavailable'].includes(i.state));
   all.sort((a, b) => {
-    const rank = (x) => (x.state === 'running' ? 0 : x.state === 'queued' ? 1 : 2);
+    const rank = (x) => (x.state === 'running' ? 0 : x.state === 'queued' ? 1 : x.state === 'error' ? 2 : 3);
     return rank(a) - rank(b) || (b.id - a.id);
   });
   const items = all.slice(0, 120);

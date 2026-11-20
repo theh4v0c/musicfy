@@ -51,6 +51,17 @@ try { db.prepare('UPDATE tracks SET updated_at=CAST(updated_at/1000 AS INTEGER) 
 const interrupted = db.prepare("SELECT payload FROM jobs WHERE state IN ('running','queued')").all();
 db.prepare("UPDATE jobs SET state='skipped', detail='interrupted by restart, requeued', finished_at=? WHERE state IN ('running','queued')").run(Math.floor(Date.now() / 1000));
 db.prepare("UPDATE jobs SET state='skipped' WHERE state='error' AND detail IN ('requeued','already owned','retried')").run();
+// a failure that a later copy superseded is history, not a standing alarm
+try {
+  for (const j of db.prepare("SELECT id,payload FROM jobs WHERE state IN ('unavailable','error') AND payload LIKE '%\"trackId\"%'").all()) {
+    try {
+      const tid = JSON.parse(j.payload || '{}').trackId;
+      if (!tid) continue;
+      if (db.prepare("SELECT 1 FROM files WHERE track_id=? AND tier='owned' LIMIT 1").get(tid))
+        db.prepare("UPDATE jobs SET state='dismissed', detail='superseded: the track is owned now' WHERE id=?").run(j.id);
+    } catch {}
+  }
+} catch {}
 setTimeout(() => {
   const seen = new Set();
   for (const j of interrupted) {
@@ -970,10 +981,15 @@ function startLadderDownload(jobId, b, onDone) {
     // largest finished audio file: yt-dlp can still be renaming or deleting a
     // container while the process exits, so never trust a name read earlier
     const AUDIO = /\.(mp3|m4a|aac|opus|ogg|flac|wav|webm|mp4|m4b|mkv|aiff?)$/i;
-    const pickAudio = () => fs.readdirSync(from)
-      .filter((f) => !f.startsWith('.') && !/\.part$/i.test(f) && AUDIO.test(f))
-      .map((f) => { let size = 0; try { size = fs.statSync(path.join(from, f)).size; } catch {} return { f, size }; })
-      .sort((x, y) => y.size - x.size)[0]?.f;
+    const pickAudio = () => {
+      let names = [];
+      // the work dir can be gone when a restart requeued this track mid-flight
+      try { names = fs.readdirSync(from); } catch { return null; }
+      return names
+        .filter((f) => !f.startsWith('.') && !/\.part$/i.test(f) && AUDIO.test(f))
+        .map((f) => { let size = 0; try { size = fs.statSync(path.join(from, f)).size; } catch {} return { f, size }; })
+        .sort((x, y) => y.size - x.size)[0]?.f;
+    };
     let name = pickAudio();
     if (!name) { ingested = false; return finish('error', 'no audio file produced'); }
     let fp = path.join(from, name);
@@ -1000,8 +1016,7 @@ function startLadderDownload(jobId, b, onDone) {
       try {
       let dur = null, br = null, t = b.title || name, a = b.artist || '';
       try { const f = JSON.parse(stdout).format; dur = Number(f.duration); br = Number(f.bit_rate); t = f.tags?.title || t; a = f.tags?.artist || a; } catch {}
-      const dest = path.join(OWNED, 'web', name.replace(/[/\\]/g, '_'));
-      fs.renameSync(fp, dest);
+      let dest = path.join(OWNED, 'web', name.replace(/[/\\]/g, '_'));
       let tid = b.trackId;
       if (!tid) {
         // an existing row for the same track wins: prefer the one that already has playlists
@@ -1015,11 +1030,18 @@ function startLadderDownload(jobId, b, onDone) {
       }
       const ext = (name.split('.').pop() || 'mp3').toLowerCase();
       tid = tid || upsertTrack({ title: t, artist: a, album: b.artist || 'Web', duration: dur, format: ext });
+      // two sources can carry the same file name: never overwrite another track's audio
+      if (db.prepare('SELECT 1 FROM files WHERE path=? AND track_id<>? LIMIT 1').get(dest, tid)) {
+        dest = dest.replace(/(\.[^.]+)$/, ` [${tid}]$1`);
+      }
+      fs.renameSync(fp, dest);
       // refuse truncated audio: a 30 second preview must never replace a real track
       const declared = Number(b.duration) || Number(db.prepare('SELECT duration FROM tracks WHERE id=?').get(tid)?.duration) || 0;
-      // a YouTube "Official Video", Live clip, promo or DJ-mix cut is not the track
+      // two classes: a cover or a lesson is never the recording, while an official video or
+      // a live upload is the same song in a video container, so it is only rejected once
       const sourceName = String(name || '');
-      const badSource = /\b(official (video|music video)|lyric video|visuali[sz]er|live|promo|teaser|trailer|interview|reaction|karaoke|tutorial|backing track)\b|\(cover\)|\(tabs?\)|cover version|cover of/i.test(sourceName) || /\(mixed\)/i.test(sourceName);
+      const hardBad = /\b(?:full|guitar|bass|drum|piano|acoustic|instrumental|metal|orchestral|sax|violin)\s+cover\b|\bcover\s+(?:by|version|of|song)\b|\(cover\)|\[cover\]|\(tabs?\)|\bkaraoke\b|\btutorial\b|\bbacking track\b/i.test(sourceName);
+      const softBad = /\b(?:official (?:video|music video)|lyric video|visuali[sz]er|live|promo|teaser|trailer|interview|reaction)\b|\(mixed\)/i.test(sourceName);
       // one retry, same job row: the old '<id>-r' jobs had no row of their own, so the
       // original stayed at 'unavailable' and the UI never moved no matter the outcome
       const retryBySearch = (detail) => {
@@ -1032,7 +1054,11 @@ function startLadderDownload(jobId, b, onDone) {
           enqueueDownload(jobId, { trackId: b.trackId, rung: 'search', title: b.title, artist: b.artist, duration: declared, retried: true });
         } catch {}
       };
-      if (badSource && b.trackId && !b.retried) {
+      if (hardBad) {
+        try { fs.rmSync(dest, { force: true }); } catch {}
+        return finish('unavailable', `not the recording: ${sourceName.slice(0, 44)}`);
+      }
+      if (softBad && b.trackId && !b.retried) {
         return retryBySearch(`video/promo source rejected (${sourceName.slice(0, 40)}), retrying by search`);
       }
       if (dur && declared && dur < declared * 0.8) {
@@ -1057,6 +1083,9 @@ function startLadderDownload(jobId, b, onDone) {
       }
       for (const f of existingFiles) {
         db.prepare('DELETE FROM files WHERE id=?').run(f.id);
+        // the same source re-downloaded writes the same name: deleting it here
+        // removed the copy that had just landed and left a row for a missing file
+        if (path.resolve(f.path) === path.resolve(dest)) continue;
         try { fs.rmSync(f.path, { force: true }); } catch {}
       }
       upsertFile({ track_id: tid, path: dest, tier: 'owned', bitrate: br, size: fs.statSync(dest).size, mtime: now() });
@@ -1089,10 +1118,13 @@ function startLadderDownload(jobId, b, onDone) {
     // track downloaded fine. A finished audio file is the success signal, not the code.
     const gotAudio = () => fs.readdirSync(dir)
       .some((f) => !f.startsWith('.') && /\.(mp3|m4a|aac|opus|ogg|flac|wav)$/i.test(f) && !/\.part$/i.test(f));
+    // skip covers and lessons while searching: the first hit for a track is often a
+    // cover, and downloading it only to reject it left the track without audio
+    const NO_COVER = 'duration > 2 & title !~= "(?i)(cover|karaoke|tutorial|lesson|backing track|\\btabs?\\b)"';
     const trySource = (source, next) => {
       const child = spawn('/opt/musicfy/ytdlp-venv/bin/yt-dlp', [
         '--no-warnings', '--newline', ...audioArgs(),
-        '--match-filter', 'duration > 2',
+        '--max-downloads', '1', '--match-filter', NO_COVER,
         '-o', path.join(dir, '%(title)s.%(ext)s'), source,
       ], { stdio: ['ignore', 'pipe', 'pipe'] });
       watch(child);
@@ -1100,8 +1132,8 @@ function startLadderDownload(jobId, b, onDone) {
       child.on('error', next);
       child.on('close', () => { if (gotAudio()) return ingestDownloaded(); next(); });
     };
-    // one hit each: ytsearch1 cannot abort itself halfway the way --max-downloads did
-    trySource(`ytsearch1:${query}`, () => trySource(`scsearch1:${query}`, () => finish('error', 'no source in search')));
+    // five candidates each, filtered by title, first survivor wins
+    trySource(`ytsearch5:${query}`, () => trySource(`scsearch5:${query}`, () => finish('error', 'no source in search')));
     return;
   }
 
@@ -2994,20 +3026,24 @@ const server = http.createServer(async (req, res) => {
     // hide failed jobs from the queue view; the rows stay for audit
     if (u.pathname === '/api/downloads/clear-failed' && req.method === 'POST') {
       const r = db.prepare(`UPDATE jobs SET state='dismissed', finished_at=?
-        WHERE state IN ('error','cancelled','skipped') AND kind IN ('track-download','ladder-download')`).run(now());
+        WHERE state IN ('error','unavailable','cancelled','skipped') AND kind IN ('track-download','ladder-download')`).run(now());
       return json(res, 200, { cleared: r.changes || 0 });
     }
 
     // retry everything that failed
     if (u.pathname === '/api/downloads/retry-failed' && req.method === 'POST') {
-      const failed = db.prepare("SELECT id, payload FROM jobs WHERE state='error' AND kind IN ('track-download','ladder-download') ORDER BY id DESC LIMIT 200").all();
+      // 'unavailable' means the source was rejected or missing: that is a failure too,
+      // and it used to be impossible to retry in bulk
+      const failed = db.prepare("SELECT id, payload FROM jobs WHERE state IN ('error','unavailable') AND kind IN ('track-download','ladder-download') ORDER BY id DESC LIMIT 200").all();
       let queued = 0;
+      const done = new Set();
       for (const job of failed) {
         let p = {};
         try { p = JSON.parse(job.payload); } catch {}
-        if (!p.trackId) continue;
-        const t = db.prepare('SELECT id,title,artist FROM tracks WHERE id=?').get(p.trackId);
-        if (!t) continue;
+        if (!p.trackId || done.has(p.trackId)) continue;
+        done.add(p.trackId);
+        const t = db.prepare('SELECT id,title,artist,format FROM tracks WHERE id=?').get(p.trackId);
+        if (!t || t.format === 'catalogue') continue;
         const owned = db.prepare("SELECT id FROM files WHERE track_id=? AND tier='owned' LIMIT 1").get(t.id);
         if (owned) { db.prepare("UPDATE jobs SET state='skipped', detail='already owned' WHERE id=?").run(job.id); continue; }
         const jobId = crypto.randomUUID();
@@ -3069,7 +3105,7 @@ const server = http.createServer(async (req, res) => {
       const rows = db.prepare(`SELECT id, state, detail, COALESCE(progress,0) progress, payload, created_at
         FROM jobs WHERE (kind='track-download' OR kind='ladder-download') AND state NOT IN ('dismissed','cancelled','skipped')
           AND (state != 'error' OR created_at >= ?)
-        ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'error' THEN 2 ELSE 3 END, id DESC LIMIT 60`).all(BOOTED_AT);
+        ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'error' THEN 2 WHEN 'unavailable' THEN 3 ELSE 4 END, id DESC LIMIT 60`).all(BOOTED_AT);
       const items = rows.map((r) => {
         let p = {};
         try { p = JSON.parse(r.payload); } catch {}
@@ -3079,7 +3115,18 @@ const server = http.createServer(async (req, res) => {
           if (t) title = `${t.artist ? t.artist + ' - ' : ''}${t.title}`;
         }
         return { id: r.id, state: r.state, detail: r.detail, progress: Math.round(r.progress || 0), title: title || 'track', track_id: p.trackId || null, at: r.created_at };
-      });
+      }).filter((() => {
+        // one row per track for failures: the history of the same failed track is
+        // not a queue and only buries what is actually running
+        const seen = new Set();
+        return (it) => {
+          if (it.state !== 'error' && it.state !== 'unavailable') return true;
+          const k = it.track_id || it.id;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        };
+      })());
       const get = (s) => (counts.find((c) => c.state === s) || { c: 0 }).c;
       const total = db.prepare('SELECT COUNT(*) c FROM tracks').get().c;
       const withAudio = db.prepare("SELECT COUNT(DISTINCT track_id) c FROM files WHERE tier='owned'").get().c;
@@ -3089,7 +3136,14 @@ const server = http.createServer(async (req, res) => {
         AND NOT EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')`).get().c;
       return json(res, 200, {
         active: get('running'), queued: get('queued'), done: get('done'),
-        failed: get('error'), cancelled: get('cancelled'), skipped: get('skipped'),
+        // one count per track still without audio: job history can hold many rows
+        // for the same track, and an alarm per row is noise
+        failed: db.prepare(`SELECT COUNT(DISTINCT t.id) c FROM tracks t
+          WHERE NOT EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')
+            AND COALESCE(t.format,'') != 'catalogue'
+            AND EXISTS (SELECT 1 FROM jobs j WHERE j.state IN ('error','unavailable')
+              AND (j.payload LIKE '%"trackId":' || t.id || ',%' OR j.payload LIKE '%"trackId":' || t.id || '}%'))`).get().c,
+        cancelled: get('cancelled'), skipped: get('skipped'),
         library: { total, with_audio: withAudio, missing: Math.max(0, total - withAudio - catalogue), catalogue },
         items,
       });
