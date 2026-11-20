@@ -134,6 +134,28 @@ Maintenance: `POST /api/mirror/spotify`, `POST /api/mirror/track`, `POST /api/hi
 
 Delete a track: the row is removed from the DOM immediately, the API deletes row and file, `refreshView` rebuilds the view. Playback is untouched by refresh because the audio element lives outside the rendered views; deleting the playing track keeps it playing and fixes the queue index.
 
+## Typography
+
+The interface ships **no web font**. `body` and the label token use the native stack:
+
+```
+system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif
+```
+
+Reasons, in order:
+
+- Safari Lockdown Mode blocks web fonts. A bundled font silently falls back to the system
+  face there, so the app looked different per browser and for no visible reason.
+- A font is one more asset to version, cache and debug. The service worker once held an
+  old font response, which made every heading render at the Light default.
+- Native faces are better hinted and read correctly at 10 px labels.
+
+Weights stay at 600/700/800, so every OS picks a real face instead of synthesising one.
+
+If a brand font is ever required, add **static** 400/600/800 files (not a variable subset),
+version every URL (`?v=N`), and let the service worker's stale-while-revalidate path handle
+`/fonts/` as well. Do not reintroduce an unversioned `@font-face` source.
+
 ## Timers
 
 `musicfy-core` always on, `musicfy-history-scan.timer` daily at midnight, `musicfy-backup.timer` daily at 03:30 writing `VACUUM INTO` snapshots to the backup disk with seven day retention, and `musicfy-audio-backup.timer` daily at 04:15 mirroring the owned audio to a second disk. Audio was not backed up before the incident above, which is why the loss mattered.

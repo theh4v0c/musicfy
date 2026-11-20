@@ -13,7 +13,9 @@
   --ok: #3fc57d;
   --acc-soft: rgba(255, 92, 57, 0.14);
   --liked: #ff4d6d;
-  --mono: "Figtree", system-ui, sans-serif; /* no monospace stack: single typeface, tabular figures */
+  /* one native typeface everywhere: no web font to cache, block or fail to render */
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: var(--sans); /* kept for the label rules; the interface has no monospace stack */
   --r-lg: 14px;
   --r-md: 10px;
   --r-pill: 99px;
@@ -21,7 +23,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
 html { color-scheme: dark; }
-body { background: var(--bg); color: var(--fg); font-family: "Figtree", system-ui, sans-serif; height: 100dvh; overflow: hidden;
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); height: 100dvh; overflow: hidden;
   -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overscroll-behavior-y: contain;
   /* long press is the app's context menu, not the browser's text/image selection */
   -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
@@ -642,7 +644,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .time, .ctx-title, .chip-card span, .canon-pill, .verif, .ask-pill,
 .prep-kicker, #prep-cov, .crate-badge, .np-kicker, .np-badge,
 .set-card h2, .set-card label, .ctx-form label, .ip-label {
-  font-family: "Figtree", system-ui, sans-serif;
+  font-family: var(--sans);
   letter-spacing: 0;
   text-transform: none;
 }

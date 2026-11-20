@@ -1780,20 +1780,6 @@ const server = http.createServer(async (req, res) => {
       } catch (e) { return json(res, 400, { error: e.message }); }
     }
 
-    // self hosted font assets
-    if (u.pathname === '/fonts.css') {
-      res.writeHead(200, { 'content-type': 'text/css; charset=utf-8', 'cache-control': 'no-store' });
-      return res.end(fs.readFileSync(path.join(WEB, 'fonts.css')));
-    }
-    if (u.pathname.startsWith('/fonts/')) {
-      const rel = path.normalize(u.pathname).replace(/^(\.\.[/\\])+/, '');
-      const fp = path.join(WEB, rel);
-      if (fp.startsWith(WEB) && fs.existsSync(fp) && /\.woff2?$/.test(fp)) {
-        res.writeHead(200, { 'content-type': 'font/woff2', 'cache-control': 'public, max-age=31536000' });
-        return res.end(fs.readFileSync(fp));
-      }
-      res.writeHead(404); return res.end();
-    }
 
     // rescan the history folder for newly delivered exports
     if (u.pathname === '/api/history/scan' && req.method === 'POST') {
