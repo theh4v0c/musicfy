@@ -156,6 +156,19 @@ If a brand font is ever required, add **static** 400/600/800 files (not a variab
 version every URL (`?v=N`), and let the service worker's stale-while-revalidate path handle
 `/fonts/` as well. Do not reintroduce an unversioned `@font-face` source.
 
+## Guided actions
+
+`/api/agent` never mutates on the first turn. A mutation intent (playlist, album, missing
+audio) returns a proposal and an action id; the client shows the tracks and reasons, then
+calls `POST /api/agent/action/:id` with `{confirm:true}` or `{cancel:true}`. Proposals expire
+after 15 minutes. Read-only intents (`report_library`, `search_tracks`) still answer directly.
+
+Playlist proposals come from `core/mood.js`, not from the catalogue: rows are scored on
+style family and BPM, mood (key/scale/BPM/energy), reference artist profile, then your plays,
+likes and playlist presence, with a small bonus for unplayed tracks. A style with a tempo
+range filters the pool; a reference artist with a known family stays in that family even if
+the result is short. The proposal says why and says when it is short.
+
 ## Timers
 
 `musicfy-core` always on, `musicfy-history-scan.timer` daily at midnight, `musicfy-backup.timer` daily at 03:30 writing `VACUUM INTO` snapshots to the backup disk with seven day retention, and `musicfy-audio-backup.timer` daily at 04:15 mirroring the owned audio to a second disk. Audio was not backed up before the incident above, which is why the loss mattered.

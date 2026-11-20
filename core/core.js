@@ -554,8 +554,24 @@ function allow(key) {
   buckets.set(key, list);
   return true;
 }
+// proposals wait here until the user confirms; nothing is created or queued before that
+const pendingActions = new Map();
+const ACTION_TTL = 15 * 60 * 1000;
+function stashAction(proposal) {
+  const id = crypto.randomUUID();
+  pendingActions.set(id, { proposal, at: Date.now() });
+  return id;
+}
+function takeAction(id) {
+  const a = pendingActions.get(id);
+  if (!a) return null;
+  pendingActions.delete(id);
+  if (Date.now() - a.at > ACTION_TTL) return null;
+  return a;
+}
 setInterval(() => {
   const now = Date.now();
+  for (const [id, a] of pendingActions) if (now - a.at > ACTION_TTL) pendingActions.delete(id);
   for (const [k, v] of buckets) {
     const kept = v.filter((t) => now - t < RATE.window);
     if (kept.length) buckets.set(k, kept); else buckets.delete(k);
@@ -2362,17 +2378,43 @@ const server = http.createServer(async (req, res) => {
         try { b = JSON.parse(body || '{}'); } catch {}
         const q = String(b.q || '').trim();
         if (!q) return json(res, 400, { error: 'q required' });
-        let plan = null;
+        // the local planner covers the clear verbs instantly; only an ambiguous request
+        // pays the model round trip, so a 5 second provider cannot slow a simple command
+        let plan = agent.planLocally(q);
         let source = 'rules';
-        if (llm.available()) {
+        if (plan.intent === 'report_library' && llm.available()) {
           try {
-            plan = await Promise.race([agent.planWithModel(llm, q), new Promise((r) => setTimeout(() => r(null), 5000))]);
-            if (plan) source = 'llm';
+            const modelPlan = await Promise.race([agent.planWithModel(llm, q), new Promise((r) => setTimeout(() => r(null), 2000))]);
+            if (modelPlan) { plan = modelPlan; source = 'llm'; }
           } catch {}
         }
-        if (!plan) plan = agent.planLocally(q);
-        const result = await agent.execute(db, plan, { enqueueTrackDownload });
-        return json(res, 200, { question: q, plan, source, ...result });
+        // read-only intents answer now; mutations become a proposal until confirmed
+        if (plan.intent === 'report_library' || plan.intent === 'search_tracks') {
+          const result = await agent.execute(db, plan, { enqueueTrackDownload });
+          return json(res, 200, { question: q, plan, source, ...result });
+        }
+        const proposal = await agent.propose(db, plan);
+        if (!proposal) {
+          const result = await agent.execute(db, plan, { enqueueTrackDownload });
+          return json(res, 200, { question: q, plan, source, ...result });
+        }
+        const id = stashAction(proposal);
+        return json(res, 200, { question: q, plan, source, spoken: proposal.reason, action: { id, ...proposal } });
+      });
+      return;
+    }
+
+    const mAgentAction = u.pathname.match(/^\/api\/agent\/action\/([\w-]+)$/);
+    if (mAgentAction && req.method === 'POST') {
+      let body = ''; req.on('data', c => body += c);
+      req.on('end', () => {
+        let b = {};
+        try { b = JSON.parse(body || '{}'); } catch {}
+        const a = takeAction(mAgentAction[1]);
+        if (!a) return json(res, 410, { error: 'this proposal expired; ask again' });
+        if (b.cancel) return json(res, 200, { ok: true, cancelled: true });
+        const result = agent.commit(db, a.proposal, { enqueueTrackDownload });
+        return json(res, 200, { ok: true, ...result });
       });
       return;
     }
@@ -2554,18 +2596,24 @@ const server = http.createServer(async (req, res) => {
           filters = merged;
           source = 'followup';
         }
-        if (!filters && llm.available()) {
-          try {
-            // a slow provider must never hold the answer hostage: drop to the local parser fast
-            const out = await Promise.race([
-              llm.ask(question),
-              new Promise((resolve) => setTimeout(() => resolve(null), 4000)),
-            ]);
-            if (out && out.filters) { filters = out.filters; source = 'llm'; }
-            if (out && out.title) b.title = b.title || out.title;
-          } catch (e) { /* fall back to the deterministic parser */ }
+        if (!filters) {
+          const local = queryEngine.parse(question, db);
+          const meaningful = local.key || local.bpm || local.year || local.genre || local.family
+            || local.owned !== undefined || local.plays || (local.order && local.order !== 'relevance');
+          if (meaningful || !llm.available()) filters = local;
+          else {
+            try {
+              // only fuzzy phrasing pays the model round trip
+              const out = await Promise.race([
+                llm.ask(question),
+                new Promise((resolve) => setTimeout(() => resolve(null), 4000)),
+              ]);
+              if (out && out.filters) { filters = out.filters; source = 'llm'; }
+              if (out && out.title) b.title = b.title || out.title;
+            } catch (e) { /* fall back to the deterministic parser */ }
+            if (!filters) filters = local;
+          }
         }
-        if (!filters) filters = queryEngine.parse(question, db);
         filters.limit = Math.min(Number(filters.limit) || 50, 200);
 
         let rows = queryEngine.run(db, filters);

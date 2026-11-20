@@ -3,6 +3,7 @@
 // arguments; it never runs code and never sees the database.
 const identity = require('./identity');
 const queryEngine = require('./query');
+const mood = require('./mood');
 
 const INTENTS = ['build_playlist', 'search_tracks', 'download_album', 'download_missing', 'report_library'];
 
@@ -176,4 +177,145 @@ async function execute(db, plan, deps) {
   };
 }
 
-module.exports = { planLocally, planWithModel, execute };
+
+// ---------- guided actions: build a proposal, execute only on confirm ----------
+function dupOf(artist, title) {
+  const norm = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return `${norm(artist)}|${norm(title)}`;
+}
+
+function listName(query) {
+  const n = String(query || '')
+    .replace(/\b(?:of\s+)?\d+\s*(?:tracks?|songs?|items?)\b/gi, ' ')
+    .replace(/\b(create|make|build|please|a|an|the|playlist|of|with|for|me)\b/gi, ' ')
+    .replace(/\s+/g, ' ').trim();
+  if (!n) return 'Made by request';
+  return (n.charAt(0).toUpperCase() + n.slice(1)).slice(0, 60);
+}
+
+function ownedIdFor(db, dupKey) {
+  return db.prepare(`SELECT t.id, EXISTS(SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned') owned
+    FROM tracks t WHERE t.dup_key=?`).get(dupKey);
+}
+
+async function propose(db, plan) {
+  if (plan.intent === 'build_playlist') {
+    const q = String(plan.args.query || '').trim();
+    const count = Math.max(1, Math.min(Number(plan.args.count) || 20, 100));
+    const picked = mood.select(db, q, count);
+    const moodNames = { question: 'Question everything', feel: 'Emotional', euphoric: 'Euphoric' };
+    const styleNames = { burningman: 'Burning Man', indiedance: 'Indie dance', downtempo: 'Downtempo', techno: 'Techno', house: 'House', dance: 'Dance floor' };
+    const auto = picked.ctx.mood ? moodNames[picked.ctx.mood.id]
+      : picked.ctx.style ? styleNames[picked.ctx.style.id]
+      : listName(q);
+    const name = plan.args.name ? String(plan.args.name).slice(0, 60) : String(auto || 'Made by request').slice(0, 60);
+    const tracks = picked.tracks.map((t) => ({
+      id: t.id, title: t.title, artist: t.artist, album: t.album,
+      bpm: t.bpm, key: t.key, key_scale: t.key_scale, owned: !!t.owned,
+    }));
+    return {
+      kind: 'playlist', name, trackIds: tracks.map((t) => t.id), tracks,
+      download: !!plan.args.download,
+      title: `Create "${name}"`,
+      reason: picked.reason,
+      summary: `${tracks.length} track${tracks.length === 1 ? '' : 's'} from your library`,
+    };
+  }
+
+  if (plan.intent === 'download_album') {
+    const q = String(plan.args.query || '').trim();
+    let albums = [];
+    let songs = [];
+    try {
+      const cat = await identity.catalog(q, { songs: 40, albums: 8, artists: 0 });
+      albums = cat.albums || [];
+      songs = cat.songs || [];
+    } catch {}
+    const want = q.toLowerCase();
+    const words = want.split(/\s+/).filter((w) => w.length > 2);
+    const byArtist = albums.filter((a) => {
+      const artist = String(a.artist || '').toLowerCase();
+      return words.length && words.every((w) => artist.includes(w));
+    });
+    let album = albums.find((a) => String(a.name || '').toLowerCase().includes(want))
+      || albums.find((a) => want.includes(String(a.name || '').toLowerCase()))
+      || (byArtist.length ? byArtist.sort((a, b) => (b.year || 0) - (a.year || 0))[0] : null)
+      || albums[0] || null;
+    if (plan.args.latest && byArtist.length) album = byArtist.sort((a, b) => (b.year || 0) - (a.year || 0))[0];
+    let list = album ? songs.filter((s) => String(s.album || '').toLowerCase() === String(album.name).toLowerCase()) : songs;
+    if (!list.length && album) list = songs;
+    if (!list.length) return null;
+    const tracks = list.map((s) => {
+      const key = dupOf(s.artist, s.title);
+      const row = ownedIdFor(db, key);
+      return { title: s.title, artist: s.artist || '', album: s.album || album?.name || '', duration: s.duration || null, key, owned: !!(row && row.owned) };
+    });
+    const missing = tracks.filter((t) => !t.owned).length;
+    return {
+      kind: 'album', album: album ? { name: album.name, artist: album.artist } : null,
+      tracks, trackIds: [], download: true,
+      title: album ? `Download "${album.name}"` : 'Download album',
+      reason: album ? `${missing} of ${tracks.length} tracks are not local. Nothing is queued until you confirm.` : 'Catalogue match, nothing queued yet.',
+      summary: album ? `${tracks.length} tracks · ${missing} missing` : `${tracks.length} tracks`,
+    };
+  }
+
+  if (plan.intent === 'download_missing') {
+    const missing = db.prepare(`SELECT t.id, t.title, t.artist, t.album FROM tracks t
+      WHERE NOT EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned') LIMIT 100`).all();
+    return {
+      kind: 'missing', trackIds: missing.map((t) => t.id), tracks: missing.map((t) => ({ ...t, owned: false })),
+      download: true,
+      title: 'Download missing audio',
+      reason: `${missing.length} tracks have no local audio. They are queued only after you confirm.`,
+      summary: `${missing.length} tracks`,
+    };
+  }
+  return null;
+}
+
+function commit(db, proposal, deps) {
+  const at = Math.floor(Date.now() / 1000);
+  let queued = 0;
+  if (proposal.kind === 'playlist') {
+    const pid = `ai-${Date.now().toString(36)}`;
+    db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)')
+      .run(pid, proposal.name, 'ai', at, at);
+    let pos = 0;
+    for (const id of proposal.trackIds) {
+      db.prepare('INSERT OR IGNORE INTO playlist_tracks (playlist_id,track_id,position,added_at) VALUES (?,?,?,?)')
+        .run(pid, id, pos++, at);
+    }
+    if (proposal.download) {
+      const rows = db.prepare(`SELECT t.id, t.title, t.artist FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
+        WHERE pt.playlist_id=? AND NOT EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')`).all(pid);
+      for (const t of rows) { if (deps.enqueueTrackDownload(t)) queued += 1; }
+    }
+    return { spoken: `Created "${proposal.name}" with ${proposal.trackIds.length} tracks${queued ? `, ${queued} downloading` : ''}.`,
+      data: { playlist: { id: pid, name: proposal.name, tracks: proposal.trackIds.length }, queued } };
+  }
+  if (proposal.kind === 'album') {
+    for (const t of proposal.tracks) {
+      let row = ownedIdFor(db, t.key);
+      if (!row) {
+        const r = db.prepare(`INSERT INTO tracks (uid,dup_key,title,artist,album,year,duration,format,added_at,updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?)`).run(t.key, t.key, t.title, t.artist, t.album, null, t.duration || null, 'catalogue', at, at);
+        row = { id: Number(r.lastInsertRowid), owned: 0 };
+      }
+      if (!row.owned && deps.enqueueTrackDownload({ id: row.id, title: t.title, artist: t.artist, duration: t.duration })) queued += 1;
+    }
+    const name = proposal.album ? proposal.album.name : 'album';
+    return { spoken: `Queueing ${queued} tracks from "${name}".`, data: { album: proposal.album, queued } };
+  }
+  if (proposal.kind === 'missing') {
+    for (const id of proposal.trackIds) {
+      const t = db.prepare('SELECT id, title, artist FROM tracks WHERE id=?').get(id);
+      if (t && deps.enqueueTrackDownload(t)) queued += 1;
+    }
+    return { spoken: `Queued ${queued} downloads.`, data: { queued } };
+  }
+  return { spoken: 'Nothing to do.', data: {} };
+}
+
+module.exports = { planLocally, planWithModel, execute, propose, commit };
+

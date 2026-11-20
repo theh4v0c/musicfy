@@ -2077,8 +2077,65 @@ async function renderAskAi() {
         stateEl.textContent = `${String(a.plan.intent).replace(/_/g, ' ')} · ${a.source === 'llm' ? 'planned by model' : 'planned locally'}`;
         const said = document.createElement('div');
         said.className = 'ai-said';
-        said.textContent = a.spoken || '';
+        said.textContent = a.action ? 'Here is what I would do. Nothing is created or downloaded until you confirm.' : (a.spoken || '');
         out.appendChild(said);
+        if (a.action) {
+          stateEl.textContent = 'Review the proposal';
+          const card = document.createElement('div');
+          card.className = 'ask-action';
+          const head = document.createElement('div');
+          head.className = 'ask-action-head';
+          head.innerHTML = `<b>${esc(a.action.title)}</b><span>${esc(a.action.summary || '')}</span>`;
+          card.appendChild(head);
+          const meta = document.createElement('div');
+          meta.className = 'ask-action-meta';
+          meta.textContent = a.action.reason || '';
+          card.appendChild(meta);
+          const tracks = a.action.tracks || [];
+          const list = document.createElement('div');
+          list.className = 'ask-preview';
+          tracks.slice(0, 12).forEach((t) => {
+            const row = document.createElement('div');
+            row.className = 'ask-preview-row';
+            row.innerHTML = `<span class="apr-title">${esc(t.title || '')}</span><span class="apr-artist">${esc(t.artist || '')}</span><span class="apr-tag ${t.owned ? 'on' : ''}">${t.owned ? 'local' : 'missing'}</span>`;
+            list.appendChild(row);
+          });
+          if (tracks.length > 12) {
+            const more = document.createElement('div');
+            more.className = 'ask-preview-more';
+            more.textContent = `+${tracks.length - 12} more`;
+            list.appendChild(more);
+          }
+          card.appendChild(list);
+          const acts = document.createElement('div');
+          acts.className = 'ask-action-btns';
+          const ok = document.createElement('button');
+          ok.className = 'btn btn-primary';
+          ok.textContent = a.action.kind === 'playlist' ? 'Create playlist' : a.action.kind === 'album' ? 'Download album' : 'Download missing';
+          const no = document.createElement('button');
+          no.className = 'btn btn-ghost';
+          no.textContent = 'Cancel';
+          acts.append(ok, no);
+          card.appendChild(acts);
+          ok.onclick = async () => {
+            ok.disabled = true;
+            try {
+              const r = await api(`/api/agent/action/${a.action.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirm: true }), nocache: true });
+              card.remove();
+              stateEl.textContent = 'Done';
+              if (r.spoken) toast(r.spoken, 5000);
+              if (r.data && r.data.playlist) { afterWrite(); await loadPlaylists(); openPlaylist(r.data.playlist.id, false); }
+              if (r.data && r.data.queued) openDownloads();
+            } catch { ok.disabled = false; toast('That proposal expired, ask again', 5000); }
+          };
+          no.onclick = async () => {
+            try { await api(`/api/agent/action/${a.action.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cancel: true }), nocache: true }); } catch {}
+            card.remove();
+            stateEl.textContent = 'Cancelled';
+          };
+          out.appendChild(card);
+          return;
+        }
         if (a.data && a.data.album) {
           const alb = document.createElement('div');
           alb.className = 'ask-meta';

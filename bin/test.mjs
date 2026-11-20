@@ -70,7 +70,7 @@ ok('report_library', rep.body && rep.body.plan.intent === 'report_library', JSON
 const find = await post('/api/agent', { q: 'find techno tracks I never played' });
 ok('search_tracks', find.body && find.body.plan.intent === 'search_tracks', JSON.stringify(find.body?.plan));
 const alb = await post('/api/agent', { q: 'download the album Pinkfong Animal Songs' });
-ok('download_album', alb.body && alb.body.plan.intent === 'download_album', JSON.stringify(alb.body?.plan));
+ok('download_album previews instead of queueing', alb.body && alb.body.plan.intent === 'download_album' && alb.body.action && alb.body.action.kind === 'album', JSON.stringify(alb.body?.plan));
 
 console.log('ask capabilities');
 const h1 = await post('/api/ask', { q: 'what can you do for me' });
@@ -81,6 +81,35 @@ const h2 = await post('/api/ask', { q: 'what can you assist me with' });
 ok('assist phrasing also gets help', h2.body && h2.body.source === 'help', JSON.stringify(h2.body?.source));
 const h3 = await post('/api/ask', { q: 'tracks in Dm between 120 and 130 bpm' });
 ok('a real query is still a query', h3.body && h3.body.source !== 'help' && h3.body.filters && h3.body.filters.key === 'D');
+
+
+console.log('guided ask');
+const plBefore = ((await j('/api/playlists')).body || []).length;
+const prop = await post('/api/agent', { q: 'create a dance music playlist of 10 tracks' });
+const act = prop.body && prop.body.action;
+ok('a mutation returns a proposal', !!act && act.kind === 'playlist', JSON.stringify(prop.body?.plan));
+ok('proposal lists the requested count', (act?.tracks || []).length === 10, 'tracks=' + (act?.tracks || []).length);
+ok('proposal explains the style', /dance floor/i.test(act?.reason || ''), act?.reason);
+const plAfterPreview = ((await j('/api/playlists')).body || []).length;
+ok('preview creates nothing', plAfterPreview === plBefore, plBefore + ' -> ' + plAfterPreview);
+const confirmed = await post(`/api/agent/action/${act?.id}`, { confirm: true });
+ok('confirm creates the playlist', confirmed.status === 200 && confirmed.body?.data?.playlist?.tracks === 10, JSON.stringify(confirmed.body?.data));
+const createdPid = confirmed.body?.data?.playlist?.id;
+if (createdPid) await del(`/api/playlists/${createdPid}`);
+
+const techno = await post('/api/agent', { q: 'create a techno playlist of 5 tracks' });
+const technoId = techno.body?.action?.id;
+const cancelled = await post(`/api/agent/action/${technoId}`, { cancel: true });
+ok('cancel dismisses the proposal', cancelled.status === 200 && !!cancelled.body?.cancelled);
+const afterCancel = await post(`/api/agent/action/${technoId}`, { confirm: true });
+ok('a cancelled proposal cannot be confirmed', afterCancel.status === 410, String(afterCancel.status));
+
+const moodProp = await post('/api/agent', { q: 'create a playlist of 10 tracks that make people question everything' });
+ok('mood request gets a proposal', !!moodProp.body?.action, JSON.stringify(moodProp.body?.plan));
+ok('mood is named in the reason', /unsettling/i.test(moodProp.body?.action?.reason || ''), moodProp.body?.action?.reason);
+
+const refProp = await post('/api/agent', { q: 'create a dance playlist like Igorrr' });
+ok('reference artist gets a proposal', !!refProp.body?.action, JSON.stringify(refProp.body?.plan));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

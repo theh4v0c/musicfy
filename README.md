@@ -19,8 +19,11 @@ Developed on a Raspberry Pi 5 (Debian 12, aarch64). Any Node 22 host with ffmpeg
   a CDJ USB folder, plus a ZIP with the audio for moving a set to another machine.
 - **Genre** from the catalogue plus MusicBrainz artist tags.
 - **Listening history** capture, and a weekly "For you" playlist built from what is played now.
-- **Ask** view: plain language queries over the library, plus playlist building and album
-  downloads through a small set of deterministic intents.
+- **Guided Ask**: plain language queries, playlist building and album downloads are
+  proposals first; nothing is created or queued until you confirm.
+- **Mood and style crates**: local-first selection scored by your plays, likes and
+  playlists, with presets for dance, house, techno, indie dance, downtempo and Burning
+  Man, plus a reference artist ("like Burial").
 - **Offline** playback on a phone through a service worker, once served over HTTPS.
 
 ## Layout
