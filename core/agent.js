@@ -4,6 +4,7 @@
 const identity = require('./identity');
 const queryEngine = require('./query');
 const mood = require('./mood');
+const deezer = require('./deezer');
 
 const INTENTS = ['build_playlist', 'search_tracks', 'download_album', 'download_missing', 'report_library'];
 
@@ -198,6 +199,41 @@ function ownedIdFor(db, dupKey) {
     FROM tracks t WHERE t.dup_key=?`).get(dupKey);
 }
 
+// related artists of the tracks we picked, so online candidates follow taste, not a keyword
+async function onlineFill(db, localPicks, need) {
+  if (need <= 0) return [];
+  let seeds = [...new Set(localPicks.map((t) => t.artist).filter(Boolean))].slice(0, 3);
+  if (!seeds.length) {
+    seeds = db.prepare(`SELECT artist FROM tracks WHERE artist IS NOT NULL AND artist != ''
+      GROUP BY artist ORDER BY COUNT(*) DESC LIMIT 3`).all().map((r) => r.artist);
+  }
+  const inLib = new Set(db.prepare('SELECT dup_key FROM tracks').all().map((r) => r.dup_key));
+  const seen = new Set();
+  const out = [];
+  for (const seed of seeds) {
+    if (out.length >= need) break;
+    const artist = await deezer.artistSearch(seed).catch(() => null);
+    if (!artist) continue;
+    const related = await deezer.relatedArtists(artist.id).catch(() => ({ data: [] }));
+    for (const r of (related.data || []).slice(0, 4)) {
+      if (out.length >= need) break;
+      const top = await deezer.artistTop(r.id, 5).catch(() => ({ data: [] }));
+      for (const t of (top.data || [])) {
+        if (out.length >= need) break;
+        if (!t.title || !t.artist || !t.duration || t.duration < 90) continue;
+        const key = dupOf(t.artist.name, t.title);
+        if (inLib.has(key) || seen.has(key)) continue;
+        seen.add(key);
+        out.push({
+          title: t.title, artist: t.artist.name, album: (t.album && t.album.title) || '',
+          duration: t.duration, key, source: 'online', owned: false, cover: (t.album && t.album.cover_medium) || null,
+        });
+      }
+    }
+  }
+  return out;
+}
+
 async function propose(db, plan) {
   if (plan.intent === 'build_playlist') {
     const q = String(plan.args.query || '').trim();
@@ -209,16 +245,38 @@ async function propose(db, plan) {
       : picked.ctx.style ? styleNames[picked.ctx.style.id]
       : listName(q);
     const name = plan.args.name ? String(plan.args.name).slice(0, 60) : String(auto || 'Made by request').slice(0, 60);
-    const tracks = picked.tracks.map((t) => ({
-      id: t.id, title: t.title, artist: t.artist, album: t.album,
-      bpm: t.bpm, key: t.key, key_scale: t.key_scale, owned: !!t.owned,
-    }));
+
+    const onlyLocal = /\b(only|just|from)\s+(my|the)\s+library\b|\bno new\b/i.test(q);
+    const wantsNew = /\b(new|discover|online|unreleased|not in my library|find more)\b/i.test(q);
+    const discovery = onlyLocal ? 0 : wantsNew ? 1 : 0.25;
+    let local = picked.tracks;
+    const targetOnline = onlyLocal ? 0 : Math.max(Math.round(count * discovery), count - local.length);
+    if (targetOnline > 0 && local.length > count - targetOnline) local = local.slice(0, Math.max(0, count - targetOnline));
+    const online = await onlineFill(db, local, Math.min(targetOnline, Math.max(0, count - local.length)));
+    // if the network gave us less than we hoped, top up from the rest of the local picks
+    if (local.length + online.length < count) {
+      const rest = picked.tracks.filter((t) => !local.includes(t)).slice(0, count - local.length - online.length);
+      local = [...local, ...rest];
+    }
+
+    const tracks = [
+      ...local.map((t) => ({
+        id: t.id, title: t.title, artist: t.artist, album: t.album,
+        bpm: t.bpm, key: t.key, key_scale: t.key_scale, owned: !!t.owned, source: 'library', cover: `/api/cover/${t.id}`,
+      })),
+      ...online,
+    ];
+    const missing = tracks.filter((t) => !t.owned).length;
+    const played = local.filter((t) => Number(t.plays) > 0).length;
+    const reasonBits = [picked.reason];
+    if (local.length) reasonBits.push(`${played} of ${local.length} local picks are tracks you already play.`);
+    reasonBits.push(online.length ? `${online.length} new from artists near your rotation.` : (targetOnline ? 'No online matches this time.' : 'From your library only.'));
     return {
-      kind: 'playlist', name, trackIds: tracks.map((t) => t.id), tracks,
+      kind: 'playlist', name, trackIds: local.map((t) => t.id), online, tracks,
       download: !!plan.args.download,
       title: `Create "${name}"`,
-      reason: picked.reason,
-      summary: `${tracks.length} track${tracks.length === 1 ? '' : 's'} from your library`,
+      reason: reasonBits.join(' '),
+      summary: `${tracks.length} track${tracks.length === 1 ? '' : 's'} · ${tracks.length - missing} local · ${missing} new`,
     };
   }
 
@@ -281,8 +339,18 @@ function commit(db, proposal, deps) {
     const pid = `ai-${Date.now().toString(36)}`;
     db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)')
       .run(pid, proposal.name, 'ai', at, at);
+    const ids = [...proposal.trackIds];
+    for (const t of (proposal.online || [])) {
+      let row = ownedIdFor(db, t.key);
+      if (!row) {
+        const r = db.prepare(`INSERT INTO tracks (uid,dup_key,title,artist,album,year,duration,format,added_at,updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?)`).run(t.key, t.key, t.title, t.artist, t.album, null, t.duration || null, 'catalogue', at, at);
+        row = { id: Number(r.lastInsertRowid), owned: 0 };
+      }
+      ids.push(row.id);
+    }
     let pos = 0;
-    for (const id of proposal.trackIds) {
+    for (const id of ids) {
       db.prepare('INSERT OR IGNORE INTO playlist_tracks (playlist_id,track_id,position,added_at) VALUES (?,?,?,?)')
         .run(pid, id, pos++, at);
     }
@@ -291,8 +359,8 @@ function commit(db, proposal, deps) {
         WHERE pt.playlist_id=? AND NOT EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')`).all(pid);
       for (const t of rows) { if (deps.enqueueTrackDownload(t)) queued += 1; }
     }
-    return { spoken: `Created "${proposal.name}" with ${proposal.trackIds.length} tracks${queued ? `, ${queued} downloading` : ''}.`,
-      data: { playlist: { id: pid, name: proposal.name, tracks: proposal.trackIds.length }, queued } };
+    return { spoken: `Created "${proposal.name}" with ${ids.length} tracks${queued ? `, ${queued} downloading` : ''}.`,
+      data: { playlist: { id: pid, name: proposal.name, tracks: ids.length }, queued } };
   }
   if (proposal.kind === 'album') {
     for (const t of proposal.tracks) {

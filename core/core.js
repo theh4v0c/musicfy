@@ -2413,6 +2413,8 @@ const server = http.createServer(async (req, res) => {
         const a = takeAction(mAgentAction[1]);
         if (!a) return json(res, 410, { error: 'this proposal expired; ask again' });
         if (b.cancel) return json(res, 200, { ok: true, cancelled: true });
+        // the client may choose "playlist only" or "create and download" at confirm time
+        if (b.download === true) a.proposal.download = true;
         const result = agent.commit(db, a.proposal, { enqueueTrackDownload });
         return json(res, 200, { ok: true, ...result });
       });

@@ -152,6 +152,8 @@ async function catalog(query, { songs = 40, albums = 12, artists = 6 } = {}) {
       family: familyOf(r.primaryGenreName),
       year: r.releaseDate ? Number(String(r.releaseDate).slice(0, 4)) : null,
       artwork: r.artworkUrl100 ? r.artworkUrl100.replace('100x100bb', '300x300bb') : null,
+      cover: r.artworkUrl100 ? r.artworkUrl100.replace('100x100bb', '300x300bb') : null,
+      preview: r.previewUrl || null,
     })),
     albums: albumRows.map((r) => ({
       name: r.collectionName,

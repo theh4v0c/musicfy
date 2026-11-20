@@ -104,8 +104,6 @@ function reason(ctx, picked) {
   if (ctx.mood) bits.push(ctx.mood.label);
   if (ctx.referenceProfile) bits.push(`follows ${ctx.referenceProfile.artist}: ${ctx.referenceProfile.avgBpm} BPM, ${ctx.referenceProfile.family || 'mixed family'}`);
   else if (ctx.reference) bits.push(`${ctx.reference} is not in the library, so this follows the request instead`);
-  const plays = picked.filter((t) => Number(t.plays) > 0).length;
-  bits.push(`${plays} of ${picked.length} are tracks you already play`);
   if (picked.length < ctx.count) bits.push(`${ctx.count - picked.length} short: the library does not have more that fit`);
   return bits.join('. ') + '.';
 }

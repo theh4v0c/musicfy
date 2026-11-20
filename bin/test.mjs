@@ -85,7 +85,7 @@ ok('a real query is still a query', h3.body && h3.body.source !== 'help' && h3.b
 
 console.log('guided ask');
 const plBefore = ((await j('/api/playlists')).body || []).length;
-const prop = await post('/api/agent', { q: 'create a dance music playlist of 10 tracks' });
+const prop = await post('/api/agent', { q: 'create a dance music playlist of 10 tracks from my library' });
 const act = prop.body && prop.body.action;
 ok('a mutation returns a proposal', !!act && act.kind === 'playlist', JSON.stringify(prop.body?.plan));
 ok('proposal lists the requested count', (act?.tracks || []).length === 10, 'tracks=' + (act?.tracks || []).length);
@@ -97,18 +97,18 @@ ok('confirm creates the playlist', confirmed.status === 200 && confirmed.body?.d
 const createdPid = confirmed.body?.data?.playlist?.id;
 if (createdPid) await del(`/api/playlists/${createdPid}`);
 
-const techno = await post('/api/agent', { q: 'create a techno playlist of 5 tracks' });
+const techno = await post('/api/agent', { q: 'create a techno playlist of 5 tracks from my library' });
 const technoId = techno.body?.action?.id;
 const cancelled = await post(`/api/agent/action/${technoId}`, { cancel: true });
 ok('cancel dismisses the proposal', cancelled.status === 200 && !!cancelled.body?.cancelled);
 const afterCancel = await post(`/api/agent/action/${technoId}`, { confirm: true });
 ok('a cancelled proposal cannot be confirmed', afterCancel.status === 410, String(afterCancel.status));
 
-const moodProp = await post('/api/agent', { q: 'create a playlist of 10 tracks that make people question everything' });
+const moodProp = await post('/api/agent', { q: 'create a playlist of 10 tracks that make people question everything from my library' });
 ok('mood request gets a proposal', !!moodProp.body?.action, JSON.stringify(moodProp.body?.plan));
 ok('mood is named in the reason', /unsettling/i.test(moodProp.body?.action?.reason || ''), moodProp.body?.action?.reason);
 
-const refProp = await post('/api/agent', { q: 'create a dance playlist like Igorrr' });
+const refProp = await post('/api/agent', { q: 'create a dance playlist like Igorrr from my library' });
 ok('reference artist gets a proposal', !!refProp.body?.action, JSON.stringify(refProp.body?.plan));
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

@@ -242,6 +242,8 @@ function closeCtx(force = false) {
   // never yank the sheet away from someone who is typing in it, whoever asked
   const active = document.activeElement;
   if (!force && active && el.contains(active) && /INPUT|TEXTAREA|SELECT/.test(active.tagName)) return;
+  // a preview or media element must stop when the sheet closes
+  try { el.querySelectorAll('audio, video').forEach((a) => { a.pause(); a.removeAttribute('src'); a.load(); }); } catch {}
   el.classList.remove('open');
   el.onclick = null;
   el.style.transform = '';
@@ -912,6 +914,13 @@ async function renderExternalInto(host) {
           <div class="tcard-name">${esc(s.title)}</div>
           <div class="tcard-sub">${esc(s.artist)}</div>
           <button class="tcard-play" title="Preview before downloading" aria-label="Preview before downloading">${IC.play}</button>`;
+        if (s.cover) {
+          const art = card.querySelector('.tcard-art');
+          art.style.backgroundImage = `url("${s.cover}")`;
+          art.style.backgroundSize = 'cover';
+          art.style.backgroundPosition = 'center';
+          art.textContent = '';
+        }
         card.style.cursor = 'pointer';
         const preview = (e) => { if (e) e.stopPropagation(); openSuggestionPreview(s); };
         card.onclick = preview;
@@ -2108,7 +2117,7 @@ async function renderAskAi() {
           card.className = 'ask-action';
           const head = document.createElement('div');
           head.className = 'ask-action-head';
-          head.innerHTML = `<b>${esc(a.action.title)}</b><span>${esc(a.action.summary || '')}</span>`;
+          head.innerHTML = `<div><div class="ask-action-kicker">PROPOSAL</div><b>${esc(a.action.title)}</b></div><span>${esc(a.action.summary || '')}</span>`;
           card.appendChild(head);
           const meta = document.createElement('div');
           meta.className = 'ask-action-meta';
@@ -2117,45 +2126,73 @@ async function renderAskAi() {
           const tracks = a.action.tracks || [];
           const list = document.createElement('div');
           list.className = 'ask-preview';
-          tracks.slice(0, 12).forEach((t) => {
+          tracks.slice(0, 20).forEach((t) => {
             const row = document.createElement('div');
             row.className = 'ask-preview-row';
-            row.innerHTML = `<span class="apr-title">${esc(t.title || '')}</span><span class="apr-artist">${esc(t.artist || '')}</span><span class="apr-tag ${t.owned ? 'on' : ''}">${t.owned ? 'local' : 'missing'}</span>`;
+            const art = document.createElement('div');
+            art.className = 'apr-art';
+            if (t.cover) art.style.backgroundImage = `url("${t.cover}")`;
+            const title = document.createElement('span');
+            title.className = 'apr-title';
+            title.textContent = t.title || '';
+            const artist = document.createElement('span');
+            artist.className = 'apr-artist';
+            artist.textContent = t.artist || '';
+            const tag = document.createElement('span');
+            const kind = t.owned ? 'local' : t.source === 'online' ? 'new' : 'missing';
+            tag.className = `apr-tag ${t.owned ? 'on' : t.source === 'online' ? 'new' : ''}`;
+            tag.textContent = kind;
+            row.append(art, title, artist, tag);
             list.appendChild(row);
           });
-          if (tracks.length > 12) {
+          if (tracks.length > 20) {
             const more = document.createElement('div');
             more.className = 'ask-preview-more';
-            more.textContent = `+${tracks.length - 12} more`;
+            more.textContent = `+${tracks.length - 20} more`;
             list.appendChild(more);
           }
           card.appendChild(list);
           const acts = document.createElement('div');
           acts.className = 'ask-action-btns';
-          const ok = document.createElement('button');
-          ok.className = 'btn btn-primary';
-          ok.textContent = a.action.kind === 'playlist' ? 'Create playlist' : a.action.kind === 'album' ? 'Download album' : 'Download missing';
-          const no = document.createElement('button');
-          no.className = 'btn btn-ghost';
-          no.textContent = 'Cancel';
-          acts.append(ok, no);
-          card.appendChild(acts);
-          ok.onclick = async () => {
-            ok.disabled = true;
+          const missing = tracks.filter((t) => !t.owned).length;
+          const confirm = async (btn, alsoDownload) => {
+            btn.disabled = true;
             try {
-              const r = await api(`/api/agent/action/${a.action.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirm: true }), nocache: true });
+              const r = await api(`/api/agent/action/${a.action.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirm: true, download: !!alsoDownload }), nocache: true });
               card.remove();
               stateEl.textContent = 'Done';
               if (r.spoken) toast(r.spoken, 5000);
               if (r.data && r.data.playlist) { afterWrite(); await loadPlaylists(); openPlaylist(r.data.playlist.id, false); }
               if (r.data && r.data.queued) openDownloads();
-            } catch { ok.disabled = false; toast('That proposal expired, ask again', 5000); }
+            } catch { btn.disabled = false; toast('That proposal expired, ask again', 5000); }
           };
+          if (a.action.kind === 'playlist' && missing > 0) {
+            const both = document.createElement('button');
+            both.className = 'btn btn-primary';
+            both.textContent = `Create + download ${missing}`;
+            const only = document.createElement('button');
+            only.className = 'btn btn-ghost';
+            only.textContent = 'Playlist only';
+            both.onclick = () => confirm(both, true);
+            only.onclick = () => confirm(only, false);
+            acts.append(both, only);
+          } else {
+            const ok = document.createElement('button');
+            ok.className = 'btn btn-primary';
+            ok.textContent = a.action.kind === 'playlist' ? 'Create playlist' : a.action.kind === 'album' ? 'Download album' : 'Download missing';
+            ok.onclick = () => confirm(ok, a.action.kind !== 'playlist');
+            acts.append(ok);
+          }
+          const no = document.createElement('button');
+          no.className = 'btn btn-ghost';
+          no.textContent = 'Cancel';
           no.onclick = async () => {
             try { await api(`/api/agent/action/${a.action.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cancel: true }), nocache: true }); } catch {}
             card.remove();
             stateEl.textContent = 'Cancelled';
           };
+          acts.append(no);
+          card.appendChild(acts);
           out.appendChild(card);
           return;
         }
@@ -2190,13 +2227,18 @@ async function renderAskAi() {
               <div class="tmeta"><div class="tt">${esc(s.title || '')}</div><div class="tbpm">${s.duration ? fmt(s.duration) : ''}</div></div>
               <div class="tartist"><span class="alink">${esc(s.artist || '')}</span></div>
               <div class="talbum">${esc(s.album || '')}</div><div class="tadded"></div><div class="tdur"></div>
-              <button class="tmore" title="Download">${IC.download}</button>`;
-            row.querySelector('.tmore').onclick = async (e) => {
-              e.stopPropagation();
-              try { await api('/api/ladder/download', { method: 'POST', headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ rung: 'search', title: s.title, artist: s.artist, duration: s.duration }) });
-                toast('Fetching', 3000); openDownloads(); } catch { toast('Could not start', 3000); }
-            };
+              <button class="tmore" title="Preview before downloading">${IC.play}</button>`;
+            if (s.cover) {
+              const art = row.querySelector('.tart');
+              art.style.backgroundImage = `url("${s.cover}")`;
+              art.style.backgroundSize = 'cover';
+              art.style.backgroundPosition = 'center';
+              art.textContent = '';
+            }
+            row.style.cursor = 'pointer';
+            const preview = (e) => { if (e) e.stopPropagation(); openSuggestionPreview(s); };
+            row.onclick = preview;
+            row.querySelector('.tmore').onclick = preview;
             sec.appendChild(row);
           }
           out.appendChild(sec);
@@ -2431,15 +2473,18 @@ async function renderSearch() {
               <div class="tmeta"><div class="tt">${esc(s.title || '')}</div><div class="tbpm">${s.duration ? fmt(s.duration) : ''}</div></div>
               <div class="tartist"><span class="alink">${esc(s.artist || '')}</span></div>
               <div class="talbum">${esc(s.album || '')}</div><div class="tadded"></div><div class="tdur"></div>
-              <button class="tmore" title="Download">${IC.download}</button>`;
-            row.querySelector('.tmore').onclick = async (e) => {
-              e.stopPropagation();
-              try {
-                await api('/api/ladder/download', { method: 'POST', headers: { 'content-type': 'application/json' },
-                  body: JSON.stringify({ rung: 'ytmusic', title: s.title, artist: s.artist, duration: s.duration }) });
-                toast('Fetching', 3000); openDownloads();
-              } catch { toast('Could not start', 3000); }
-            };
+              <button class="tmore" title="Preview before downloading">${IC.play}</button>`;
+            if (s.cover) {
+              const art = row.querySelector('.tart');
+              art.style.backgroundImage = `url("${s.cover}")`;
+              art.style.backgroundSize = 'cover';
+              art.style.backgroundPosition = 'center';
+              art.textContent = '';
+            }
+            row.style.cursor = 'pointer';
+            const preview = (e) => { if (e) e.stopPropagation(); openSuggestionPreview(s); };
+            row.onclick = preview;
+            row.querySelector('.tmore').onclick = preview;
             sec.appendChild(row);
           }
           res.appendChild(sec);
