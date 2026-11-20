@@ -810,6 +810,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .apr-tag.new { color: var(--acc); }
 
 /* player status: a quiet label with a slow pulse, not a second line of body text */
+.np-status { margin-top: 6px; justify-content: center; }
 .pb-status { display: flex; align-items: center; gap: 6px; margin-top: 3px;
   font-size: 9.5px; line-height: 1; letter-spacing: .14em; text-transform: uppercase; color: var(--fg-mute); }
 .pb-status::before { content: ""; width: 5px; height: 5px; border-radius: 50%; flex: none;

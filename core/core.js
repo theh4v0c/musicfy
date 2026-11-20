@@ -1304,7 +1304,27 @@ async function resolveBest(seed, cap = 1800, opts = {}) {
 }
 
 // ---------- HTTP ----------
-const json = (res, code, obj) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(obj)); };
+// library JSON is ~900 KB raw: gzip takes it to ~70 KB, which is the difference between
+// a usable and an unusable phone on a mobile link
+const jsonGzip = new Map();
+function compressJson(body) {
+  const key = body.length + ':' + require('node:crypto').createHash('md5').update(body).digest('hex');
+  if (jsonGzip.has(key)) return jsonGzip.get(key);
+  const gz = zlib.gzipSync(body, { level: 5 });
+  if (jsonGzip.size > 8) jsonGzip.clear();
+  jsonGzip.set(key, gz);
+  return gz;
+}
+const json = (res, code, obj) => {
+  const body = Buffer.from(JSON.stringify(obj));
+  const ae = String((res.req && res.req.headers['accept-encoding']) || '');
+  const wantGzip = body.length > 1024 && /\bgzip\b/.test(ae);
+  const out = wantGzip ? compressJson(body) : body;
+  const headers = { 'content-type': 'application/json', 'content-length': out.length, vary: 'Accept-Encoding' };
+  if (wantGzip) headers['content-encoding'] = 'gzip';
+  res.writeHead(code, headers);
+  res.end(out);
+};
 
 const AUTH_TOKEN = String(process.env.MUSICFY_TOKEN || '');
 const ALLOWED_ORIGINS = String(process.env.MUSICFY_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -4018,7 +4038,9 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, rows);
     }
 
-    const m2 = u.pathname.match(/^\/api\/stream\/(\d+)$/);
+    // /offline-audio is the service worker's path for a saved copy; without a worker
+    // (plain http on the LAN) the same bytes still have to come from here
+    const m2 = u.pathname.match(/^\/(?:api\/stream|offline-audio)\/(\d+)$/);
     if (m2) {
       const tid = Number(m2[1]);
       const f = db.prepare(`SELECT path FROM files WHERE track_id=? AND tier='owned' LIMIT 1`).get(tid);

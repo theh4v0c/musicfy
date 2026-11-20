@@ -2107,8 +2107,8 @@ async function renderSettings() {
         <label>Buffer ahead
           <select id="set-buffer">
             <option value="0"${String(s.prefetch_ahead) === '0' ? ' selected' : ''}>off</option>
-            <option value="1"${String(s.prefetch_ahead) === '1' ? ' selected' : ''}>1 track</option>
-            <option value="2"${String(s.prefetch_ahead ?? 2) === '2' ? ' selected' : ''}>2 tracks</option>
+            <option value="1"${String(s.prefetch_ahead ?? 1) === '1' ? ' selected' : ''}>1 track</option>
+            <option value="2"${String(s.prefetch_ahead) === '2' ? ' selected' : ''}>2 tracks</option>
           </select>
         </label>
         <div class="lib-actions"><button class="btn btn-ghost" id="set-clearbuf" type="button">Clear buffer</button><span class="set-note">Frees preloaded audio and cached pages</span></div>
@@ -3280,12 +3280,15 @@ function targetVolume() {
 }
 
 function setStatus(text) {
-  // dedicated element only: the artist line is not ours to rewrite
-  const el = document.getElementById('pb-status');
-  if (!el) return;
-  // the animated dot carries the movement; the text stays still and quiet
-  el.textContent = String(text || '').replace(/\.{2,}$/, '');
-  el.hidden = !text;
+  // dedicated elements only: the artist line is not ours to rewrite. The mobile player
+  // hides the bar, so it needs its own status or a stall there is completely silent.
+  const value = String(text || '').replace(/\.{2,}$/, '');
+  for (const id of ['pb-status', 'np-status']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.textContent = value;
+    el.hidden = !value;
+  }
 }
 
 function applyLoudnessGain(t) {
@@ -3584,7 +3587,9 @@ async function addTracksToPlaylist(pid, ids) {
 }
 
 /* ============ queue drawer ============ */
-audio.addEventListener('canplay', () => prefetchNext());
+audio.addEventListener('canplay', () => setStatus(null));
+audio.addEventListener('timeupdate', maybePrefetch);
+audio.addEventListener('loadstart', () => setStatus('Loading'));
 
 function saveQueue() {
   try {
@@ -3758,7 +3763,7 @@ $('dl-close').onclick = closeDownloads;
 // fetch the next track ahead of time and keep the bytes in memory; works the same
 // on iPhone, Android and desktop because it avoids the resolver round trip at play time
 const preload = new Map();
-const PRELOAD_MAX = 2;
+const PRELOAD_MAX = 1;
 
 function releasePreload(id) {
   const p = preload.get(id);
@@ -3781,7 +3786,7 @@ function prefetchTrack(t) {
       const el = new Audio();
       el.preload = 'auto';
       el.muted = true;
-      el.src = `/api/stream/${t.id}`;
+      el.src = streamUrl(t);
       el.load();
       preload.set(t.id, { el, at: Date.now() });
     }
@@ -3793,12 +3798,31 @@ function prefetchTrack(t) {
 }
 
 function prefetchNext() {
-  const ahead = state.settings && state.settings.prefetch_ahead != null ? Number(state.settings.prefetch_ahead) : 2;
+  const ahead = state.settings && state.settings.prefetch_ahead != null ? Number(state.settings.prefetch_ahead) : 1;
   if (ahead <= 0) return;
+  // a prefetch on a metered or slow link steals the bandwidth of the track that is
+  // playing, which is how a car ends up stalling on a track that was already fine
+  const conn = navigator.connection || {};
+  if (conn.saveData) return;
+  if (/^(slow-2g|2g|3g)$/.test(conn.effectiveType || '')) return;
   const next = state.queue[state.qi + 1];
   if (next) prefetchTrack(next);
   const after = state.queue[state.qi + 2];
   if (ahead >= 2 && after) setTimeout(() => prefetchTrack(after), 6000);
+}
+
+/* only warm the next track after the current one has played a while and holds buffer:
+   asking for three streams at once over one slow uplink is what made the whole thing slow */
+let prefetchedFor = null;
+function maybePrefetch() {
+  const t = state.current;
+  if (!t || prefetchedFor === t.id || audio.paused) return;
+  if (audio.currentTime < 12) return;
+  const b = audio.buffered;
+  const ahead = b && b.length ? b.end(b.length - 1) - audio.currentTime : 0;
+  if (ahead < 12) return;
+  prefetchedFor = t.id;
+  prefetchNext();
 }
 
 /* ============ playback ============ */
@@ -3823,6 +3847,14 @@ async function playPlaylist(pid, shuffled = false) {
   playList(list, 0, shuffled, p ? p.name : '');
 }
 
+// a saved track plays from the offline copy; everything else goes straight to the server
+function streamUrl(t, bust) {
+  if (!t || !t.id) return '';
+  const offline = state.offlineIds && state.offlineIds.has(t.id);
+  const base = offline ? `/offline-audio/${t.id}` : `/api/stream/${t.id}`;
+  return bust ? `${base}?r=${Date.now()}` : base;
+}
+
 function trackPlayable(t) {
   if (!t) return false;
   return hasAudio(t) || t.streamable || !!t.rung || !!t.owned;
@@ -3842,13 +3874,14 @@ async function playAt(i, opts = {}) {
     if (hops) i = j;
   }
   state.qi = i; state.current = state.queue[i];
+  state._resumeAt = 0;
   saveQueue();
   const t = state.current;
   applyLoudnessGain(t);
-  audio.src = `/api/stream/${t.id}`;
+  audio.src = streamUrl(t);
   try { audio.volume = targetVolume(); } catch {}
+  prefetchedFor = null;
   try { await audio.play(); } catch {}
-  prefetchNext();
   // do not log a play the moment it starts: wait until it is genuinely being listened to
   state._listenTrack = t;
   state._listenLogged = false;
@@ -3888,7 +3921,8 @@ function bindMediaSession() {
   ['seekbackward', 'seekforward', 'seekto', 'skipad', 'nextslide', 'previousslide', 'seekto'].forEach(clear);
   set('play', () => audio.play().catch(() => {}));
   set('pause', () => audio.pause());
-  set('previoustrack', () => prevTrack(true));
+  // the button in the car is "back", not "previous track": restart the song you are in
+  set('previoustrack', () => prevTrack());
   set('nexttrack', () => nextTrack());
   set('stop', () => { audio.pause(); audio.currentTime = 0; });
 }
@@ -4013,6 +4047,25 @@ function prevTrack(force = false) {
   playAt(Math.max(0, state.qi - 1));
 }
 
+/* a dropped stream must resume where the listener was, not at the start of the track:
+   that is what a tunnel hiccup or a locked phone used to cost */
+function resumeStream(t) {
+  if (!t || !t.id) return;
+  state._resumeAt = audio.currentTime || 0;
+  try { audio.src = streamUrl(t, true); audio.load(); } catch {}
+  audio.play().catch(() => {});
+}
+/* if a stream sits with nothing to play for long enough, reload it once */
+let stallTimer = null;
+function armStallRecovery() {
+  if (stallTimer) return;
+  stallTimer = setTimeout(() => {
+    stallTimer = null;
+    if (!state.current || audio.paused || audio.readyState >= 3) return;
+    resumeStream(state.current);
+  }, 12000);
+}
+
 /* ============ audio events ============ */
 /* a track with no stored audio is not a playback error: say so instead of silently skipping */
 audio.addEventListener('error', async () => {
@@ -4022,10 +4075,9 @@ audio.addEventListener('error', async () => {
     state._retriedSrc = state._retriedSrc || {};
     state._retriedSrc[t.id] = true;
     try {
-      const r = await fetch(`/api/stream/${t.id}`, { method: 'HEAD' });
+      const r = await fetch(streamUrl(t), { method: 'HEAD' });
       if (r.status === 302 || r.status === 200) {
-        audio.src = `/api/stream/${t.id}?r=${Date.now()}`;
-        audio.play().catch(() => {});
+        resumeStream(t);
         return;
       }
     } catch {}
@@ -4056,7 +4108,14 @@ audio.addEventListener('error', async () => {
 
 audio.addEventListener('play', () => { setPlayIcons(true); paintRows(); if (state._failed) state._failed.clear(); });
 audio.addEventListener('pause', () => { setPlayIcons(false); paintRows(); });
-audio.addEventListener('loadedmetadata', () => { $('t-dur').textContent = fmt(audio.duration); $('np-dur').textContent = fmt(audio.duration); });
+audio.addEventListener('loadedmetadata', () => {
+  $('t-dur').textContent = fmt(audio.duration); $('np-dur').textContent = fmt(audio.duration);
+  const at = Number(state._resumeAt || 0);
+  if (at > 0.5 && Number.isFinite(audio.duration) && at < audio.duration - 1) {
+    try { audio.currentTime = at; } catch {}
+  }
+  state._resumeAt = 0;
+});
 audio.addEventListener('timeupdate', () => {
   if (!audio.duration) return;
   const pct = `${(audio.currentTime / audio.duration) * 100}%`;
@@ -4064,9 +4123,9 @@ audio.addEventListener('timeupdate', () => {
   $('t-cur').textContent = fmt(audio.currentTime); $('np-cur').textContent = fmt(audio.currentTime);
 });
 audio.addEventListener('ended', () => { setStatus('Next track'); nextTrack(); });
-audio.addEventListener('waiting', () => setStatus('Buffering'));
-audio.addEventListener('playing', () => setStatus(null));
-audio.addEventListener('stalled', () => setStatus('Reconnecting'));
+audio.addEventListener('waiting', () => { setStatus('Buffering'); armStallRecovery(); });
+audio.addEventListener('playing', () => { setStatus(null); if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; } });
+audio.addEventListener('stalled', () => { setStatus('Reconnecting'); armStallRecovery(); });
 audio.addEventListener('pause', () => { if (!audio.ended) setStatus(null); });
 audio.addEventListener('error', () => { if (state.current) $('pb-title').textContent = `error: ${state.current.title}`; });
 
@@ -4128,7 +4187,9 @@ $('toggle').onclick = togglePlay;
 $('mini-toggle').onclick = togglePlay;
 $('np-toggle').onclick = togglePlay;
 $('next').onclick = nextTrack; $('np-next').onclick = nextTrack;
-$('prev').onclick = prevTrack; $('np-prev').onclick = prevTrack;
+// handlers receive the event as an argument: passing prevTrack directly made that
+// event count as "force", so back skipped the track instead of restarting it
+$('prev').onclick = () => prevTrack(); $('np-prev').onclick = () => prevTrack();
 $('shuffle').onclick = (e) => { state.shuffle = !state.shuffle; e.currentTarget.setAttribute('aria-pressed', state.shuffle); };
 $('repeat').onclick = (e) => { state.repeat = !state.repeat; e.currentTarget.setAttribute('aria-pressed', state.repeat); };
 $('np-shuffle').onclick = () => $('shuffle').click();

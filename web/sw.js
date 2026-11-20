@@ -2,10 +2,21 @@
 // MUSICFY offline layer. Caches the app shell, library JSON and explicitly saved
 // audio so the app opens and plays from the device with no network.
 // Service workers require HTTPS (Pangolin) or localhost.
-const SHELL = 'mf-shell-v3';
+const SHELL = 'mf-shell-v4';
 const AUDIO = 'mf-audio-v2';
 const API = 'mf-api-v2';
 const AUDIO_KEYS = () => caches.open(AUDIO);
+// which track ids have an offline copy, for the UI list
+const AUDIO_IDS = new Set();
+async function indexAudio() {
+  try {
+    const c = await caches.open(AUDIO);
+    for (const r of await c.keys()) {
+      const m = r.url.match(/\/offline\/(\d+)$/);
+      if (m) AUDIO_IDS.add(Number(m[1]));
+    }
+  } catch {}
+}
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(['/', '/index.html'])).then(() => self.skipWaiting()));
@@ -16,6 +27,7 @@ self.addEventListener('activate', (e) => {
     caches.keys()
       .then((keys) => Promise.all(keys.filter((k) => ![SHELL, AUDIO, API].includes(k)).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
+      .then(() => indexAudio())
   );
 });
 
@@ -28,13 +40,13 @@ self.addEventListener('message', (e) => {
     e.waitUntil(AUDIO_KEYS().then(async (c) => {
       try {
         const r = await fetch('/api/tracks/' + d.id + '/file', { credentials: 'same-origin' });
-        if (r.ok) { await c.put(offlineKey(d.id), r.clone()); reply({ type: 'offline-set', id: d.id, on: true, bytes: Number(r.headers.get('content-length')) || 0 }); }
+        if (r.ok) { await c.put(offlineKey(d.id), r.clone()); AUDIO_IDS.add(Number(d.id)); reply({ type: 'offline-set', id: d.id, on: true, bytes: Number(r.headers.get('content-length')) || 0 }); }
         else reply({ type: 'offline-fail', id: d.id });
       } catch { reply({ type: 'offline-fail', id: d.id }); }
     }));
   }
   if (d.type === 'uncache-track' && d.id != null) {
-    e.waitUntil(AUDIO_KEYS().then((c) => c.delete(offlineKey(d.id))).then(() => reply({ type: 'offline-set', id: d.id, on: false })));
+    e.waitUntil(AUDIO_KEYS().then((c) => c.delete(offlineKey(d.id))).then(() => { AUDIO_IDS.delete(Number(d.id)); reply({ type: 'offline-set', id: d.id, on: false }); }));
   }
   if (d.type === 'list-offline') {
     e.waitUntil(AUDIO_KEYS().then(async (c) => {
@@ -44,7 +56,7 @@ self.addEventListener('message', (e) => {
     }));
   }
   if (d.type === 'clear-offline') {
-    e.waitUntil(caches.delete(AUDIO).then(() => reply({ type: 'offline-list', ids: [] })));
+    e.waitUntil(caches.delete(AUDIO).then(() => { AUDIO_IDS.clear(); reply({ type: 'offline-list', ids: [] }); }));
   }
 });
 
@@ -53,13 +65,36 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // saved audio: serve the full cached file for the stream endpoint (works offline)
-  if (url.pathname.startsWith('/api/stream/')) {
-    const id = url.pathname.split('/').pop();
+  // saved audio only. Normal streams never touch the worker: a proxied byte stream costs
+  // a copy of every byte and dies with the worker when the phone locks, which is exactly
+  // the "plays only while unlocked" failure. Saved tracks ask for this path instead.
+  if (url.pathname.startsWith('/offline-audio/')) {
+    const id = Number(url.pathname.split('/').pop());
     e.respondWith(AUDIO_KEYS().then(async (c) => {
       const hit = await c.match(offlineKey(id));
-      if (hit) return hit;
-      try { return await fetch(req); } catch { return new Response('', { status: 504 }); }
+      // not saved after all: let the server answer, range included
+      if (!hit) return fetch('/api/stream/' + id + url.search, { headers: req.headers });
+      const range = req.headers.get('range');
+      // the media element always asks for a byte range: answer it properly or seeking
+      // inside a saved track jumps back to the start
+      if (!range) return hit;
+      const m = range.match(/bytes=(\d*)-(\d*)/);
+      if (!m) return hit;
+      const buf = await hit.arrayBuffer();
+      const size = buf.byteLength;
+      const start = m[1] ? Number(m[1]) : 0;
+      const end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+      if (!(start < size) || start > end) return new Response(null, { status: 416, headers: { 'content-range': `bytes */${size}` } });
+      return new Response(buf.slice(start, end + 1), {
+        status: 206,
+        headers: {
+          'content-type': hit.headers.get('content-type') || 'audio/mpeg',
+          'accept-ranges': 'bytes',
+          'content-length': String(end - start + 1),
+          'content-range': `bytes ${start}-${end}/${size}`,
+          'cache-control': 'private, max-age=86400',
+        },
+      });
     }));
     return;
   }

@@ -118,7 +118,13 @@ A track played twice downloads itself (`settings.auto_download_plays`, 0 disable
 
 ## Playback
 
-`/api/stream/:id` serves owned files with ranges and a private one day cache, and 302 redirects stream rows to the resolved source, cached four hours (`resolveStreamUrl`). The client prefetches the next two tracks with hidden media elements, publishes Media Session metadata for car displays, and skips automatically to the next track when audio errors, after four consecutive failures.
+`/api/stream/:id` serves owned files with ranges and a private one day cache, and 302 redirects stream rows to the resolved source, cached four hours (`resolveStreamUrl`). The client prefetches one track ahead, and only after the current one has played a while with buffer of its own: two prefetches over one slow uplink starve the track that is playing, which is what a car on mobile data actually hears.
+
+Saved tracks are requested as `/offline-audio/:id` and answered by the service worker from the audio cache, with a real 206 for the range the media element asks for. Normal streams never go through the worker: a proxied byte stream costs a copy of every byte and dies with the worker when the phone locks, which is the "plays only while unlocked" failure. The server answers `/offline-audio/:id` too, so a client without a worker still plays.
+
+Media Session metadata goes to car displays, and `previoustrack` restarts the current track first (past three seconds), then steps back on a second press.
+
+Library JSON is gzipped (`/api/tracks` is 870 KB raw, 142 KB compressed). On a phone that is the difference between a usable app and a slow one.
 
 ## Endpoints
 
