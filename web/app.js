@@ -2755,18 +2755,11 @@ async function renderSearch() {
             <div class="tartist"><span class="alink">${esc(s.artist || '')}</span></div>
             <div class="talbum">${esc(s.album || '')}</div>
             <div class="tadded"></div><div class="tdur">${s.year || ''}</div>
-            <button class="tmore" title="Find audio for this track">${IC.download}</button>`;
-          row.querySelector('.tmore').onclick = async (e) => {
-            e.stopPropagation();
-            row.querySelector('.tmore').classList.add('busy');
-            try {
-              const r = await api('/api/ladder/download', { method: 'POST', headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ rung: 'ytmusic', title: s.title, artist: s.artist, duration: s.duration }) });
-              if (r.job) { toast(`Fetching ${s.title}`.slice(0, 60), 4000); openDownloads(); }
-              else toast('No source found', 4000);
-            } catch { toast('Could not start download', 4000); }
-            row.querySelector('.tmore').classList.remove('busy');
-          };
+            <button class="tmore" title="Preview before downloading">${IC.play}</button>`;
+          const preview = (e) => { if (e) e.stopPropagation(); toggleSuggestionPreview(s, row); };
+          row.style.cursor = 'pointer';
+          row.onclick = (e) => { if (!e.target.closest('button')) preview(e); };
+          row.querySelector('.tmore').onclick = preview;
           host.appendChild(row);
         });
         box.appendChild(sec);
