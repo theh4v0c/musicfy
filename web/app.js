@@ -2107,17 +2107,19 @@ async function renderAskAi() {
         const a = await api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: text }), nocache: true });
         stateEl.classList.remove('thinking');
         stateEl.textContent = `${String(a.plan.intent).replace(/_/g, ' ')} · ${a.source === 'llm' ? 'planned by model' : 'planned locally'}`;
-        const said = document.createElement('div');
-        said.className = 'ai-said';
-        said.textContent = a.action ? 'Here is what I would do. Nothing is created or downloaded until you confirm.' : (a.spoken || '');
-        out.appendChild(said);
+        if (!a.action) {
+          const said = document.createElement('div');
+          said.className = 'ai-said';
+          said.textContent = a.spoken || '';
+          out.appendChild(said);
+        }
         if (a.action) {
-          stateEl.textContent = 'Review the proposal';
+          stateEl.textContent = '';
           const card = document.createElement('div');
           card.className = 'ask-action';
           const head = document.createElement('div');
           head.className = 'ask-action-head';
-          head.innerHTML = `<div><div class="ask-action-kicker">PROPOSAL</div><b>${esc(a.action.title)}</b></div><span>${esc(a.action.summary || '')}</span>`;
+          head.innerHTML = `<div><div class="ask-action-kicker">ON DECK</div><b>${esc(a.action.title)}</b></div><span>${esc(a.action.summary || '')}</span>`;
           card.appendChild(head);
           const meta = document.createElement('div');
           meta.className = 'ask-action-meta';
@@ -2152,6 +2154,10 @@ async function renderAskAi() {
             list.appendChild(more);
           }
           card.appendChild(list);
+          const safety = document.createElement('div');
+          safety.className = 'ask-action-safety';
+          safety.textContent = 'Nothing is saved until you pick one.';
+          card.appendChild(safety);
           const acts = document.createElement('div');
           acts.className = 'ask-action-btns';
           const missing = tracks.filter((t) => !t.owned).length;
@@ -2164,7 +2170,7 @@ async function renderAskAi() {
               if (r.spoken) toast(r.spoken, 5000);
               if (r.data && r.data.playlist) { afterWrite(); await loadPlaylists(); openPlaylist(r.data.playlist.id, false); }
               if (r.data && r.data.queued) openDownloads();
-            } catch { btn.disabled = false; toast('That proposal expired, ask again', 5000); }
+            } catch { btn.disabled = false; toast('That draft went stale, ask again', 5000); }
           };
           if (a.action.kind === 'playlist' && missing > 0) {
             const both = document.createElement('button');

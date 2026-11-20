@@ -103,8 +103,8 @@ function reason(ctx, picked) {
   if (ctx.style) bits.push(ctx.style.label);
   if (ctx.mood) bits.push(ctx.mood.label);
   if (ctx.referenceProfile) bits.push(`follows ${ctx.referenceProfile.artist}: ${ctx.referenceProfile.avgBpm} BPM, ${ctx.referenceProfile.family || 'mixed family'}`);
-  else if (ctx.reference) bits.push(`${ctx.reference} is not in the library, so this follows the request instead`);
-  if (picked.length < ctx.count) bits.push(`${ctx.count - picked.length} short: the library does not have more that fit`);
+  else if (ctx.reference) bits.push(`You do not have ${ctx.reference} yet, so this follows the request instead`);
+  if (picked.length < ctx.count) bits.push(`${picked.length} in your library fit`);
   return bits.join('. ') + '.';
 }
 

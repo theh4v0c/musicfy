@@ -10,7 +10,7 @@ const INTENTS = ['build_playlist', 'search_tracks', 'download_album', 'download_
 
 function planLocally(text) {
   const t = String(text || '').toLowerCase();
-  const countMatch = t.match(/(\d{1,3})\s*(?:songs?|tracks?)/);
+  const countMatch = t.match(/(\d{1,3})\s*(?:[a-z-]+\s+){0,4}(?:songs?|tracks?|items?)/i);
   const count = countMatch ? Math.min(Number(countMatch[1]), 100) : 20;
   const wantsPlaylist = /\b(playlist|set|mix|selection)\b/.test(t) || /\bcreate\b/.test(t);
   const wantsDownload = /\bdownload\b/.test(t);
@@ -187,8 +187,9 @@ function dupOf(artist, title) {
 
 function listName(query) {
   const n = String(query || '')
-    .replace(/\b(?:of\s+)?\d+\s*(?:tracks?|songs?|items?)\b/gi, ' ')
-    .replace(/\b(create|make|build|please|a|an|the|playlist|of|with|for|me)\b/gi, ' ')
+    .replace(/[^\w\s'-]/g, ' ')
+    .replace(/\b\d+\b/g, ' ')
+    .replace(/\b(create|make|build|please|a|an|the|playlist|of|with|for|me|tracks?|songs?|items?)\b/gi, ' ')
     .replace(/\s+/g, ' ').trim();
   if (!n) return 'Made by request';
   return (n.charAt(0).toUpperCase() + n.slice(1)).slice(0, 60);
@@ -241,9 +242,13 @@ async function propose(db, plan) {
     const picked = mood.select(db, q, count);
     const moodNames = { question: 'Question everything', feel: 'Emotional', euphoric: 'Euphoric' };
     const styleNames = { burningman: 'Burning Man', indiedance: 'Indie dance', downtempo: 'Downtempo', techno: 'Techno', house: 'House', dance: 'Dance floor' };
-    const auto = picked.ctx.mood ? moodNames[picked.ctx.mood.id]
-      : picked.ctx.style ? styleNames[picked.ctx.style.id]
-      : listName(q);
+    const textName = listName(q);
+    let auto;
+    if (picked.ctx.mood) auto = moodNames[picked.ctx.mood.id];
+    else if (picked.ctx.style) {
+      const styleName = styleNames[picked.ctx.style.id];
+      auto = textName.length > styleName.length ? textName : styleName;
+    } else auto = textName;
     const name = plan.args.name ? String(plan.args.name).slice(0, 60) : String(auto || 'Made by request').slice(0, 60);
 
     const onlyLocal = /\b(only|just|from)\s+(my|the)\s+library\b|\bno new\b/i.test(q);
@@ -269,12 +274,12 @@ async function propose(db, plan) {
     const missing = tracks.filter((t) => !t.owned).length;
     const played = local.filter((t) => Number(t.plays) > 0).length;
     const reasonBits = [picked.reason];
-    if (local.length) reasonBits.push(`${played} of ${local.length} local picks are tracks you already play.`);
-    reasonBits.push(online.length ? `${online.length} new from artists near your rotation.` : (targetOnline ? 'No online matches this time.' : 'From your library only.'));
+    if (local.length) reasonBits.push(`${played} of ${local.length} you already play.`);
+    reasonBits.push(online.length ? `${online.length} new from artists around your rotation.` : (targetOnline ? 'Nothing new turned up this time.' : 'All from your library.'));
     return {
       kind: 'playlist', name, trackIds: local.map((t) => t.id), online, tracks,
       download: !!plan.args.download,
-      title: `Create "${name}"`,
+      title: name,
       reason: reasonBits.join(' '),
       summary: `${tracks.length} track${tracks.length === 1 ? '' : 's'} · ${tracks.length - missing} local · ${missing} new`,
     };
