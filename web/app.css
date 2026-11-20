@@ -133,6 +133,12 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
   background: linear-gradient(180deg, #fff 20%, rgba(255,255,255,.58)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .mtile-l { font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--fg-mute); }
 .mtile-s { font-size: 11.5px; color: var(--fg-soft); margin-top: 3px; }
+@media (max-width: 1120px) {
+  .mast-main { flex-direction: column; align-items: stretch; gap: 16px; }
+  .mast-side { width: auto; flex-direction: row; align-items: center; }
+  .mast-side .flow-key { flex: 1; }
+  .mast-side .mast-resume { flex: none; max-width: 46%; }
+}
 @media (max-width: 920px) {
   .mast { padding: 15px 16px 0; border-radius: 16px; }
   .mast-main { flex-direction: column; align-items: stretch; gap: 16px; margin: 14px 0 16px; }
