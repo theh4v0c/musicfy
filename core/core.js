@@ -2395,6 +2395,9 @@ const server = http.createServer(async (req, res) => {
         }
         const proposal = await agent.propose(db, plan);
         if (!proposal) {
+          if (plan.intent === 'build_playlist') {
+            return json(res, 200, { question: q, plan, source, spoken: 'I could not find tracks for that, in the library or online.', data: {} });
+          }
           const result = await agent.execute(db, plan, { enqueueTrackDownload });
           return json(res, 200, { question: q, plan, source, ...result });
         }

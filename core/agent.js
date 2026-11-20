@@ -189,7 +189,7 @@ function listName(query) {
   const n = String(query || '')
     .replace(/[^\w\s'-]/g, ' ')
     .replace(/\b\d+\b/g, ' ')
-    .replace(/\b(create|make|build|please|a|an|the|playlist|of|with|for|me|tracks?|songs?|items?)\b/gi, ' ')
+    .replace(/\b(create|make|build|please|a|an|the|playlist|of|with|for|me|tracks?|songs?|items?|top|rated|best|rating)\b/gi, ' ')
     .replace(/\s+/g, ' ').trim();
   if (!n) return 'Made by request';
   return (n.charAt(0).toUpperCase() + n.slice(1)).slice(0, 60);
@@ -201,16 +201,41 @@ function ownedIdFor(db, dupKey) {
 }
 
 // related artists of the tracks we picked, so online candidates follow taste, not a keyword
-async function onlineFill(db, localPicks, need) {
+async function onlineFill(db, localPicks, need, queryText) {
   if (need <= 0) return [];
   let seeds = [...new Set(localPicks.map((t) => t.artist).filter(Boolean))].slice(0, 3);
+  let direct = null;
+  if (!seeds.length && queryText) {
+    direct = await deezer.artistSearch(queryText).catch(() => null);
+    if (direct) seeds = [direct.name];
+  }
   if (!seeds.length) {
     seeds = db.prepare(`SELECT artist FROM tracks WHERE artist IS NOT NULL AND artist != ''
       GROUP BY artist ORDER BY COUNT(*) DESC LIMIT 3`).all().map((r) => r.artist);
   }
   const inLib = new Set(db.prepare('SELECT dup_key FROM tracks').all().map((r) => r.dup_key));
   const seen = new Set();
+  const seenTitle = new Set();
   const out = [];
+  const add = (t) => {
+    if (!t || !t.title || !t.artist || !t.duration || t.duration < 90) return;
+    const key = dupOf(t.artist.name, t.title);
+    if (inLib.has(key) || seen.has(key)) return;
+    const titleKey = String(t.title).toLowerCase().replace(/\(.*?\)|\[.*?\]/g, ' ')
+      .replace(/\b(remaster(?:ed)?|version|edit)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+    if (seenTitle.has(titleKey)) return;
+    seenTitle.add(titleKey);
+    seen.add(key);
+    out.push({
+      title: t.title, artist: t.artist.name, album: (t.album && t.album.title) || '',
+      duration: t.duration, key, source: 'online', owned: false,
+      cover: (t.album && t.album.cover_medium) || null, preview: t.preview || null,
+    });
+  };
+  if (direct) {
+    const top = await deezer.artistTop(direct.id, Math.max(need, 5)).catch(() => ({ data: [] }));
+    for (const t of (top.data || [])) { if (out.length >= need) break; add(t); }
+  }
   for (const seed of seeds) {
     if (out.length >= need) break;
     const artist = await deezer.artistSearch(seed).catch(() => null);
@@ -221,14 +246,7 @@ async function onlineFill(db, localPicks, need) {
       const top = await deezer.artistTop(r.id, 5).catch(() => ({ data: [] }));
       for (const t of (top.data || [])) {
         if (out.length >= need) break;
-        if (!t.title || !t.artist || !t.duration || t.duration < 90) continue;
-        const key = dupOf(t.artist.name, t.title);
-        if (inLib.has(key) || seen.has(key)) continue;
-        seen.add(key);
-        out.push({
-          title: t.title, artist: t.artist.name, album: (t.album && t.album.title) || '',
-          duration: t.duration, key, source: 'online', owned: false, cover: (t.album && t.album.cover_medium) || null, preview: t.preview || null,
-        });
+        add(t);
       }
     }
   }
@@ -257,7 +275,7 @@ async function propose(db, plan) {
     let local = picked.tracks;
     const targetOnline = onlyLocal ? 0 : Math.max(Math.round(count * discovery), count - local.length);
     if (targetOnline > 0 && local.length > count - targetOnline) local = local.slice(0, Math.max(0, count - targetOnline));
-    const online = await onlineFill(db, local, Math.min(targetOnline, Math.max(0, count - local.length)));
+    const online = await onlineFill(db, local, Math.min(targetOnline, Math.max(0, count - local.length)), picked.ctx.text.join(' '));
     // if the network gave us less than we hoped, top up from the rest of the local picks
     if (local.length + online.length < count) {
       const rest = picked.tracks.filter((t) => !local.includes(t)).slice(0, count - local.length - online.length);
@@ -276,12 +294,13 @@ async function propose(db, plan) {
     const played = local.filter((t) => Number(t.plays) > 0).length;
     const reasonBits = [picked.reason];
     if (local.length) reasonBits.push(`${played} of ${local.length} you already play.`);
-    reasonBits.push(online.length ? `${online.length} new from artists around your rotation.` : (targetOnline ? 'Nothing new turned up this time.' : 'All from your library.'));
+    const sourceName = picked.ctx.text.join(' ');
+    reasonBits.push(online.length ? (local.length ? `${online.length} new from artists around your rotation.` : `${online.length} new from ${sourceName || 'the name in your request'}.`) : (targetOnline ? 'Nothing new turned up this time.' : 'All from your library.'));
     return {
       kind: 'playlist', name, trackIds: local.map((t) => t.id), online, tracks,
       download: !!plan.args.download,
       title: name,
-      reason: reasonBits.join(' '),
+      reason: reasonBits.join(' ').replace(/^[a-z]/, (c) => c.toUpperCase()),
       summary: `${tracks.length} track${tracks.length === 1 ? '' : 's'} · ${tracks.length - missing} local · ${missing} new`,
     };
   }

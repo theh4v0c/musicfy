@@ -2130,7 +2130,7 @@ async function renderAskAi() {
     stateEl.textContent = 'Searching';
     stateEl.classList.add('thinking');
     out.innerHTML = '';
-    const agentish = /\b(create|make|build|download|find|search|show|list|how many)\b/i.test(text);
+    const agentish = /\b(create|make|build|download|find|search|show|list|playlist|how many)\b/i.test(text);
     try {
       if (agentish) {
         const a = await api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: text }), nocache: true });
@@ -2320,10 +2320,20 @@ async function renderAskAi() {
       if (f.genre) bits.push(f.genre);
       if (f.artist) bits.push(f.artist);
       if (f.text) bits.push(`“${f.text}”`);
-      stateEl.textContent = d.count
-        ? `${d.count} track${d.count === 1 ? '' : 's'}${bits.length ? ' · ' + bits.join(' · ') : ''}`
-        : 'No tracks matched — try “tracks in Dm between 120 and 130 bpm”.';
-      if (!d.count) return;
+      if (!d.count) {
+        const term = (f.text || []).join(' ').trim();
+        const label = term.replace(/\b\w/g, (c) => c.toUpperCase());
+        stateEl.textContent = term ? `No ${label} in your library` : 'No tracks matched';
+        if (term) {
+          const find = document.createElement('button');
+          find.className = 'btn btn-ghost';
+          find.textContent = `Find ${label} online`;
+          find.onclick = () => { box.value = `create a playlist with 3 ${term} tracks`; run(box.value); };
+          out.appendChild(find);
+        }
+        return;
+      }
+      stateEl.textContent = `${d.count} track${d.count === 1 ? '' : 's'}${bits.length ? ' · ' + bits.join(' · ') : ''}`;
       const wrap = document.createElement('div');
       const tracks = d.results.map((r) => ({ ...r, rung: r.owned ? 'local' : null }));
       tracks.forEach((t, i) => { registerRow(t); wrap.appendChild(trow(t, i, tracks)); });
@@ -2484,7 +2494,7 @@ async function renderSearch() {
   const drawAsk = async (text) => {
     res.innerHTML = `<div class="ladder-state">Thinking about "${esc(text)}"...</div>`;
     // verbs like create, find, download go to the agent; questions go to the query engine
-    const agentish = /\b(create|make|build|download|find|search|show|list|how many)\b/i.test(text);
+    const agentish = /\b(create|make|build|download|find|search|show|list|playlist|how many)\b/i.test(text);
     if (agentish) {
       let a;
       try {

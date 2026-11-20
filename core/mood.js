@@ -2,6 +2,8 @@
 // Turns a plain request into a scored selection from the local library.
 // No model: style and mood are keyword presets, the ranking is numbers we already store.
 
+const queryEngine = require('./query');
+
 const STYLES = [
   { id: 'burningman', re: /\b(burning\s*man|playa|desert)\b/i, families: ['electronic', 'house', 'techno', 'ambient'], bpm: { min: 95, max: 128 }, label: 'Burning Man: 95-128 BPM, electronic to downtempo' },
   { id: 'indiedance', re: /\b(indie[ -]?dance)\b/i, families: ['electronic', 'house'], bpm: { min: 110, max: 124 }, label: 'indie dance: 110-124 BPM' },
@@ -100,11 +102,13 @@ function score(t, ctx) {
 
 function reason(ctx, picked) {
   const bits = [];
+  if (ctx.text && ctx.text.length && picked.length) bits.push(`${ctx.text.join(' ')} from your library`);
   if (ctx.style) bits.push(ctx.style.label);
   if (ctx.mood) bits.push(ctx.mood.label);
   if (ctx.referenceProfile) bits.push(`follows ${ctx.referenceProfile.artist}: ${ctx.referenceProfile.avgBpm} BPM, ${ctx.referenceProfile.family || 'mixed family'}`);
   else if (ctx.reference) bits.push(`You do not have ${ctx.reference} yet, so this follows the request instead`);
-  if (picked.length < ctx.count) bits.push(`${picked.length} in your library fit`);
+  if (!picked.length) bits.push('nothing in your library matched');
+  else if (picked.length < ctx.count) bits.push(`${picked.length} in your library fit`);
   return bits.join('. ') + '.';
 }
 
@@ -112,14 +116,28 @@ function select(db, query, count) {
   const ctx = detect(query);
   ctx.count = Math.max(1, Math.min(Number(count) || 20, 100));
   ctx.referenceProfile = ctx.reference ? artistProfile(db, ctx.reference) : null;
+  const parsed = queryEngine.parse(query, db);
+  ctx.text = parsed.text || [];
+  ctx.genre = parsed.genre || null;
+  ctx.family = parsed.family || null;
 
-  const rows = db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.bpm, t.key, t.key_scale, t.energy,
+  let rows = db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.bpm, t.key, t.key_scale, t.energy,
       t.genre, t.genre_family,
       (SELECT COUNT(*) FROM files f WHERE f.track_id=t.id AND f.tier='owned') owned,
       (SELECT COUNT(*) FROM listens l WHERE l.track_id=t.id) plays,
       (SELECT COUNT(*) FROM likes lk WHERE lk.track_id=t.id) liked,
       (SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.track_id=t.id) npl
     FROM tracks t`).all();
+
+  if (ctx.genre) rows = rows.filter((t) => String(t.genre || '').toLowerCase() === String(ctx.genre).toLowerCase());
+  if (ctx.family) rows = rows.filter((t) => String(t.genre_family || '').toLowerCase() === String(ctx.family).toLowerCase());
+  if (!ctx.style && !ctx.mood && !ctx.reference && ctx.text.length) {
+    const words = ctx.text.map((w) => w.toLowerCase());
+    rows = rows.filter((t) => {
+      const hay = `${t.title || ''} ${t.artist || ''} ${t.album || ''}`.toLowerCase();
+      return words.some((w) => hay.includes(w));
+    });
+  }
 
   const excluded = ctx.referenceProfile ? ctx.referenceProfile.artist.toLowerCase() : null;
   const scored = rows
