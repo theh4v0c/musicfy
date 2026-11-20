@@ -1506,7 +1506,7 @@ async function renderDjExport() {
     <div class="prep-hero">
       <div class="prep-kicker">SET PREPARATION</div>
       <div class="prep-title">Prep</div>
-      <p class="prep-sub">Analyze for BPM and beat grid, then export a crate that carries the audio and the cues.</p>
+      <p class="prep-sub">Prep a crate for BPM, key and beat grid. Export copies the audio and writes cues from what is already prepped; it does not analyze on the way out.</p>
       <div class="prep-meter"><div class="prep-meter-bar"><i id="prep-fill" style="width:0%"></i></div><span id="prep-cov">…</span></div>
       <div class="prep-actions">
         <button class="btn btn-primary" id="dj-analyze">Analyze unanalyzed</button>
@@ -1556,9 +1556,16 @@ async function renderDjExport() {
         <button class="crate-btn" data-tr title="Download a ZIP with the audio + Traktor NML">Traktor</button>
         <button class="crate-btn" data-usb title="ZIP of the audio under Contents/ for a CDJ USB">USB</button>
       </div>`;
-    card.querySelector('[data-rb]').onclick = (e) => { e.stopPropagation(); toast('Zipping the crate…', 6000); window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.zip?format=rekordbox`; };
-    card.querySelector('[data-tr]').onclick = (e) => { e.stopPropagation(); toast('Zipping the crate…', 6000); window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.zip?format=traktor`; };
-    card.querySelector('[data-usb]').onclick = (e) => { e.stopPropagation(); toast('Zipping for the CDJ…', 6000); window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/pioneer.zip`; };
+    const missingPrep = Math.max(0, (p.owned || 0) - (p.prepped || 0));
+    const exportCrate = (fmt) => {
+      if (missingPrep && !confirm(`${missingPrep} track${missingPrep === 1 ? '' : 's'} in "${p.name}" have no beat grid. Cues will be missing. Export anyway?`)) return;
+      toast(fmt === 'usb' ? 'Zipping for the CDJ…' : 'Zipping the crate…', 6000);
+      if (fmt === 'usb') window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/pioneer.zip`;
+      else window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.zip?format=${fmt}`;
+    };
+    card.querySelector('[data-rb]').onclick = (e) => { e.stopPropagation(); exportCrate('rekordbox'); };
+    card.querySelector('[data-tr]').onclick = (e) => { e.stopPropagation(); exportCrate('traktor'); };
+    card.querySelector('[data-usb]').onclick = (e) => { e.stopPropagation(); exportCrate('usb'); };
     const abt = card.querySelector('.crate-analyze');
     if (abt) abt.onclick = async (e) => {
       e.stopPropagation();
