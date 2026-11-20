@@ -3073,6 +3073,7 @@ const server = http.createServer(async (req, res) => {
     // an album page and its rows share one cover instead of a video thumbnail per track.
     if (u.pathname === '/api/covers/albums' && req.method === 'POST') {
       const limit = Math.min(Number(u.searchParams.get('limit') || 20), 100);
+      const offset = Math.max(0, Number(u.searchParams.get('offset') || 0));
       const force = u.searchParams.get('force') === '1';
       const rows = db.prepare(`SELECT id, album, artist, COALESCE(has_art,0) has_art FROM tracks
         WHERE album IS NOT NULL AND album != '' ORDER BY id`).all();
@@ -3085,10 +3086,10 @@ const server = http.createServer(async (req, res) => {
         g.ids.push(r.id);
         if (!r.has_art) g.missing.push(r.id);
       }
-      const work = [...groups.values()]
+      const allWork = [...groups.values()]
         .filter((g) => g.ids.length > 1)
-        .sort((a, b) => b.missing.length - a.missing.length || b.ids.length - a.ids.length)
-        .slice(0, limit);
+        .sort((a, b) => b.missing.length - a.missing.length || b.ids.length - a.ids.length);
+      const work = allWork.slice(offset, offset + limit);
       let albums = 0, tracks = 0;
       for (const g of work) {
         const targets = force ? g.ids : g.missing;
@@ -3106,7 +3107,8 @@ const server = http.createServer(async (req, res) => {
         }
         albums += 1;
       }
-      return json(res, 200, { ok: true, albums, tracks, remaining: db.prepare('SELECT COUNT(*) c FROM tracks WHERE COALESCE(has_art,0)=0').get().c });
+      const nextOffset = allWork.length > offset + work.length ? offset + work.length : null;
+      return json(res, 200, { ok: true, albums, tracks, offset, next_offset: nextOffset, remaining: db.prepare('SELECT COUNT(*) c FROM tracks WHERE COALESCE(has_art,0)=0').get().c });
     }
 
     // rung health: what is actually working right now

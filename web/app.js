@@ -1711,8 +1711,10 @@ async function renderSongs(push = true) {
         (async () => {
           let albums = 0, tracks = 0;
           try {
-            const r = await api('/api/covers/albums?force=1&limit=25', { method: 'POST' });
+            const offset = state.coverOffset || 0;
+            const r = await api(`/api/covers/albums?force=1&limit=25&offset=${offset}`, { method: 'POST' });
             albums = r.albums || 0; tracks = r.tracks || 0;
+            state.coverOffset = r.next_offset || 0;
           } catch {}
           let singles = 0;
           try { const s = await api('/api/covers/fill?limit=40', { method: 'POST' }); singles = s.found || 0; } catch {}
