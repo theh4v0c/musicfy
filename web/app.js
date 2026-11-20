@@ -3657,10 +3657,14 @@ async function renderDownloads() {
   const items = all.slice(0, 120);
   const lib = d.library || { total: 0, with_audio: 0, missing: 0 };
   const pct = lib.total ? Math.round((lib.with_audio / lib.total) * 100) : 0;
+  const queueLine = [
+    lib.catalogue ? `${lib.catalogue} catalogue-only` : '',
+    `${d.active} running`,
+    `${d.queued} queued`,
+  ].filter(Boolean).map((x) => `<span>${x}</span>`).join('<span class="dl-dot">·</span>');
   host.innerHTML = `<div class="dl-summary">
       <span class="dl-lib">${lib.with_audio} of ${lib.total} tracks have audio (${pct}%)</span>
-      ${lib.catalogue ? `<span>·</span><span>${lib.catalogue} catalogue-only</span>` : ''}
-      <span>·</span><span>${d.active} running</span><span>·</span><span>${d.queued} queued</span>${d.failed ? `<span>·</span><span class="warn-txt">${d.failed} failed</span>` : ''}
+      <span class="dl-sub">${queueLine}${d.failed ? `<span class="dl-dot">·</span><span class="warn-txt">${d.failed} failed</span>` : ''}</span>
     </div>
     <div class="dl-libbar"><i style="width:${pct}%"></i></div>
     <div class="dl-tools">
@@ -3668,19 +3672,26 @@ async function renderDownloads() {
       ${(d.active + d.queued) ? `<button class="dl-act" id="dl-cancel-all">Cancel all (${d.active + d.queued})</button>` : ''}
       ${lib.missing && !(d.active + d.queued) ? `<button class="dl-act" id="dl-fill">Fill ${lib.missing} missing track${lib.missing === 1 ? '' : 's'}</button>` : ''}
       ${d.failed ? `<button class="dl-act" id="dl-clear-failed">Dismiss failed (${d.failed})</button>` : ''}
-    </div>` + (items.length ? items.map((i) => `
+    </div>` + (items.length ? items.map((i) => {
+      const label = i.state === 'running' ? `${i.progress}%`
+        : i.state === 'queued' ? 'waiting'
+        : i.state === 'unavailable' ? 'no source'
+        : i.state === 'error' ? 'failed'
+        : i.state;
+      return `
       <div class="dl-row" data-job="${i.id}">
         <div class="dl-line">
           <span class="dl-title">${esc(i.title || 'track')}</span>
-          <span class="dl-pct">${i.state === 'running' ? i.progress + '%' : i.state}</span>
+          <span class="dl-pct${i.state === 'unavailable' || i.state === 'error' ? ' warn' : ''}">${esc(label)}</span>
         </div>
-        <div class="dl-bar"><i style="width:${i.state === 'done' ? 100 : Math.max(2, i.progress || 0)}%"></i></div>
-        ${i.detail && i.state === 'error' ? `<div class="dl-err">${esc(i.detail.slice(0, 60))}</div>` : ''}
+        ${i.state === 'unavailable' || i.state === 'error' ? '' : `<div class="dl-bar"><i style="width:${i.state === 'done' ? 100 : Math.max(2, i.progress || 0)}%"></i></div>`}
+        ${i.detail && (i.state === 'error' || i.state === 'unavailable') ? `<div class="dl-err">${esc(i.detail.slice(0, 70))}</div>` : ''}
         <div class="dl-actions">
-          ${i.state === 'error' ? `<button class="dl-act" data-retry="${i.id}">Retry</button>` : ''}
+          ${i.state === 'error' || i.state === 'unavailable' ? `<button class="dl-act" data-retry="${i.id}">Retry</button>` : ''}
           ${i.state === 'running' || i.state === 'queued' ? `<button class="dl-act" data-cancel="${i.id}">Cancel</button>` : ''}
         </div>
-      </div>`).join('') : `<div class="q-empty">Nothing in the queue.</div>`);
+      </div>`;
+    }).join('') : `<div class="q-empty">Nothing in the queue.</div>`);
 
   host.querySelectorAll('[data-retry]').forEach((b) => b.onclick = async (e) => {
     e.stopPropagation();
