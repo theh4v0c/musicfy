@@ -10,7 +10,7 @@
 <title>MUSICFY</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="/app.css?v=237">
+<link rel="stylesheet" href="/app.css?v=238">
 </head>
 <body>
 <div id="app">
@@ -86,7 +86,7 @@
       <div class="pb-meta">
         <div class="pb-title" id="pb-title"></div>
         <div class="pb-artist" id="pb-artist"></div>
-        <div class="pb-status" id="pb-status" hidden></div>
+        <div class="pb-status" id="pb-status" role="status" aria-live="polite" hidden></div>
       </div>
       <button class="pb-like" id="pb-like" title="Like">&#9825;</button>
       <button class="pb-menu icon-btn" id="pb-menu" title="Track options" aria-label="Track options">
@@ -197,6 +197,6 @@
 
 </div>
 <audio id="audio" preload="none"></audio>
-<script src="/app.js?v=237"></script>
+<script src="/app.js?v=238"></script>
 </body>
 </html>

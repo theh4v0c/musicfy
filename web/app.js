@@ -3122,7 +3122,8 @@ function setStatus(text) {
   // dedicated element only: the artist line is not ours to rewrite
   const el = document.getElementById('pb-status');
   if (!el) return;
-  el.textContent = text || '';
+  // the animated dot carries the movement; the text stays still and quiet
+  el.textContent = String(text || '').replace(/\.{2,}$/, '');
   el.hidden = !text;
 }
 
@@ -3854,9 +3855,9 @@ audio.addEventListener('timeupdate', () => {
   $('t-cur').textContent = fmt(audio.currentTime); $('np-cur').textContent = fmt(audio.currentTime);
 });
 audio.addEventListener('ended', () => { setStatus('Next track'); nextTrack(); });
-audio.addEventListener('waiting', () => setStatus('Buffering...'));
+audio.addEventListener('waiting', () => setStatus('Buffering'));
 audio.addEventListener('playing', () => setStatus(null));
-audio.addEventListener('stalled', () => setStatus('Reconnecting...'));
+audio.addEventListener('stalled', () => setStatus('Reconnecting'));
 audio.addEventListener('pause', () => { if (!audio.ended) setStatus(null); });
 audio.addEventListener('error', () => { if (state.current) $('pb-title').textContent = `error: ${state.current.title}`; });
 
