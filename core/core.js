@@ -47,8 +47,25 @@ try { db.exec('ALTER TABLE jobs ADD COLUMN updated_at INTEGER'); } catch {}
 // repair: millisecond timestamps written into seconds columns (rendered as year 58853)
 try { db.prepare('UPDATE tracks SET added_at=CAST(added_at/1000 AS INTEGER) WHERE added_at > 100000000000').run(); } catch {}
 try { db.prepare('UPDATE tracks SET updated_at=CAST(updated_at/1000 AS INTEGER) WHERE updated_at > 100000000000').run(); } catch {}
-db.prepare("UPDATE jobs SET state='error', detail='interrupted by restart', finished_at=? WHERE state='running'").run(Math.floor(Date.now() / 1000));
+// a restart should not kill a queue: park running jobs, then requeue their tracks
+const interrupted = db.prepare("SELECT payload FROM jobs WHERE state IN ('running','queued')").all();
+db.prepare("UPDATE jobs SET state='skipped', detail='interrupted by restart, requeued', finished_at=? WHERE state IN ('running','queued')").run(Math.floor(Date.now() / 1000));
 db.prepare("UPDATE jobs SET state='skipped' WHERE state='error' AND detail IN ('requeued','already owned','retried')").run();
+setTimeout(() => {
+  const seen = new Set();
+  for (const j of interrupted) {
+    try {
+      const p = JSON.parse(j.payload || '{}');
+      if (!p.trackId || seen.has(p.trackId)) continue;
+      seen.add(p.trackId);
+      const t = db.prepare('SELECT id,title,artist,duration FROM tracks WHERE id=?').get(p.trackId);
+      if (!t) continue;
+      const owned = db.prepare("SELECT id FROM files WHERE track_id=? AND tier='owned' LIMIT 1").get(t.id);
+      if (!owned) enqueueTrackDownload(t);
+    } catch {}
+  }
+  if (seen.size) console.log('[downloads] requeued', seen.size, 'interrupted job(s)');
+}, 5000);
 
 // one row per artist + title: album differences must not create twins
 try { db.exec('ALTER TABLE tracks ADD COLUMN dup_key TEXT'); } catch {}
@@ -993,7 +1010,7 @@ function startLadderDownload(jobId, b, onDone) {
       const declared = Number(b.duration) || Number(db.prepare('SELECT duration FROM tracks WHERE id=?').get(tid)?.duration) || 0;
       // a YouTube "Official Video", Live clip, promo or DJ-mix cut is not the track
       const sourceName = String(files[0] || '');
-      const badSource = /\b(official (video|music video)|lyric video|visuali[sz]er|live|promo|teaser|trailer|interview|reaction|karaoke|tutorial)\b/i.test(sourceName) || /\(mixed\)/i.test(sourceName);
+      const badSource = /\b(official (video|music video)|lyric video|visuali[sz]er|live|promo|teaser|trailer|interview|reaction|karaoke|tutorial|backing track)\b|\(cover\)|\(tabs?\)|cover version|cover of/i.test(sourceName) || /\(mixed\)/i.test(sourceName);
       if (badSource && b.trackId && !b.retried) {
         try { fs.rmSync(dest, { force: true }); } catch {}
         try {
