@@ -126,6 +126,12 @@ Media Session metadata goes to car displays, and `previoustrack` restarts the cu
 
 Library JSON is gzipped (`/api/tracks` is 870 KB raw, 142 KB compressed). On a phone that is the difference between a usable app and a slow one.
 
+## Format compatibility
+
+Rekordbox and Traktor both open `.mp3`, `.m4a` (AAC), `.wav`, `.aiff` and `.flac`, so the exporter passes them through untouched. Anything else — webm, ogg, opus, wma, an mp4 container — is unplayable in both and is converted by `core/transcode.js`: AAC 256k in an m4a by default (`transcode_format` setting), MP3 320k on request, and AAC that only needs a new container is copied, never re-encoded. A lossy source is never inflated past its own bitrate. The original file is replaced and the row is repointed, so the library, the playlists and the export all see the same track.
+
+`GET /api/maintenance/transcode` reports the count, `POST` runs them one at a time in the background (ffmpeg competes with streaming and analysis on a Pi). Prep shows a "Make N playable" button whenever the count is above zero.
+
 ## Endpoints
 
 Library: `GET/POST /api/playlists`, `GET/PATCH/DELETE /api/playlists/:id`, `POST /api/playlists/:id/tracks`, `DELETE /api/playlists/:id/tracks/:trackId`, `GET /api/playlists/:id/export.m3u`, `GET /api/playlists/:id/zip`, `POST /api/playlists/:id/download`, `GET/POST/DELETE /api/tracks`, `POST /api/tracks/:id/download`, `GET /api/tracks/:id/file`, `POST /api/tracks/:id/cover`, `GET /api/cover/:id`, `GET /api/group/:type/:name`.

@@ -27,6 +27,7 @@ const archive = require('./archive');
 const spotify = require('./spotify');
 const exporter = require('./export');
 const tagwrite = require('./tagwrite');
+const transcode = require('./transcode');
 const { DatabaseSync } = require('node:sqlite');
 
 const ROOT = process.env.MUSICFY_HOME || '/opt/musicfy';
@@ -581,6 +582,34 @@ function sendStatic(req, res, body, type) {
   return res.end(body);
 }
 
+// ---------- transcoding queue ----------
+// one at a time: ffmpeg on a Pi competes with streaming and analysis, and a wrong file
+// is worse than a slow one
+const transcodeQueue = [];
+let transcodeBusy = false;
+async function pumpTranscode() {
+  if (transcodeBusy) return;
+  transcodeBusy = true;
+  let done = 0;
+  while (transcodeQueue.length) {
+    const row = transcodeQueue.shift();
+    try {
+      if (!fs.existsSync(row.path)) continue;
+      const out = await transcode.toPlayable(row.path, { format: setting('transcode_format', 'm4a') });
+      if (!out) { console.log('[transcode] skipped', path.basename(row.path)); continue; }
+      upsertFile({ track_id: row.track_id, path: out.path, tier: 'owned', bitrate: out.bitrate, size: out.size, mtime: now() });
+      db.prepare('DELETE FROM files WHERE id=?').run(row.id);
+      try { fs.rmSync(row.path, { force: true }); } catch {}
+      done += 1;
+      console.log('[transcode]', row.track_id, path.basename(row.path), '->', path.basename(out.path));
+    } catch (e) {
+      console.log('[transcode] failed', path.basename(row.path), String(e.message || e).slice(0, 120));
+    }
+  }
+  transcodeBusy = false;
+  if (done) console.log('[transcode] converted', done, 'file(s)');
+}
+
 // ---------- uploads and cover helpers ----------
 const MAX_BODY_BYTES = Number(process.env.MUSICFY_MAX_BODY || 64 * 1024 * 1024);
 function readBody(req, limit = MAX_BODY_BYTES) {
@@ -994,7 +1023,7 @@ function startLadderDownload(jobId, b, onDone) {
     if (!name) { ingested = false; return finish('error', 'no audio file produced'); }
     let fp = path.join(from, name);
     // Safari cannot play webm: convert the container before it enters the library
-    if (['webm', 'mkv', 'ogg', 'opus'].includes((name.split('.').pop() || '').toLowerCase())) {
+    if (['webm', 'mkv', 'ogg', 'opus', 'mp4', 'm4b', 'aac', 'wma'].includes((name.split('.').pop() || '').toLowerCase())) {
       const conv = fp.replace(/\.[^.]+$/, '') + '.m4a';
       try {
         await new Promise((resolve, reject) => {
@@ -2117,6 +2146,21 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, groups: mergedGroups, removed });
     }
 
+    // ---------- format compatibility (rekordbox / Traktor) ----------
+    // files neither app can open are converted in place: same track, playable container
+    if (u.pathname === '/api/maintenance/transcode' && req.method === 'GET') {
+      const rows = db.prepare("SELECT id, track_id, path FROM files WHERE tier='owned'").all()
+        .filter((r) => transcode.needsConvert(r.path));
+      return json(res, 200, { count: rows.length, files: rows.slice(0, 40).map((r) => ({ id: r.id, track_id: r.track_id, name: path.basename(r.path) })) });
+    }
+    if (u.pathname === '/api/maintenance/transcode' && req.method === 'POST') {
+      const rows = db.prepare("SELECT id, track_id, path FROM files WHERE tier='owned'").all()
+        .filter((r) => transcode.needsConvert(r.path));
+      for (const r of rows) transcodeQueue.push(r);
+      pumpTranscode();
+      return json(res, 202, { started: rows.length > 0, count: rows.length });
+    }
+
     // metadata repair: clear impossible years, collapse placeholder albums, trim whitespace
     if (u.pathname === '/api/maintenance/repair' && req.method === 'POST') {
       const thisYear = new Date().getFullYear();
@@ -2440,8 +2484,8 @@ const server = http.createServer(async (req, res) => {
 
       // one concrete observation about this listener, not a dashboard stat
       const nowTs = Math.floor(Date.now() / 1000);
-      const last = db.prepare(`SELECT t.title, t.artist, l.played_at FROM listens l JOIN tracks t ON t.id=l.track_id
-        ORDER BY l.played_at DESC LIMIT 1`).get();
+      const last = db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.bpm, t.key, t.key_scale, t.has_art, l.played_at
+        FROM listens l JOIN tracks t ON t.id=l.track_id ORDER BY l.played_at DESC LIMIT 1`).get();
       const weekArtist = db.prepare(`SELECT t.artist, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
         WHERE l.played_at >= ? AND t.artist IS NOT NULL AND t.artist != ''
         GROUP BY t.artist ORDER BY n DESC LIMIT 1`).get(nowTs - 7 * 86400);
@@ -2490,7 +2534,12 @@ const server = http.createServer(async (req, res) => {
       const tracks = db.prepare('SELECT COUNT(*) c FROM tracks').get().c;
       const artists = db.prepare("SELECT COUNT(DISTINCT artist) c FROM tracks WHERE artist IS NOT NULL AND artist != ''").get().c;
       const addedWeek = weekNew;
-      return json(res, 200, { name, part, hour, weather, city, sub, line, fact, stats: { plays, tracks, artists, addedWeek } });
+      const lastOut = last ? {
+        id: last.id, title: last.title, artist: last.artist, album: last.album,
+        bpm: last.bpm ? Math.round(last.bpm) : null, key: last.key || null,
+        key_scale: last.key_scale || null, has_art: !!last.has_art, at: last.played_at,
+      } : null;
+      return json(res, 200, { name, part, hour, weather, city, sub, line, fact, last: lastOut, stats: { plays, tracks, artists, addedWeek } });
     }
 
     // dynamic Ask suggestions from what you actually play this week

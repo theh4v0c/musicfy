@@ -841,23 +841,67 @@ async function renderHome() {
   $('view-title').textContent = 'Home';
   const v = $('view');
   v.innerHTML = `
-    <div class="hero-greet">Good ${greetPart()}.</div>
-    <div class="hero-sub">${state.playlists.length} playlists</div>
-    <div class="hero-actions"><button class="btn btn-primary" id="flow-btn">&#9654; Flow</button><span class="flow-hint">endless mix from what you play</span></div>
-    <div class="quicktiles" id="quick"></div>
+    <section class="mast">
+      <div class="mast-glow" id="mast-glow"></div>
+      <div class="mast-meta"><span id="mast-clock"></span><span id="mast-place"></span><span class="mast-flex"></span><span class="mast-read" id="mast-read"></span></div>
+      <div class="mast-main">
+        <div class="mast-copy">
+          <h1 class="mast-greet" id="mast-greet">Good ${greetPart()}.</h1>
+          <p class="mast-note" id="mast-note">${state.playlists.length} playlist${state.playlists.length === 1 ? '' : 's'}, ready when you are.</p>
+        </div>
+        <div class="mast-side">
+          <button class="flow-key" id="flow-btn" aria-label="Start Flow">
+            <span class="flow-key-k">${IC.play}</span>
+            <span class="flow-key-t"><b>Flow</b><i>endless mix from what you play</i></span>
+          </button>
+          <button class="mast-resume" id="mast-resume" hidden></button>
+        </div>
+      </div>
+      <div class="mast-tiles" id="quick"></div>
+    </section>
     <div id="rotation-slot"></div>
     <div id="discover-home"></div>
     <div class="sec-title">Recently played <small id="recent-hint"></small></div>
     <div class="row-scroller" id="recent-row"></div>
     <div class="sec-title">Your playlists <small>${state.playlists.length} TOTAL</small></div>
     <div class="pgrid" id="home-grid"></div>`;
-  // personalised greeting: name from settings, time of day, live weather
+  // the masthead reports the session, not the weather: time, place, what was last on
+  const nowD = new Date();
+  const clock = document.getElementById('mast-clock');
+  if (clock) {
+    const day = nowD.toLocaleDateString(undefined, { weekday: 'short' });
+    const hm = nowD.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    clock.textContent = `${day} ${hm}`;
+  }
   api('/api/greeting', { nocache: true }).then((g) => {
-    const greet = v.querySelector('.hero-greet');
-    const sub = v.querySelector('.hero-sub');
-    if (greet) greet.textContent = g.name ? `Good ${g.part}, ${g.name}!` : `Good ${g.part}.`;
-    if (sub) sub.textContent = g.sub || [g.fact, g.line].filter(Boolean).join(' · ');
+    const greet = document.getElementById('mast-greet');
+    const note = document.getElementById('mast-note');
+    const read = document.getElementById('mast-read');
+    const place = document.getElementById('mast-place');
+    if (greet) {
+      const salutation = `Good ${g.part}${g.name ? ',' : '.'}`;
+      greet.innerHTML = g.name
+        ? `${esc(salutation)}<br><span class="mast-name">${esc(g.name)}</span>`
+        : esc(salutation);
+    }
+    if (note) note.textContent = g.fact || g.sub || '';
+    if (place && g.city) place.textContent = g.city;
+    if (g.last) {
+      const bits = [];
+      if (g.last.bpm) bits.push(`${g.last.bpm} BPM`);
+      if (g.last.key) bits.push(`${g.last.key}${g.last.key_scale === 'minor' ? 'm' : ''}`);
+      if (read) read.textContent = bits.join('  ·  ');
+
+    }
   }).catch(() => {});
+  // a queue survives the session: offer to pick it up instead of starting cold
+  const rq = state.queue && state.queue[state.qi];
+  const resume = document.getElementById('mast-resume');
+  if (resume && rq) {
+    resume.hidden = false;
+    resume.innerHTML = `Resume <b>${esc(rq.title || 'last track')}</b>`;
+    resume.onclick = () => { playAt(state.qi); };
+  }
   drawQuick();
   const fb = $('flow-btn');
   if (fb) fb.onclick = async () => {
@@ -1121,38 +1165,27 @@ async function drawRotation(rec) {
 
 function drawQuick() {
   const q = $('quick');
-  const likedCount = state.liked.size;
-  const withAudio = (state.allTracks || []).filter(hasAudio).length;
-  // these are shortcuts, not a second copy of the playlist grid
+  if (!q) return;
+  // three readouts, not a grid of cards: the state of the library at a glance
+  const tracks = state.allTracks || [];
+  const weekAgo = Math.floor(Date.now() / 1000) - 7 * 86400;
+  const fresh = tracks.filter((t) => Number(t.added_at) >= weekAgo).length;
   const tiles = [
-    { go: 'liked', name: 'Liked Songs', sub: `${likedCount} songs`, art: '/api/cover-liked' },
+    { go: 'liked', n: state.liked.size, l: 'liked songs', s: 'your shortlist' },
+    { go: 'fresh', n: fresh, l: 'new this week', s: 'in the library' },
+    { go: 'prep', n: state.playlists.length, l: 'crates', s: 'ready to prep' },
   ];
-  q.innerHTML = tiles.map((t) => `<div class="qtile" data-go="${esc(t.go)}">
-      ${t.art ? `<img class="qtile-art" src="${t.art}" onerror="this.style.display='none'">` : `<div class="qtile-art ph">${IC.play}</div>`}
-      <div class="qtile-name">${esc(t.name)}</div><div class="qtile-sub">${esc(t.sub)}</div></div>`).join('');
-  q.querySelectorAll('.qtile').forEach(el => {
-    el.onclick = async () => {
+  q.innerHTML = tiles.map((t) => `<button class="mtile" data-go="${esc(t.go)}">
+      <span class="mtile-n">${Number(t.n) || 0}</span>
+      <span class="mtile-l">${esc(t.l)}</span>
+      <span class="mtile-s">${esc(t.s)}</span>
+    </button>`).join('');
+  q.querySelectorAll('.mtile').forEach((el) => {
+    el.onclick = () => {
       const go = el.dataset.go;
       if (go === 'liked') return nav('liked');
-      if (go === 'songs-owned') { nav('songs'); return; }
-      if (go === 'ask') { nav('search'); return; }
-      if (go === 'picks') {
-        el.classList.add('busy');
-        try {
-          const r = await api('/api/recommend/weekly', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ days: 30, limit: 25 }) });
-          if (r.created) { afterWrite(); await loadPlaylists(); toast(`Created "${r.created.name}" with ${r.created.tracks} tracks`, 6000); openPlaylist(r.created.id, false); }
-          else toast(r.reason || 'Not enough listening yet', 6000);
-        } catch { toast('Could not build picks', 4000); }
-        el.classList.remove('busy');
-      }
-    };
-  });
-  q.querySelectorAll('.qtile-play').forEach(b => {
-    b.onclick = (e) => {
-      e.stopPropagation();
-      const id = b.dataset.play;
-      if (id === 'liked') playLiked();
-      else playPlaylist(id);
+      if (go === 'fresh') return nav('library');
+      if (go === 'prep') return nav('djexport');
     };
   });
 }
@@ -1525,6 +1558,7 @@ async function renderDjExport() {
       <div class="prep-meter"><div class="prep-meter-bar"><i id="prep-fill" style="width:0%"></i></div><span id="prep-cov">…</span></div>
       <div class="prep-actions">
         <button class="btn btn-primary" id="dj-analyze">Analyze unanalyzed</button>
+        <button class="btn btn-ghost" id="dj-compat" hidden>Make playable</button>
       </div>
     </div>
     <div class="sec-title">Crates <small>EXPORT READY</small></div>
@@ -1552,6 +1586,24 @@ async function renderDjExport() {
     } catch { toast('Could not start analysis'); }
     btn.disabled = false;
   };
+  // formats neither rekordbox nor Traktor can open (webm, ogg, opus, wma, ALAC)
+  try {
+    const t = await api('/api/maintenance/transcode', { nocache: true });
+    const cb = document.getElementById('dj-compat');
+    if (cb && t.count) {
+      cb.hidden = false;
+      cb.textContent = `Make ${t.count} playable`;
+      cb.onclick = async () => {
+        if (!confirm(`${t.count} file${t.count === 1 ? '' : 's'} are in a format rekordbox and Traktor cannot open. Convert them to m4a now? The originals are replaced.`)) return;
+        cb.disabled = true;
+        try {
+          const r = await api('/api/maintenance/transcode', { method: 'POST' });
+          toast(`Converting ${r.count} file${r.count === 1 ? '' : 's'} in the background`, 6000);
+          cb.hidden = true;
+        } catch { toast('Could not start the conversion', 4000); cb.disabled = false; }
+      };
+    }
+  } catch {}
   const list = document.getElementById('dj-list');
   if (!list) return;
   for (const p of state.playlists) {
