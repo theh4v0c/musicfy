@@ -911,16 +911,11 @@ async function renderExternalInto(host) {
         card.innerHTML = `<div class="tcard-art ph" style="background:${gradFor((s.artist || '') + (s.title || ''))};color:rgba(255,255,255,.9)">${esc((s.artist || '?').charAt(0))}</div>
           <div class="tcard-name">${esc(s.title)}</div>
           <div class="tcard-sub">${esc(s.artist)}</div>
-          <button class="tcard-play" title="Add to library" aria-label="Add to library">${IC.download}</button>`;
-        card.querySelector('.tcard-play').onclick = async (e) => {
-          e.stopPropagation();
-          try {
-            await api('/api/ladder/download', { method: 'POST', headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ rung: 'search', title: s.title, artist: s.artist, duration: s.duration }) });
-            toast(`Fetching ${s.title}`, 4000);
-            openDownloads();
-          } catch { toast('Could not start', 3000); }
-        };
+          <button class="tcard-play" title="Preview before downloading" aria-label="Preview before downloading">${IC.play}</button>`;
+        card.style.cursor = 'pointer';
+        const preview = (e) => { if (e) e.stopPropagation(); openSuggestionPreview(s); };
+        card.onclick = preview;
+        card.querySelector('.tcard-play').onclick = preview;
         row.appendChild(card);
       }
       host.appendChild(row);
@@ -929,6 +924,34 @@ async function renderExternalInto(host) {
 }
 
 /* the algorithm, visible: radio built from what you actually played */
+/* a suggestion is auditioned before it is downloaded: cover, details, 30s preview */
+function openSuggestionPreview(s) {
+  markCtxOpen();
+  const m = $('ctx');
+  const mins = s.duration ? `${Math.floor(s.duration / 60)}:${String(Math.round(s.duration % 60)).padStart(2, '0')}` : '';
+  m.innerHTML = `<div class="sugg">
+      ${s.cover ? `<img class="sugg-art" src="${esc(s.cover)}" alt="" loading="lazy" onerror="this.remove()">` : ''}
+      <div class="sugg-meta"><b>${esc(s.title || '')}</b><span>${esc(s.artist || '')}${s.album ? ` · ${esc(s.album)}` : ''}${mins ? ` · ${mins}` : ''}</span></div>
+      ${s.preview ? `<audio class="sugg-audio" controls preload="none" src="${esc(s.preview)}"></audio>` : '<div class="sugg-note">No 30 second preview from this source. Details only.</div>'}
+      <div class="ctx-row"><button class="btn btn-primary" id="sugg-dl">Download to library</button><button class="btn btn-ghost" id="sugg-cancel">Cancel</button></div>
+    </div>`;
+  m.classList.add('open');
+  m.style.left = '50%'; m.style.top = '50%'; m.style.transform = 'translate(-50%,-50%)';
+  const stop = m.querySelector('#sugg-cancel');
+  if (stop) stop.onclick = () => closeCtx(true);
+  const dl = m.querySelector('#sugg-dl');
+  if (dl) dl.onclick = async () => {
+    dl.disabled = true;
+    try {
+      await api('/api/ladder/download', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ rung: 'search', title: s.title, artist: s.artist, duration: s.duration }) });
+      closeCtx(true);
+      toast(`Fetching ${s.title}`, 4000);
+      openDownloads();
+    } catch { dl.disabled = false; toast('Could not start', 3000); }
+  };
+}
+
 /* right click menu for a ladder candidate: stream it, keep it in a playlist, or download it */
 function openLadderCtx(c, x, y) {
   markCtxOpen();

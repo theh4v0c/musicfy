@@ -3140,7 +3140,7 @@ const server = http.createServer(async (req, res) => {
             const k = normKey(t.artist.name, t.title);
             if (inLib.has(k) || seen.has(k)) continue;
             seen.add(k);
-            out.push({ title: t.title, artist: t.artist.name, album: (t.album && t.album.title) || '', duration: t.duration || null });
+            out.push({ title: t.title, artist: t.artist.name, album: (t.album && t.album.title) || '', duration: t.duration || null, preview: t.preview || null, cover: (t.album && t.album.cover_medium) || null });
             if (out.length >= 12) break;
           }
           if (out.length >= 12) break;
