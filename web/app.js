@@ -1806,8 +1806,39 @@ async function renderSongs(push = true) {
     for (const r of rows.slice(0, limit)) {
       const card = document.createElement('div');
       card.className = 'pcard';
-      card.innerHTML = `<div class="pcard-art ph" style="background:${gradFor(r.name)};color:rgba(255,255,255,.9)">${esc(r.name.charAt(0).toUpperCase())}</div>
-        <div class="pcard-name">${esc(r.name)}</div><div class="pcard-sub">${r.n} tracks</div>`;
+      const art = document.createElement('div');
+      art.className = 'pcard-art ph';
+      art.style.background = gradFor(r.name);
+      art.style.color = 'rgba(255,255,255,.9)';
+      art.textContent = r.name.charAt(0).toUpperCase();
+      let artEl = art;
+      if (browse === 'albums') {
+        const img = document.createElement('img');
+        img.className = 'pcard-art';
+        img.loading = 'lazy';
+        img.alt = '';
+        img.src = `/api/cover-album/${encodeURIComponent(r.name)}?v=${state.artV || 0}`;
+        img.onerror = () => img.replaceWith(art);
+        artEl = img;
+      } else {
+        const sample = all.find((t) => t.artist === r.name && t.has_art);
+        if (sample) {
+          const img = document.createElement('img');
+          img.className = 'pcard-art';
+          img.loading = 'lazy';
+          img.alt = '';
+          img.src = `/api/cover/${sample.id}?v=${state.artV || 0}`;
+          img.onerror = () => img.replaceWith(art);
+          artEl = img;
+        }
+      }
+      const name = document.createElement('div');
+      name.className = 'pcard-name';
+      name.textContent = r.name;
+      const sub = document.createElement('div');
+      sub.className = 'pcard-sub';
+      sub.textContent = `${r.n} tracks`;
+      card.append(artEl, name, sub);
       card.onclick = () => (browse === 'artists' ? renderArtist(r.name) : renderAlbum(r.name));
       g.appendChild(card);
     }
