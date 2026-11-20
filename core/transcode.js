@@ -102,4 +102,55 @@ async function toPlayable(file, opts = {}) {
   };
 }
 
-module.exports = { PLAYABLE, needsConvert, isAlac, probe, toPlayable };
+/* An m4a with the moov atom at the end has to be fetched from the tail before the player
+   knows what it is: two extra round trips and a partial download before a single note.
+   Rebuilding the container with -movflags +faststart puts the index first and costs one
+   copy of the file, no re-encode. */
+function hasFaststart(file) {
+  let fd;
+  try {
+    fd = fs.openSync(file, 'r');
+    const buf = Buffer.alloc(65536);
+    const n = fs.readSync(fd, buf, 0, buf.length, 0);
+    let off = 0;
+    for (let i = 0; i < 12 && off + 8 <= n; i += 1) {
+      const size = buf.readUInt32BE(off);
+      const type = buf.toString('ascii', off + 4, off + 8);
+      if (type === 'moov') return true;
+      if (type === 'mdat') return false;
+      if (size < 8) return false;
+      off += size;
+    }
+    return false;
+  } catch { return true; }
+  finally { if (fd !== undefined) try { fs.closeSync(fd); } catch {} }
+}
+
+async function toFaststart(file) {
+  if (!file || !fs.existsSync(file) || hasFaststart(file)) return false;
+  const dir = path.dirname(file);
+  const base = path.basename(file);
+  const tmp = path.join(dir, `.fs-${process.pid}-${base}`);
+  const run = (args) => new Promise((resolve) => {
+    execFile('/usr/bin/ffmpeg', args, { timeout: 20 * 60 * 1000, maxBuffer: 8 * 1024 * 1024 }, (err) => resolve(!err));
+  });
+  // keep artwork and tags when the muxer accepts them, fall back to plain audio if not
+  let ok = await run(['-v', 'error', '-y', '-i', file, '-map', '0', '-c', 'copy', '-map_metadata', '0', '-movflags', '+faststart', tmp]);
+  if (!ok || !fs.existsSync(tmp) || fs.statSync(tmp).size < 10000) {
+    try { fs.rmSync(tmp, { force: true }); } catch {}
+    ok = await run(['-v', 'error', '-y', '-i', file, '-map', '0:a', '-c', 'copy', '-map_metadata', '0', '-movflags', '+faststart', tmp]);
+  }
+  if (!ok || !fs.existsSync(tmp) || fs.statSync(tmp).size < 10000 || !hasFaststart(tmp)) {
+    try { fs.rmSync(tmp, { force: true }); } catch {}
+    return false;
+  }
+  try {
+    fs.renameSync(tmp, file);           // same directory: atomic swap, no half file ever visible
+    return true;
+  } catch {
+    try { fs.rmSync(tmp, { force: true }); } catch {}
+    return false;
+  }
+}
+
+module.exports = { PLAYABLE, needsConvert, isAlac, probe, toPlayable, hasFaststart, toFaststart };

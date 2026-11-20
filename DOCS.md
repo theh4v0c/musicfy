@@ -126,6 +126,26 @@ Media Session metadata goes to car displays, and `previoustrack` restarts the cu
 
 Library JSON is gzipped (`/api/tracks` is 870 KB raw, 142 KB compressed). On a phone that is the difference between a usable app and a slow one.
 
+## Mobile start time
+
+Three things made a phone wait before the first note, and all three were measured with
+the network throttled to 400 kbps and 150 ms.
+
+- **The moov atom was at the end of 583 of 725 m4a files.** The player has to fetch the
+  tail of the file before it knows what it is holding: an extra round trip and a partial
+  download per track. `transcode.toFaststart` rebuilds the container with the index first
+  (`-c copy`, no re-encode) and every file has been through it. New downloads get
+  `--postprocessor-args ffmpeg:-movflags +faststart`, and the transcoder writes it too.
+- **The home page competed with playback.** Ninety requests, mostly covers, were in
+  flight when a thumb hit play. The rails below the fold now wait for a scroll or six
+  quiet seconds, and a `playing` event cancels the timer; the playlist grid shows twelve
+  plus a link instead of forty-one.
+- **The prefetch gate was too strict.** It wanted twelve seconds of slack before warming
+  the next track, which never happens on a thin link, so every change was a cold start.
+  Six seconds is enough.
+
+Measured on the same throttle: first play 7.9 s -> 3.4 s, and the tail request is gone.
+
 ## Format compatibility
 
 Rekordbox and Traktor both open `.mp3`, `.m4a` (AAC), `.wav`, `.aiff` and `.flac`, so the exporter passes them through untouched. Anything else — webm, ogg, opus, wma, an mp4 container — is unplayable in both and is converted by `core/transcode.js`: AAC 256k in an m4a by default (`transcode_format` setting), MP3 320k on request, and AAC that only needs a new container is copied, never re-encoded. A lossy source is never inflated past its own bitrate. The original file is replaced and the row is repointed, so the library, the playlists and the export all see the same track.

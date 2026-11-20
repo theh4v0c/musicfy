@@ -587,6 +587,14 @@ function sendStatic(req, res, body, type) {
 // is worse than a slow one
 const transcodeQueue = [];
 let transcodeBusy = false;
+let faststartScan = { at: 0, rows: [] };
+function faststartCandidates() {
+  if (Date.now() - faststartScan.at < 10 * 60 * 1000) return faststartScan.rows;
+  const rows = db.prepare("SELECT id, track_id, path FROM files WHERE tier='owned' AND path LIKE '%.m4a'").all()
+    .filter((r) => !transcode.hasFaststart(r.path));
+  faststartScan = { at: Date.now(), rows };
+  return rows;
+}
 async function pumpTranscode() {
   if (transcodeBusy) return;
   transcodeBusy = true;
@@ -595,6 +603,11 @@ async function pumpTranscode() {
     const row = transcodeQueue.shift();
     try {
       if (!fs.existsSync(row.path)) continue;
+      if (row.kind === 'faststart') {
+        const ok = await transcode.toFaststart(row.path);
+        if (ok) { done += 1; if (done % 25 === 0) console.log('[faststart]', done, 'done'); }
+        continue;
+      }
       const out = await transcode.toPlayable(row.path, { format: setting('transcode_format', 'm4a') });
       if (!out) { console.log('[transcode] skipped', path.basename(row.path)); continue; }
       upsertFile({ track_id: row.track_id, path: out.path, tier: 'owned', bitrate: out.bitrate, size: out.size, mtime: now() });
@@ -607,7 +620,8 @@ async function pumpTranscode() {
     }
   }
   transcodeBusy = false;
-  if (done) console.log('[transcode] converted', done, 'file(s)');
+  faststartScan = { at: 0, rows: [] };   // the scan that ran mid-flight is stale now
+  if (done) console.log('[queue] processed', done, 'file(s)');
 }
 
 // ---------- uploads and cover helpers ----------
@@ -925,7 +939,11 @@ function downloadFormat() {
 }
 function audioArgs() {
   const fmt = downloadFormat();
-  return fmt === 'best' ? ['-f', 'bestaudio/best'] : ['-x', '--audio-format', fmt, '--audio-quality', '0'];
+  // an mp4 container written without faststart needs its index fetched from the end
+  // before a phone can start playing it: two round trips before the first note
+  const fast = ['--postprocessor-args', 'ffmpeg:-movflags +faststart'];
+  if (fmt === 'best') return ['-f', 'bestaudio/best', ...fast];
+  return ['-x', '--audio-format', fmt, '--audio-quality', '0', ...(fmt === 'm4a' ? fast : [])];
 }
 
 function enqueueDownload(jobId, payload) {
@@ -2152,6 +2170,17 @@ const server = http.createServer(async (req, res) => {
       const rows = db.prepare("SELECT id, track_id, path FROM files WHERE tier='owned'").all()
         .filter((r) => transcode.needsConvert(r.path));
       return json(res, 200, { count: rows.length, files: rows.slice(0, 40).map((r) => ({ id: r.id, track_id: r.track_id, name: path.basename(r.path) })) });
+    }
+    // put the index at the front of every m4a: the single biggest win for a phone
+    if (u.pathname === '/api/maintenance/faststart' && req.method === 'GET') {
+      return json(res, 200, { count: faststartCandidates().length });
+    }
+    if (u.pathname === '/api/maintenance/faststart' && req.method === 'POST') {
+      const rows = faststartCandidates();
+      for (const r of rows) transcodeQueue.push({ ...r, kind: 'faststart' });
+      faststartScan = { at: 0, rows: [] };
+      pumpTranscode();
+      return json(res, 202, { started: rows.length > 0, count: rows.length });
     }
     if (u.pathname === '/api/maintenance/transcode' && req.method === 'POST') {
       const rows = db.prepare("SELECT id, track_id, path FROM files WHERE tier='owned'").all()

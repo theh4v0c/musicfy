@@ -75,7 +75,7 @@ function setArt(elId, url, letter) {
   }
 }
 const artTag = (t, cls, size) => artUrl(t, size)
-  ? `<img class="${cls}" src="${artUrl(t, size)}" alt="" loading="lazy" draggable="false">`
+  ? `<img class="${cls}" src="${artUrl(t, size)}" alt="" loading="lazy" decoding="async" fetchpriority="low" draggable="false">`
   : ph(t, cls);
 const hasAudio = (t) => !!(t && (t.owned || t.rung === 'local'));
 const saveLiked = () => localStorage.setItem('mf-liked', JSON.stringify([...state.liked]));
@@ -860,11 +860,13 @@ async function renderHome() {
       <div class="mast-tiles" id="quick"></div>
     </section>
     <div id="rotation-slot"></div>
-    <div id="discover-home"></div>
-    <div class="sec-title">Recently played <small id="recent-hint"></small></div>
-    <div class="row-scroller" id="recent-row"></div>
-    <div class="sec-title">Your playlists <small>${state.playlists.length} TOTAL</small></div>
-    <div class="pgrid" id="home-grid"></div>`;
+    <div id="home-lazy">
+      <div id="discover-home"></div>
+      <div class="sec-title">Recently played <small id="recent-hint"></small></div>
+      <div class="row-scroller" id="recent-row"></div>
+      <div class="sec-title">Your playlists <small>${state.playlists.length} TOTAL</small></div>
+      <div class="pgrid" id="home-grid"></div>
+    </div>`;
   // the masthead reports the session, not the weather: time, place, what was last on
   const nowD = new Date();
   const clock = document.getElementById('mast-clock');
@@ -919,12 +921,37 @@ async function renderHome() {
     } catch { toast('Flow failed'); }
     fb.disabled = false;
   };
-  const g = $('home-grid');
-  for (const p of state.playlists) g.appendChild(pcard(p));
-  renderDiscoverInto($('discover-home'));
   const rec = await loadRecentlyPlayed();
-  drawRecents(rec);
   drawRotation(rec);
+  // nothing below the fold is fetched until it is about to be seen: 90 idle requests
+  // on a phone delay the first play more than the audio itself does
+  const lazy = document.getElementById('home-lazy');
+  if (!lazy) return;
+  const fillRest = () => {
+    if (lazy.dataset.filled) return;
+    lazy.dataset.filled = '1';
+    renderDiscoverInto($('discover-home'));
+    drawRecents(rec);
+    const grid = $('home-grid');
+    if (grid) {
+      for (const p of state.playlists.slice(0, 12)) grid.appendChild(pcard(p));
+      if (state.playlists.length > 12) {
+        const more = document.createElement('button');
+        more.className = 'btn btn-ghost';
+        more.textContent = `All ${state.playlists.length} playlists`;
+        more.onclick = () => nav('library');
+        grid.after(more);
+      }
+    }
+  };
+  // playback wins the network: the rails wait for a scroll, or for six quiet seconds.
+  // On a phone in a car the press of play happens first, and it must not queue behind
+  // fifty covers and a page of playlist art.
+  let timer = setTimeout(fillRest, 6000);
+  const nowFill = () => { clearTimeout(timer); fillRest(); };
+  addEventListener('scroll', nowFill, { once: true, passive: true });
+  audio.addEventListener('playing', () => clearTimeout(timer), { once: true });
+  audio.addEventListener('pause', () => { if (!lazy.dataset.filled) timer = setTimeout(fillRest, 1500); }, { once: true });
 }
 
 // discovery rails: newest, more-from-artists-you-play, and unfiled tracks
@@ -940,7 +967,7 @@ async function renderDiscoverInto(host) {
     ];
     const seen = new Set();
     for (const [title, tag, list, origin] of rails) {
-      const fresh = (list || []).filter((t) => t && t.id != null && !seen.has(t.id)).slice(0, 12);
+      const fresh = (list || []).filter((t) => t && t.id != null && !seen.has(t.id)).slice(0, 8);
       if (!fresh.length) continue;
       fresh.forEach((t) => seen.add(t.id));
       const h = document.createElement('div');
@@ -3877,10 +3904,12 @@ let prefetchedFor = null;
 function maybePrefetch() {
   const t = state.current;
   if (!t || prefetchedFor === t.id || audio.paused) return;
-  if (audio.currentTime < 12) return;
+  if (audio.currentTime < 8) return;
   const b = audio.buffered;
   const ahead = b && b.length ? b.end(b.length - 1) - audio.currentTime : 0;
-  if (ahead < 12) return;
+  // a slow link buffers barely ahead, and waiting for twelve seconds of slack meant the
+  // next track never got warmed: every change was a cold start
+  if (ahead < 6) return;
   prefetchedFor = t.id;
   prefetchNext();
 }
