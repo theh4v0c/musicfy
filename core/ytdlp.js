@@ -141,43 +141,6 @@ function searchYouTubeMusic(query, opts = {}) {
   });
 }
 
-function searchSoundcloud(seed, { limit = 8 } = {}) {
-  const query = `${seed.artist || ''} ${seed.title}`.trim();
-  return new Promise((resolve, reject) => {
-    const args = [
-      '--flat-playlist', '--no-warnings', '--quiet',
-      '--print', '%(id)s\t%(url)s\t%(webpage_url)s\t%(title)s\t%(duration)s\t%(uploader)s',
-      `scsearch${limit}:${query}`,
-    ];
-    execFile(YTDLP, args, { timeout: 45000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
-      if (err && !stdout) return reject(err);
-      const out = [];
-      for (const line of stdout.split('\n')) {
-        if (!line.trim()) continue;
-        const [id, apiUrl, pageUrl, title, dur, uploader] = line.split('\t');
-        // flat search sometimes returns an artist page; that is not a track and yt-dlp
-        // would download the whole profile (or nothing). Only keep real track permalinks.
-        const url = pageUrl && /^https:\/\/soundcloud\.com\/[^/]+\/[^/]+/.test(pageUrl) ? pageUrl : null;
-        if (!id || !url) continue;
-        out.push({
-          source: 'soundcloud',
-          rung: 'soundcloud',
-          id,
-          url,
-          title: title || '',
-          duration: dur ? Number(dur) : null,
-          artist: uploader || '',
-          format: 'stream',
-          bitrate: null,
-          handle: { kind: 'soundcloud', id, url },
-        });
-      }
-      resolve(out);
-    });
-  });
-}
-
-// YouTube Music catalogue search (songs and albums, not random uploads)
 function streamUrl(id) {
   return streamUrlFor(`https://www.youtube.com/watch?v=${id}`);
 }

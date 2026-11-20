@@ -561,7 +561,6 @@ function setNav(v) {
   const pill = $('pill'); if (pill) pill.hidden = !(v === 'library' || v === 'settings');
 }
 function nav(v, push = true) {
-  stopPreview();
   closeInlinePreview();
   const qd = $('queue-drawer'); if (qd) qd.hidden = true;
   if (typeof clearSelection === 'function') clearSelection();
@@ -952,7 +951,6 @@ function toggleSuggestionPreview(s, anchor, opts = {}) {
   const key = `${s.title || ''}|${s.artist || ''}`;
   if (inlinePreview && inlinePreview.dataset.key === key) { closeInlinePreview(); return; }
   closeInlinePreview();
-  stopPreview();
   const owned = !!(opts.owned || s.owned);
   const panel = document.createElement('div');
   panel.className = 'inline-preview';
@@ -961,7 +959,7 @@ function toggleSuggestionPreview(s, anchor, opts = {}) {
   panel.innerHTML = `<div class="ip-art"></div>
     <div class="ip-meta"><b>${esc(s.title || '')}</b><span>${esc(s.artist || '')}${s.album ? ` · ${esc(s.album)}` : ''}${mins ? ` · ${mins}` : ''}</span></div>
     <div class="ip-actions"><button class="btn btn-primary" data-dl${owned ? ' disabled' : ''}>${owned ? 'In your library' : 'Download'}</button><button class="btn btn-ghost" data-close>Close</button></div>
-    ${s.preview ? `<audio class="ip-audio" controls preload="none" src="${esc(s.preview)}"></audio>` : '<div class="ip-note">No preview from this source. Details only.</div>'}`;
+    ${s.preview ? `<audio class="ip-audio" controls preload="none" src="${esc(s.preview)}"></audio>` : (s.owned && s.id ? `<audio class="ip-audio" controls preload="none" src="/api/stream/${s.id}"></audio>` : '<div class="ip-note">Finding a preview…</div>')}`;
   const art = panel.querySelector('.ip-art');
   if (s.cover) art.style.backgroundImage = `url("${s.cover}")`;
   const cardHost = anchor.closest('.ask-action');
@@ -971,8 +969,24 @@ function toggleSuggestionPreview(s, anchor, opts = {}) {
   else anchor.insertAdjacentElement('afterend', panel);
   inlinePreview = panel;
   panel.querySelector('[data-close]').onclick = closeInlinePreview;
-  const audioEl = panel.querySelector('audio');
+  let audioEl = panel.querySelector('audio');
   if (audioEl) audioEl.play().catch(() => {});
+  const noteEl = panel.querySelector('.ip-note');
+  if (!audioEl && noteEl) {
+    api(`/api/preview?title=${encodeURIComponent(s.title || '')}&artist=${encodeURIComponent(s.artist || '')}&duration=${Number(s.duration) || ''}`, { nocache: true })
+      .then((r) => {
+        if (inlinePreview !== panel) return;
+        if (!r || !r.url) { noteEl.textContent = 'No preview available.'; return; }
+        audioEl = document.createElement('audio');
+        audioEl.className = 'ip-audio';
+        audioEl.controls = true;
+        audioEl.preload = 'none';
+        audioEl.src = r.url;
+        noteEl.replaceWith(audioEl);
+        audioEl.play().catch(() => {});
+      })
+      .catch(() => { if (inlinePreview === panel) noteEl.textContent = 'No preview available.'; });
+  }
   const dl = panel.querySelector('[data-dl]');
   dl.onclick = async () => {
     if (owned) return;
@@ -1883,6 +1897,7 @@ async function renderSongs(push = true) {
   }
 
   const draw = () => {
+    closeInlinePreview();
     if (state.genreFilter) { renderGenreView($("songs-list"), all, 60); return; }
     let list = all.slice();
     if (filter === 'owned') list = list.filter((t) => hasAudio(t));
@@ -2144,29 +2159,6 @@ async function renderSettings() {
   };
 }
 
-let previewAudio = null;
-let previewBtn = null;
-function stopPreview() {
-  if (previewAudio) {
-    try { previewAudio.pause(); previewAudio.removeAttribute('src'); previewAudio.load(); } catch {}
-  }
-  if (previewBtn) { previewBtn.classList.remove('on'); previewBtn.innerHTML = IC.play; }
-  previewAudio = null;
-  previewBtn = null;
-}
-function playPreview(t, btn) {
-  if (!t.preview) return;
-  if (previewAudio && previewBtn === btn && !previewAudio.paused) { stopPreview(); return; }
-  stopPreview();
-  previewAudio = new Audio(t.preview);
-  try { previewAudio.volume = Math.min(1, Number(audio.volume) || 0.9); } catch {}
-  previewBtn = btn;
-  btn.classList.add('on');
-  btn.innerHTML = IC.pause;
-  previewAudio.onended = stopPreview;
-  previewAudio.play().catch(() => { stopPreview(); toast('No preview for this one', 3000); });
-}
-
 function renderActionCard(a, out, stateEl) {
   if (stateEl) stateEl.textContent = '';
   const card = document.createElement('div');
@@ -2229,8 +2221,7 @@ function renderActionCard(a, out, stateEl) {
   acts.className = 'ask-action-btns';
   const missing = tracks.filter((t) => !t.owned).length;
   const confirm = async (btn, alsoDownload) => {
-    stopPreview();
-    btn.disabled = true;
+      btn.disabled = true;
     try {
       const r = await api(`/api/agent/action/${a.action.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirm: true, download: !!alsoDownload }), nocache: true });
       card.remove();
@@ -2261,8 +2252,7 @@ function renderActionCard(a, out, stateEl) {
   no.className = 'btn btn-ghost';
   no.textContent = 'Cancel';
   no.onclick = async () => {
-    stopPreview();
-    try { await api(`/api/agent/action/${a.action.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cancel: true }), nocache: true }); } catch {}
+      try { await api(`/api/agent/action/${a.action.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cancel: true }), nocache: true }); } catch {}
     card.remove();
     if (stateEl) stateEl.textContent = 'Cancelled';
   };
@@ -2274,7 +2264,7 @@ function renderActionCard(a, out, stateEl) {
 
 async function runAssistant(text, out, stateEl, box) {
     if (!text.trim()) return;
-    stopPreview();
+      closeInlinePreview();
     $('view').classList.add('asking');
     stateEl.textContent = 'Searching';
     stateEl.classList.add('thinking');
@@ -2393,7 +2383,6 @@ async function runAssistant(text, out, stateEl, box) {
   }
 
 async function renderAskAi() {
-  stopPreview();
   closeInlinePreview();
   setNav('search');
   state.view = 'askai'; state.playlistId = null; state.genreFilter = null; renderSidebar();
@@ -2432,16 +2421,6 @@ async function renderAskAi() {
       hint.appendChild(b);
     }
   }).catch(() => {});
-}
-
-function viewTabs(active) {
-  return `<div class="mode-tabs view-tabs">
-    <button class="mode-tab ${active === 'search' ? 'on' : ''}" data-view="search">Web search</button>
-    <button class="mode-tab ${active === 'ask' ? 'on' : ''}" data-view="ask">Ask your library</button>
-  </div>`;
-}
-function wireViewTabs(root) {
-  root.querySelectorAll('[data-view]').forEach((b) => { b.onclick = () => (b.dataset.view === 'ask' ? renderAskAi() : renderSearch()); });
 }
 
 async function renderSearch() {
@@ -2516,6 +2495,7 @@ async function renderSearch() {
 
 
   const draw = async () => {
+    closeInlinePreview();
     mode = searchLib && searchWeb ? 'all' : searchLib ? 'library' : 'ladder';
     const s = q.value.trim().toLowerCase();
     if (state.genreFilter) { renderGenreView(res, all, 60); return; }
@@ -2795,7 +2775,9 @@ async function renderSearch() {
     if (mode === 'ladder' || !appendAfterLibrary) res.innerHTML = '';
     res.appendChild(holder);
     try {
-      const r = await fetch(`/api/search/ladder?q=${encodeURIComponent(s)}${state.longSets ? '' : '&durCap=720'}`);
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 25000);
+      const r = await fetch(`/api/search/ladder?q=${encodeURIComponent(s)}${state.longSets ? '' : '&durCap=720'}`, { signal: ac.signal }).finally(() => clearTimeout(timer));
       const data = await r.json();
       if (ctl.abort) return;
       const box = document.createElement('div');
@@ -3048,7 +3030,7 @@ async function renderSearch() {
     } catch (e) {
       if (ctl.abort) return;
       const box = document.createElement('div');
-      box.innerHTML = `<div class="sec-title" >Web sources <small>ERROR</small></div><div class="empty">${esc(e.message)}</div>`;
+      box.innerHTML = `<div class="sec-title" >Web sources <small>${e.name === 'AbortError' ? 'TIMEOUT' : 'ERROR'}</small></div><div class="empty">${e.name === 'AbortError' ? 'Web search took too long. Try a narrower query.' : esc(e.message)}</div>`;
       holder.replaceWith(box);
     }
   };

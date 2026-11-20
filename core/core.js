@@ -588,6 +588,7 @@ function allow(key) {
   return true;
 }
 // proposals wait here until the user confirms; nothing is created or queued before that
+const previewCache = new Map();
 const pendingActions = new Map();
 const ACTION_TTL = 15 * 60 * 1000;
 function stashAction(proposal) {
@@ -2648,6 +2649,29 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ask the library a question in plain language, optionally creating a playlist
+    // short preview for any result, including catalogue rows without an iTunes preview
+    if (u.pathname === '/api/preview') {
+      const title = String(u.searchParams.get('title') || '').trim();
+      const artist = String(u.searchParams.get('artist') || '').trim();
+      const duration = Number(u.searchParams.get('duration')) || null;
+      if (!title) return json(res, 400, { error: 'title required' });
+      const key = `${artist}|${title}`.toLowerCase();
+      const hit = previewCache.get(key);
+      if (hit && Date.now() - hit.at < 30 * 60 * 1000) return json(res, 200, hit.data);
+      try {
+        const best = await resolveBest({ title, artist, duration }, 1800);
+        if (!best) return json(res, 404, { error: 'no preview source' });
+        let url = null;
+        if (best.rung === 'yt-dlp' || best.rung === 'ytmusic' || best.rung === 'ytmusic-album') url = `/api/ladder/stream/youtube/${best.id}`;
+        else if (best.rung === 'soundcloud') url = `/api/ladder/stream/soundcloud?u=${encodeURIComponent(best.url)}`;
+        else if (best.url) url = `/api/ladder/stream/generic?u=${encodeURIComponent(best.url)}`;
+        if (!url) return json(res, 404, { error: 'no preview source' });
+        const data = { url, rung: best.rung, title: best.title, artist: best.artist };
+        previewCache.set(key, { at: Date.now(), data });
+        return json(res, 200, data);
+      } catch (e) { return json(res, 502, { error: e.message }); }
+    }
+
     if (u.pathname === '/api/ask' && req.method === 'POST') {
       let body = ''; req.on('data', c => body += c);
       req.on('end', async () => {
