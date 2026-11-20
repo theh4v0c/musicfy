@@ -562,6 +562,7 @@ function setNav(v) {
 }
 function nav(v, push = true) {
   stopPreview();
+  closeInlinePreview();
   const qd = $('queue-drawer'); if (qd) qd.hidden = true;
   if (typeof clearSelection === 'function') clearSelection();
   if (push && state.view && v !== state.view) state.history.push({ v: state.view, pid: state.playlistId });
@@ -927,7 +928,7 @@ async function renderExternalInto(host) {
           art.textContent = '';
         }
         card.style.cursor = 'pointer';
-        const preview = (e) => { if (e) e.stopPropagation(); openSuggestionPreview(s); };
+        const preview = (e) => { if (e) e.stopPropagation(); toggleSuggestionPreview(s, card); };
         card.onclick = preview;
         card.querySelector('.tcard-play').onclick = preview;
         row.appendChild(card);
@@ -939,29 +940,43 @@ async function renderExternalInto(host) {
 
 /* the algorithm, visible: radio built from what you actually played */
 /* a suggestion is auditioned before it is downloaded: cover, details, 30s preview */
-function openSuggestionPreview(s) {
+let inlinePreview = null;
+function closeInlinePreview() {
+  if (!inlinePreview) return;
+  const a = inlinePreview.querySelector('audio');
+  if (a) { try { a.pause(); a.removeAttribute('src'); a.load(); } catch {} }
+  inlinePreview.remove();
+  inlinePreview = null;
+}
+function toggleSuggestionPreview(s, anchor) {
+  const key = `${s.title || ''}|${s.artist || ''}`;
+  if (inlinePreview && inlinePreview.dataset.key === key) { closeInlinePreview(); return; }
+  closeInlinePreview();
   stopPreview();
-  markCtxOpen();
-  const m = $('ctx');
+  const panel = document.createElement('div');
+  panel.className = 'inline-preview';
+  panel.dataset.key = key;
   const mins = s.duration ? `${Math.floor(s.duration / 60)}:${String(Math.round(s.duration % 60)).padStart(2, '0')}` : '';
-  m.innerHTML = `<div class="sugg">
-      ${s.cover ? `<img class="sugg-art" src="${esc(s.cover)}" alt="" loading="lazy" onerror="this.remove()">` : ''}
-      <div class="sugg-kicker">PREVIEW</div>
-      <div class="sugg-meta"><b>${esc(s.title || '')}</b><span>${esc(s.artist || '')}${s.album ? ` · ${esc(s.album)}` : ''}${mins ? ` · ${mins}` : ''}</span></div>
-      ${s.preview ? `<audio class="sugg-audio" controls preload="none" src="${esc(s.preview)}"></audio>` : '<div class="sugg-note">No 30 second preview from this source. Details only.</div>'}
-      <div class="sugg-btns"><button class="btn btn-primary" id="sugg-dl">Download to library</button><button class="btn btn-ghost" id="sugg-cancel">Cancel</button></div>
-    </div>`;
-  m.classList.add('open');
-  m.style.left = '50%'; m.style.top = '50%'; m.style.transform = 'translate(-50%,-50%)';
-  const stop = m.querySelector('#sugg-cancel');
-  if (stop) stop.onclick = () => closeCtx(true);
-  const dl = m.querySelector('#sugg-dl');
-  if (dl) dl.onclick = async () => {
+  panel.innerHTML = `<div class="ip-art"></div>
+    <div class="ip-meta"><b>${esc(s.title || '')}</b><span>${esc(s.artist || '')}${s.album ? ` · ${esc(s.album)}` : ''}${mins ? ` · ${mins}` : ''}</span></div>
+    <div class="ip-actions"><button class="btn btn-primary" data-dl>Download</button><button class="btn btn-ghost" data-close>Close</button></div>
+    ${s.preview ? `<audio class="ip-audio" controls preload="none" src="${esc(s.preview)}"></audio>` : '<div class="ip-note">No preview from this source. Details only.</div>'}`;
+  const art = panel.querySelector('.ip-art');
+  if (s.cover) art.style.backgroundImage = `url("${s.cover}")`;
+  const shelf = anchor.closest('.row-scroller');
+  if (shelf) shelf.insertAdjacentElement('afterend', panel);
+  else anchor.insertAdjacentElement('afterend', panel);
+  inlinePreview = panel;
+  panel.querySelector('[data-close]').onclick = closeInlinePreview;
+  const audioEl = panel.querySelector('audio');
+  if (audioEl) audioEl.play().catch(() => {});
+  const dl = panel.querySelector('[data-dl]');
+  dl.onclick = async () => {
     dl.disabled = true;
     try {
       const r = await api('/api/ladder/download', { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ rung: 'search', title: s.title, artist: s.artist, duration: s.duration }) });
-      closeCtx(true);
+      closeInlinePreview();
       toast(`Fetching ${s.title}`, 4000);
       openDownloads();
       if (r.job) waitForJob(r.job, s.title);
@@ -2148,6 +2163,7 @@ function playPreview(t, btn) {
 
 async function renderAskAi() {
   stopPreview();
+  closeInlinePreview();
   setNav('search');
   state.view = 'askai'; state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'Ask';
@@ -2328,7 +2344,7 @@ async function renderAskAi() {
               art.textContent = '';
             }
             row.style.cursor = 'pointer';
-            const preview = (e) => { if (e) e.stopPropagation(); openSuggestionPreview(s); };
+            const preview = (e) => { if (e) e.stopPropagation(); toggleSuggestionPreview(s, row); };
             row.onclick = preview;
             row.querySelector('.tmore').onclick = preview;
             sec.appendChild(row);
@@ -2418,6 +2434,7 @@ function wireViewTabs(root) {
 }
 
 async function renderSearch() {
+  closeInlinePreview();
   setNav('search'); state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'Search';
   const v = $('view');
@@ -2429,8 +2446,9 @@ async function renderSearch() {
         <button class="mode-tab" id="long-sets" data-on="false" title="Include DJ mixes, sets and long recordings"><span class="chk"></span>Long sets</button>
       </div>
       <div class="ladder-state" id="ladder-state"></div>
-    </div><div id="qres"></div>`;
+    </div><div id="qres"></div><div id="search-discover"></div>`;
   wireViewTabs(v);
+  renderExternalInto($('search-discover'));
   const q = $('q'); q.focus();
   if (!state.allTracks) state.allTracks = await api('/api/tracks');
   const all = state.allTracks;
@@ -2595,7 +2613,7 @@ async function renderSearch() {
               art.textContent = '';
             }
             row.style.cursor = 'pointer';
-            const preview = (e) => { if (e) e.stopPropagation(); openSuggestionPreview(s); };
+            const preview = (e) => { if (e) e.stopPropagation(); toggleSuggestionPreview(s, row); };
             row.onclick = preview;
             row.querySelector('.tmore').onclick = preview;
             sec.appendChild(row);
