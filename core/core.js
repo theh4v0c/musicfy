@@ -967,31 +967,40 @@ function startLadderDownload(jobId, b, onDone) {
   const ingestFrom = async (from) => {
     if (ingested) return;   // a retry path may call this after the file already landed
     ingested = true;
-    const files = fs.readdirSync(from)
-      .filter((f) => !f.startsWith('.') && /\.(mp3|m4a|aac|opus|ogg|flac|wav|webm|mp4|m4b|mkv|aiff?)$/i.test(f))
-      // yt-dlp writes a .part file while it works; never treat that as a result
-      .filter((f) => !/\.part$/i.test(f));
-    if (!files.length) { ingested = false; return finish('error', 'no audio file produced'); }
-    let fp = path.join(from, files[0]);
+    // largest finished audio file: yt-dlp can still be renaming or deleting a
+    // container while the process exits, so never trust a name read earlier
+    const AUDIO = /\.(mp3|m4a|aac|opus|ogg|flac|wav|webm|mp4|m4b|mkv|aiff?)$/i;
+    const pickAudio = () => fs.readdirSync(from)
+      .filter((f) => !f.startsWith('.') && !/\.part$/i.test(f) && AUDIO.test(f))
+      .map((f) => { let size = 0; try { size = fs.statSync(path.join(from, f)).size; } catch {} return { f, size }; })
+      .sort((x, y) => y.size - x.size)[0]?.f;
+    let name = pickAudio();
+    if (!name) { ingested = false; return finish('error', 'no audio file produced'); }
+    let fp = path.join(from, name);
     // Safari cannot play webm: convert the container before it enters the library
-    const rawExt = (files[0].split('.').pop() || '').toLowerCase();
-    if (['webm', 'mkv', 'ogg', 'opus'].includes(rawExt)) {
+    if (['webm', 'mkv', 'ogg', 'opus'].includes((name.split('.').pop() || '').toLowerCase())) {
       const conv = fp.replace(/\.[^.]+$/, '') + '.m4a';
       try {
         await new Promise((resolve, reject) => {
           execFile('/usr/bin/ffmpeg', ['-v', 'error', '-y', '-i', fp, '-vn', '-c:a', 'aac', '-b:a', '256k', conv],
             { timeout: 900000, maxBuffer: 8 * 1024 * 1024 }, (err) => (err ? reject(err) : resolve()));
         });
-        if (fs.existsSync(conv) && fs.statSync(conv).size > 10000) { try { fs.unlinkSync(fp); } catch {} fp = conv; files[0] = path.basename(conv); }
+        if (fs.existsSync(conv) && fs.statSync(conv).size > 10000) { try { fs.unlinkSync(fp); } catch {} fp = conv; name = path.basename(conv); }
       } catch {}
+    }
+    // the container may have been rotated under us mid-flight: re-read once
+    if (!fs.existsSync(fp)) {
+      name = pickAudio();
+      if (!name) { ingested = false; return finish('error', 'audio file vanished before ingest'); }
+      fp = path.join(from, name);
     }
     spawn('ffprobe', ['-v', 'error', '-show_entries', 'format=duration,bit_rate:format_tags=title,artist', '-of', 'json', fp]).on('exit', () => {});
     execFile('ffprobe', ['-v', 'error', '-show_entries', 'format=duration,bit_rate:format_tags=title,artist', '-of', 'json', fp], { timeout: 20000 }, (err, stdout) => {
       // never let a throw here strand the job in 'running' and leak a concurrency slot
       try {
-      let dur = null, br = null, t = b.title || files[0], a = b.artist || '';
+      let dur = null, br = null, t = b.title || name, a = b.artist || '';
       try { const f = JSON.parse(stdout).format; dur = Number(f.duration); br = Number(f.bit_rate); t = f.tags?.title || t; a = f.tags?.artist || a; } catch {}
-      const dest = path.join(OWNED, 'web', files[0].replace(/[/\\]/g, '_'));
+      const dest = path.join(OWNED, 'web', name.replace(/[/\\]/g, '_'));
       fs.renameSync(fp, dest);
       let tid = b.trackId;
       if (!tid) {
@@ -1004,31 +1013,32 @@ function startLadderDownload(jobId, b, onDone) {
           db.prepare('UPDATE tracks SET src_kind=NULL, src_id=NULL, src_url=NULL WHERE id=?').run(tid);
         }
       }
-      const ext = (files[0].split('.').pop() || 'mp3').toLowerCase();
+      const ext = (name.split('.').pop() || 'mp3').toLowerCase();
       tid = tid || upsertTrack({ title: t, artist: a, album: b.artist || 'Web', duration: dur, format: ext });
       // refuse truncated audio: a 30 second preview must never replace a real track
       const declared = Number(b.duration) || Number(db.prepare('SELECT duration FROM tracks WHERE id=?').get(tid)?.duration) || 0;
       // a YouTube "Official Video", Live clip, promo or DJ-mix cut is not the track
-      const sourceName = String(files[0] || '');
+      const sourceName = String(name || '');
       const badSource = /\b(official (video|music video)|lyric video|visuali[sz]er|live|promo|teaser|trailer|interview|reaction|karaoke|tutorial|backing track)\b|\(cover\)|\(tabs?\)|cover version|cover of/i.test(sourceName) || /\(mixed\)/i.test(sourceName);
-      if (badSource && b.trackId && !b.retried) {
+      // one retry, same job row: the old '<id>-r' jobs had no row of their own, so the
+      // original stayed at 'unavailable' and the UI never moved no matter the outcome
+      const retryBySearch = (detail) => {
         try { fs.rmSync(dest, { force: true }); } catch {}
+        finish('unavailable', detail);
+        if (cancelledJobs.has(jobId)) return;
         try {
-          enqueueDownload(jobId + '-r', { trackId: b.trackId, rung: 'search', title: b.title, artist: b.artist, duration: declared, retried: true });
+          db.prepare("UPDATE jobs SET state='queued', detail='retrying by search', progress=0, updated_at=? WHERE payload LIKE ?")
+            .run(now(), `%${jobId}%`);
+          enqueueDownload(jobId, { trackId: b.trackId, rung: 'search', title: b.title, artist: b.artist, duration: declared, retried: true });
         } catch {}
-        return finish('unavailable', `video/promo source rejected (${sourceName.slice(0, 40)}), retrying by search`);
+      };
+      if (badSource && b.trackId && !b.retried) {
+        return retryBySearch(`video/promo source rejected (${sourceName.slice(0, 40)}), retrying by search`);
       }
       if (dur && declared && dur < declared * 0.8) {
-        try { fs.rmSync(dest, { force: true }); } catch {}
         // the source was a clip: try a plain search for the full version once
-        if (!b.retried) {
-          try {
-            // jobId is the enclosing argument; b has no jobId, so b.jobId was "undefined",
-            // which built a shared web/undefined dir and matched zero rows in every UPDATE.
-            enqueueDownload(jobId + '-r', { trackId: b.trackId, rung: 'search', title: b.title, artist: b.artist, duration: declared, retried: true });
-          } catch {}
-          return finish('unavailable', `truncated audio: ${Math.round(dur)}s of ${Math.round(declared)}s, retrying by search`);
-        }
+        if (!b.retried) return retryBySearch(`truncated audio: ${Math.round(dur)}s of ${Math.round(declared)}s, retrying by search`);
+        try { fs.rmSync(dest, { force: true }); } catch {}
         return finish('unavailable', `truncated audio: ${Math.round(dur)}s of ${Math.round(declared)}s`);
       }
       if (dur && dur < 3) {
@@ -1075,18 +1085,23 @@ function startLadderDownload(jobId, b, onDone) {
 
   if (b.rung === 'search') {
     const query = [b.artist, b.title].filter(Boolean).join(' ');
+    // yt-dlp exits 101 when --max-downloads stops after the first hit, even though that
+    // track downloaded fine. A finished audio file is the success signal, not the code.
+    const gotAudio = () => fs.readdirSync(dir)
+      .some((f) => !f.startsWith('.') && /\.(mp3|m4a|aac|opus|ogg|flac|wav)$/i.test(f) && !/\.part$/i.test(f));
     const trySource = (source, next) => {
       const child = spawn('/opt/musicfy/ytdlp-venv/bin/yt-dlp', [
         '--no-warnings', '--newline', ...audioArgs(),
-        '--max-downloads', '1', '--match-filter', 'duration > 2',
+        '--match-filter', 'duration > 2',
         '-o', path.join(dir, '%(title)s.%(ext)s'), source,
       ], { stdio: ['ignore', 'pipe', 'pipe'] });
       watch(child);
       runningChildren.set(jobId, child);
       child.on('error', next);
-      child.on('close', (code) => { if (code === 0 && fs.readdirSync(dir).some((f) => /\.(mp3|m4a)$/i.test(f))) return ingestDownloaded(); next(); });
+      child.on('close', () => { if (gotAudio()) return ingestDownloaded(); next(); });
     };
-    trySource(`ytsearch3:${query}`, () => trySource(`scsearch3:${query}`, () => finish('error', 'no source in search')));
+    // one hit each: ytsearch1 cannot abort itself halfway the way --max-downloads did
+    trySource(`ytsearch1:${query}`, () => trySource(`scsearch1:${query}`, () => finish('error', 'no source in search')));
     return;
   }
 
@@ -1109,18 +1124,20 @@ function startLadderDownload(jobId, b, onDone) {
       const tryClient = (index) => {
         if (index >= clients.length) {
           // last resort: let yt-dlp search and take the first that works
-          const query = `ytsearch3:${[b.artist, b.title].filter(Boolean).join(' ')}`;
+          const query = `ytsearch1:${[b.artist, b.title].filter(Boolean).join(' ')}`;
           const retry = spawn('/opt/musicfy/ytdlp-venv/bin/yt-dlp', [
             '--no-warnings', '--newline', '-x', '--audio-format', 'mp3', '--audio-quality', '0',
-            '--max-downloads', '1', '--match-filter', 'duration > 2',
+            '--match-filter', 'duration > 2',
             '--extractor-args', 'youtube:player_client=android',
             '-o', path.join(dir, '%(title)s.%(ext)s'), query,
           ], { stdio: ['ignore', 'pipe', 'pipe'] });
           watch(retry);
           runningChildren.set(jobId, retry);
           retry.on('error', (e) => finish('error', String(e.message).slice(0, 160)));
-          retry.on('close', (code2) => {
-            if (code2 !== 0) return finish('error', `yt-dlp exit ${code}, clients and search failed`);
+          retry.on('close', () => {
+            // same 101 quirk: judge by the file on disk, not the exit code
+            const got = fs.readdirSync(dir).some((f) => /\.(mp3|m4a|aac|opus|ogg|flac|wav)$/i.test(f) && !/\.part$/i.test(f));
+            if (!got) return finish('error', `yt-dlp exit ${code}, clients and search failed`);
             ingestDownloaded();
           });
           return;
