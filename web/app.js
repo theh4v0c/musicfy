@@ -3815,12 +3815,15 @@ $('pb-menu').onclick = (e) => {
   const r = $('pb-menu').getBoundingClientRect();
   currentCtx(r.left - 150, r.top - 8);
 };
-$('pb-title').onclick = (e) => { e.stopPropagation(); const r = $('pb-title').getBoundingClientRect(); currentCtx(r.left, r.bottom + 6); };
+$('pb-title').onclick = (e) => { e.stopPropagation(); openNowPlaying(); };
+// the player bar is not a context-menu target: right click and the dots button open
+// the menu, a plain click expands the now playing view
+function openNowPlaying() { if (!state.current) return; $('np').hidden = false; setTimeout(fitNowPlaying, 30); }
+$('pb-art').addEventListener('click', () => setTimeout(fitNowPlaying, 30), true);
 document.querySelector('.pb-left').oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); currentCtx(e.clientX, e.clientY); };
 document.querySelector('.pb-left').onclick = (e) => {
   if (e.target.closest('button') || e.target.closest('#pb-art') || e.target.closest('#pb-artist')) return;
-  const r = document.querySelector('.pb-left').getBoundingClientRect();
-  currentCtx(r.left + 20, Math.max(80, r.top - 240));
+  openNowPlaying();
 };
 longPress(document.querySelector('.pb-left'), () => {
   const r = document.querySelector('.pb-left').getBoundingClientRect();
@@ -3843,7 +3846,6 @@ $('np-art').onclick = (e) => {
 };
 longPress($('np-art'), () => { if (state.current) openCtx(state.current, innerWidth / 2 - 110, innerHeight / 2 - 140); });
 const npOpen = (open) => { $('np').hidden = !open; if (open) fitNowPlaying(); };
-$('pb-art').addEventListener('click', () => setTimeout(fitNowPlaying, 30), true);
 $('mini').addEventListener('click', () => setTimeout(fitNowPlaying, 30), true);
 const closeQueue = () => {
   $('queue-drawer').hidden = true;
