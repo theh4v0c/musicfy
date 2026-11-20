@@ -842,7 +842,7 @@ async function renderHome() {
     const greet = v.querySelector('.hero-greet');
     const sub = v.querySelector('.hero-sub');
     if (greet) greet.textContent = g.name ? `Good ${g.part}, ${g.name}!` : `Good ${g.part}.`;
-    if (sub) sub.textContent = [g.fact, g.line].filter(Boolean).join(' · ');
+    if (sub) sub.textContent = g.sub || [g.fact, g.line].filter(Boolean).join(' · ');
   }).catch(() => {});
   drawQuick();
   const fb = $('flow-btn');

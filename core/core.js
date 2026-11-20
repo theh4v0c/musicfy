@@ -2347,33 +2347,63 @@ const server = http.createServer(async (req, res) => {
           } catch {}
         }
       }
-      let line;
-      if (city && weather) line = `${weather.temp}°C and ${weather.word} in ${city}.`;
-      else if (city) line = `In ${city}.`;
-      else if (weather) line = `${weather.temp}°C and ${weather.word} outside.`;
-      else line = 'Ready when you are.';
-      if (weather) {
-        if (/rain|snow|storm|fog/i.test(weather.word)) line += ' A stay-in and dig night.';
-        else if (hour >= 22 || hour < 5) line += ' Late-night session?';
-        else if (hour < 12) line += ' Easy start.';
-        else if (hour >= 18) line += ' Golden hour.';
+      const weatherLine = weather
+        ? `${weather.temp}°C, ${weather.word}${city ? ` in ${city}` : ''}.`
+        : (city ? `${city}.` : '');
+
+      // one concrete observation about this listener, not a dashboard stat
+      const nowTs = Math.floor(Date.now() / 1000);
+      const last = db.prepare(`SELECT t.title, t.artist, l.played_at FROM listens l JOIN tracks t ON t.id=l.track_id
+        ORDER BY l.played_at DESC LIMIT 1`).get();
+      const weekArtist = db.prepare(`SELECT t.artist, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
+        WHERE l.played_at >= ? AND t.artist IS NOT NULL AND t.artist != ''
+        GROUP BY t.artist ORDER BY n DESC LIMIT 1`).get(nowTs - 7 * 86400);
+      const weekTrack = db.prepare(`SELECT t.title, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
+        WHERE l.played_at >= ? GROUP BY l.track_id ORDER BY n DESC LIMIT 1`).get(nowTs - 7 * 86400);
+      const hourFamily = db.prepare(`SELECT t.genre_family f, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
+        WHERE l.played_at >= ? AND t.genre_family IS NOT NULL AND t.genre_family != ''
+          AND CAST(strftime('%H', l.played_at, 'unixepoch', 'localtime') AS INTEGER) BETWEEN ? AND ?
+        GROUP BY t.genre_family ORDER BY n DESC LIMIT 1`).get(nowTs - 120 * 86400, Math.max(0, hour - 1), Math.min(23, hour + 1));
+      const tempo = db.prepare(`SELECT ROUND(AVG(t.bpm)) b, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
+        WHERE l.played_at >= ? AND t.bpm IS NOT NULL AND t.bpm > 0`).get(nowTs - 7 * 86400);
+      const weekNew = db.prepare(`SELECT COUNT(*) c FROM tracks WHERE added_at >= ?`).get(nowTs - 7 * 86400).c;
+      const weekNewUnheard = db.prepare(`SELECT COUNT(*) c FROM tracks t WHERE t.added_at >= ? AND NOT EXISTS
+        (SELECT 1 FROM listens l WHERE l.track_id=t.id)`).get(nowTs - 7 * 86400).c;
+      const staleAlbum = db.prepare(`SELECT t.album a, COUNT(*) n, MAX(l.played_at) last FROM listens l JOIN tracks t ON t.id=l.track_id
+        WHERE t.album IS NOT NULL AND t.album != '' GROUP BY t.album HAVING n >= 4 AND last IS NOT NULL AND last < ?
+        ORDER BY n DESC LIMIT 1`).get(nowTs - 21 * 86400);
+      const topHour = db.prepare(`SELECT CAST(strftime('%H', l.played_at, 'unixepoch', 'localtime') AS INTEGER) h, COUNT(*) n
+        FROM listens l GROUP BY h ORDER BY n DESC LIMIT 1`).get();
+
+      const hhmm = (ts) => {
+        try { return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz }).format(new Date(ts * 1000)); }
+        catch { return ''; }
+      };
+      const candidates = [];
+      if (last && nowTs - last.played_at < 8 * 3600) {
+        candidates.push(`“${last.title}” was the last thing on${hhmm(last.played_at) ? `, at ${hhmm(last.played_at)}` : ''}.`);
       }
-      // a music fact pulled from the listening profile, rotated by the hour so it changes
+      if (weekTrack && weekTrack.n >= 4) candidates.push(`“${weekTrack.title}”, ${weekTrack.n} times this week.`);
+      if (weekArtist && weekArtist.n >= 3) candidates.push(`${weekArtist.artist}, ${weekArtist.n} plays this week.`);
+      if (weekNew) candidates.push(`${weekNew} new track${weekNew === 1 ? '' : 's'} this week${weekNewUnheard ? `; ${weekNewUnheard} still unheard` : ''}.`);
+      if (hourFamily && hourFamily.n >= 4) candidates.push(`At this hour you usually reach for ${hourFamily.f}.`);
+      if (staleAlbum) candidates.push(`${staleAlbum.a}, untouched for ${Math.floor((nowTs - staleAlbum.last) / 86400)} days.`);
+      if (tempo && tempo.n >= 10 && tempo.b) candidates.push(`${tempo.b} BPM, more or less all week.`);
+      if (topHour && topHour.n >= 20) candidates.push(`${String(topHour.h).padStart(2, '0')}:00 is your hour.`);
+
+      const day = Math.floor(nowTs / 86400);
+      const seed = Math.abs(hour * 7 + day) % Math.max(1, candidates.length);
+      // a track that just played is the most alive thing we know, so it wins
+      const fresh = last && nowTs - last.played_at < 3 * 3600 ? candidates[0] : null;
+      const music = fresh || candidates[seed] || (topHour ? `${String(topHour.h).padStart(2, '0')}:00 is your hour.` : '');
+      const sub = [music, weatherLine].filter(Boolean).join(' · ');
+      const line = weatherLine;
+      const fact = music;
       const plays = db.prepare('SELECT COUNT(*) c FROM listens').get().c;
-      const topTrack = db.prepare(`SELECT t.title, t.artist, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
-        GROUP BY l.track_id ORDER BY n DESC LIMIT 1`).get();
-      const topArtist = db.prepare(`SELECT t.artist, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
-        WHERE t.artist IS NOT NULL AND t.artist != '' GROUP BY t.artist ORDER BY n DESC LIMIT 1`).get();
       const tracks = db.prepare('SELECT COUNT(*) c FROM tracks').get().c;
       const artists = db.prepare("SELECT COUNT(DISTINCT artist) c FROM tracks WHERE artist IS NOT NULL AND artist != ''").get().c;
-      const addedWeek = db.prepare('SELECT COUNT(*) c FROM tracks WHERE added_at >= ?').get(now() - 7 * 86400).c;
-      const facts = [];
-      if (topTrack && topTrack.n >= 3) facts.push(`You have played “${topTrack.title}” ${topTrack.n} times.`);
-      if (topArtist) facts.push(`Your most played artist is ${topArtist.artist}.`);
-      if (addedWeek) facts.push(`${addedWeek} new track${addedWeek === 1 ? '' : 's'} landed this week.`);
-      facts.push(`${plays.toLocaleString()} plays across ${tracks} tracks.`);
-      const fact = facts[Math.abs(hour) % facts.length];
-      return json(res, 200, { name, part, hour, weather, city, line, fact, stats: { plays, tracks, artists, addedWeek } });
+      const addedWeek = weekNew;
+      return json(res, 200, { name, part, hour, weather, city, sub, line, fact, stats: { plays, tracks, artists, addedWeek } });
     }
 
     // dynamic Ask suggestions from what you actually play this week
