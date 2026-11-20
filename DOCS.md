@@ -126,6 +126,20 @@ Media Session metadata goes to car displays, and `previoustrack` restarts the cu
 
 Library JSON is gzipped (`/api/tracks` is 870 KB raw, 142 KB compressed). On a phone that is the difference between a usable app and a slow one.
 
+## Home masthead and micro-interactions
+
+The greeting is a session report: day and time, city, a two line greeting (late hours get
+"Still up,"), the last track as a sentence with its BPM and key as chips, Flow as a
+transport key, Resume when a queue survived, three picks with the reason each is there,
+and three readouts under a hairline. Picks come from `GET /api/home/picks`: artist of the
+week, more from the last artist, same key, same tempo, worn out, never heard. The reason
+is the point; a pick with no argument is a billboard.
+
+Motion is small and purposeful: a light runs the top edge of the Flow key on hover
+(`.beam`), a lens ring opens from the pointer on every press (`.ripple`), the assistant's
+thinking state is a three colour orb, and context menus arrive through a short goo blur.
+All of it is off under `prefers-reduced-motion`.
+
 ## Mobile start time
 
 Three things made a phone wait before the first note, and all three were measured with

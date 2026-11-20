@@ -189,6 +189,7 @@ function weatherWord(code) {
 }
 // one weather call per 10 minutes, not one per home screen load
 let weatherCache = { at: 0, key: '', data: null };
+let picksCache = { at: 0, data: null };
 
 // metadata to write into a track's file: Traktor PRIV + standard ID3. MP3 only.
 function trackTagMeta(db, tid) {
@@ -2477,6 +2478,77 @@ const server = http.createServer(async (req, res) => {
         });
         return;
       }
+    }
+
+    // three tracks worth putting under the greeting, each with the reason it is there.
+    // the reason is the whole point: a pick with no argument is a billboard.
+    if (u.pathname === '/api/home/picks') {
+      res.setHeader('cache-control', 'no-store');
+      const nowTs = Math.floor(Date.now() / 1000);
+      const fresh = u.searchParams.get('fresh') === '1';
+      if (!fresh && picksCache.at && Date.now() - picksCache.at < 45000) return json(res, 200, picksCache.data);
+      const last = db.prepare(`SELECT t.id, t.artist, t.title, t.bpm, t.key, t.key_scale
+        FROM listens l JOIN tracks t ON t.id=l.track_id ORDER BY l.played_at DESC LIMIT 1`).get();
+      const owned = `JOIN files f ON f.track_id=t.id AND f.tier='owned'`;
+      const picks = [];
+      const seen = new Set();
+      const add = (row, reason) => {
+        if (!row || seen.has(row.id) || picks.length >= 3) return;
+        seen.add(row.id);
+        picks.push({
+          id: row.id, title: row.title, artist: row.artist, has_art: !!row.has_art,
+          bpm: row.bpm ? Math.round(row.bpm) : null, key: row.key || null, key_scale: row.key_scale || null,
+          reason,
+        });
+      };
+      // the artist you actually played most this week beats a guess
+      const weekArtist = db.prepare(`SELECT t.artist a, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
+        WHERE l.played_at >= ? AND t.artist IS NOT NULL AND t.artist != ''
+        GROUP BY t.artist ORDER BY n DESC LIMIT 1`).get(nowTs - 7 * 86400);
+      if (weekArtist && weekArtist.a) {
+        add(db.prepare(`SELECT t.id,t.title,t.artist,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
+          WHERE t.artist=? AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id AND l.played_at > ?)
+          ORDER BY RANDOM() LIMIT 1`).get(weekArtist.a, nowTs - 14 * 86400),
+          `your artist of the week, unheard lately`);
+      }
+      if (last && last.artist) {
+        add(db.prepare(`SELECT t.id,t.title,t.artist,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
+          WHERE t.artist=? AND t.id<>? ORDER BY RANDOM() LIMIT 1`).get(last.artist, last.id),
+          `more from ${last.artist}`);
+      }
+      if (last && last.key) {
+        add(db.prepare(`SELECT t.id,t.title,t.artist,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
+          WHERE t.key=? AND t.id<>? AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id AND l.played_at > ?)
+          ORDER BY RANDOM() LIMIT 1`).get(last.key, last.id, nowTs - 30 * 86400),
+          `same key as “${String(last.title).slice(0, 22)}”`);
+      }
+      if (last && last.bpm) {
+        add(db.prepare(`SELECT t.id,t.title,t.artist,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
+          WHERE t.bpm BETWEEN ? AND ? AND t.id<>? AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id)
+          ORDER BY RANDOM() LIMIT 1`).get(last.bpm - 3, last.bpm + 3, last.id),
+          `${Math.round(last.bpm)} BPM, never played`);
+      }
+      add(db.prepare(`SELECT t.id,t.title,t.artist,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
+        WHERE NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id) ORDER BY RANDOM() LIMIT 1`).get(),
+        'in the library, never heard');
+      add(db.prepare(`SELECT t.id,t.title,t.artist,t.has_art,t.bpm,t.key,t.key_scale, COUNT(l.track_id) n, MAX(l.played_at) last
+        FROM tracks t ${owned} LEFT JOIN listens l ON l.track_id=t.id
+        GROUP BY t.id HAVING n >= 3 AND last < ? ORDER BY n DESC LIMIT 1`).get(nowTs - 21 * 86400),
+        'you wore this one out, then forgot it');
+      // never hand back two when three were asked for, and never with a shrug twice
+      const pickOne = (where, args) => db.prepare(`SELECT t.id,t.title,t.artist,t.has_art,t.bpm,t.key,t.key_scale
+        FROM tracks t ${owned} WHERE t.id NOT IN (${[...seen].map(() => '?').join(',') || 'NULL'}) ${where}
+        ORDER BY RANDOM() LIMIT 1`).get(...[...seen], ...args);
+      if (picks.length < 3) {
+        add(pickOne('AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id AND l.played_at > ?)', [nowTs - 60 * 86400]),
+          'untouched for two months');
+      }
+      if (picks.length < 3) {
+        add(pickOne('AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id)', []), 'in the library, never heard');
+      }
+      add(pickOne('', []), 'no reason, it just slaps');
+      picksCache = { at: Date.now(), data: { picks } };
+      return json(res, 200, { picks });
     }
 
     // personalised greeting: name from settings, time of day, live weather

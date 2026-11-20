@@ -200,6 +200,10 @@ function ctxRename(t) {
 
 function openCtx(t, x, y) {
   markCtxOpen();
+  const ctxEl = $('ctx');
+  ctxEl.classList.remove('goo');
+  void ctxEl.offsetWidth;
+  ctxEl.classList.add('goo');
   ctxTarget = t;
   const m = $('ctx');
   const liked = isLiked(t);
@@ -829,6 +833,32 @@ function longPress(el, fn, holdMs = 500) {
 // a long press must never fire while the page is scrolling
 window.addEventListener('scroll', () => { if (activeLongPressTimer) { clearTimeout(activeLongPressTimer); activeLongPressTimer = null; } }, true);
 
+/* a click should leave a mark: a lens ring from the pointer, and a short press.
+   no canvas, no WebGL, and nothing at all under reduce-motion. */
+function rippleAt(el, x, y) {
+  if (!el || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = el.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const size = Math.max(r.width, r.height) * 1.2;
+  const span = document.createElement('span');
+  span.className = 'ripple';
+  span.style.width = span.style.height = `${size}px`;
+  span.style.left = `${(x || r.left + r.width / 2) - r.left - size / 2}px`;
+  span.style.top = `${(y || r.top + r.height / 2) - r.top - size / 2}px`;
+  if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+  el.appendChild(span);
+  el.classList.remove('pressed');
+  void el.offsetWidth;
+  el.classList.add('pressed');
+  setTimeout(() => el.classList.remove('pressed'), 140);
+  span.addEventListener('animationend', () => span.remove(), { once: true });
+  setTimeout(() => span.remove(), 700);
+}
+document.addEventListener('pointerdown', (e) => {
+  const el = e.target.closest('.btn, .flow-key, .mpick, .mtile, .tcard, .pcard, .qtile, .crate, .snav-btn, .bn-btn, .dl-act, .mode-tab, .ask-ex, .chip-card');
+  if (el) rippleAt(el, e.clientX, e.clientY);
+}, { passive: true });
+
 /* ============ views ============ */
 const greetPart = () => { const h = new Date().getHours(); return h < 5 ? 'night' : h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'; };
 
@@ -843,20 +873,21 @@ async function renderHome() {
   v.innerHTML = `
     <section class="mast">
       <div class="mast-glow" id="mast-glow"></div>
-      <div class="mast-meta"><span id="mast-clock"></span><span id="mast-place"></span><span class="mast-flex"></span><span class="mast-read" id="mast-read"></span></div>
+      <div class="mast-meta"><span id="mast-clock"></span><span id="mast-place"></span><span class="mast-flex"></span></div>
       <div class="mast-main">
         <div class="mast-copy">
           <h1 class="mast-greet" id="mast-greet">Good ${greetPart()}.</h1>
-          <p class="mast-note" id="mast-note">${state.playlists.length} playlist${state.playlists.length === 1 ? '' : 's'}, ready when you are.</p>
+          <p class="mast-note" id="mast-note"><span class="mast-fact">${state.playlists.length} playlist${state.playlists.length === 1 ? '' : 's'}, ready when you are.</span></p>
         </div>
         <div class="mast-side">
-          <button class="flow-key" id="flow-btn" aria-label="Start Flow">
+          <button class="flow-key beam" id="flow-btn" aria-label="Start Flow">
             <span class="flow-key-k">${IC.play}</span>
             <span class="flow-key-t"><b>Flow</b><i>endless mix from what you play</i></span>
           </button>
           <button class="mast-resume" id="mast-resume" hidden></button>
         </div>
       </div>
+      <div class="mast-picks" id="mast-picks" hidden></div>
       <div class="mast-tiles" id="quick"></div>
     </section>
     <div id="rotation-slot"></div>
@@ -878,15 +909,24 @@ async function renderHome() {
   api('/api/greeting', { nocache: true }).then((g) => {
     const greet = document.getElementById('mast-greet');
     const note = document.getElementById('mast-note');
-    const read = document.getElementById('mast-read');
     const place = document.getElementById('mast-place');
     if (greet) {
-      const salutation = `Good ${g.part}${g.name ? ',' : '.'}`;
+      // small hours get their own line: "Good evening" at 2am is a lie
+      const late = Number(g.hour) >= 23 || Number(g.hour) < 5;
+      const salutation = late
+        ? (g.name ? `Still up,` : 'Still up.')
+        : `Good ${g.part}${g.name ? ',' : '.'}`;
       greet.innerHTML = g.name
         ? `${esc(salutation)}<br><span class="mast-name">${esc(g.name)}</span>`
         : esc(salutation);
     }
-    if (note) note.textContent = g.fact || g.sub || '';
+    if (note) {
+      const fact = String(g.fact || g.sub || '').replace(/\s*·\s*$/, '');
+      const chips = [];
+      if (g.last && g.last.bpm) chips.push(`${g.last.bpm} BPM`);
+      if (g.last && g.last.key) chips.push(`${g.last.key}${g.last.key_scale === 'minor' ? 'm' : ''}`);
+      note.innerHTML = `${fact ? `<span class="mast-fact">${esc(fact)}</span>` : ''}${chips.map((c) => `<span class="mast-chip">${esc(c)}</span>`).join('')}`;
+    }
     // the greeting already counts this week's additions; the library list may not be
     // loaded yet when the tiles first render
     if (g.stats && Number.isFinite(Number(g.stats.addedWeek))) {
@@ -894,14 +934,8 @@ async function renderHome() {
       drawQuick();
     }
     if (place && g.city) place.textContent = g.city;
-    if (g.last) {
-      const bits = [];
-      if (g.last.bpm) bits.push(`${g.last.bpm} BPM`);
-      if (g.last.key) bits.push(`${g.last.key}${g.last.key_scale === 'minor' ? 'm' : ''}`);
-      if (read) read.textContent = bits.join('  ·  ');
-
-    }
   }).catch(() => {});
+  loadMastPicks();
   // a queue survives the session: offer to pick it up instead of starting cold
   const rq = state.queue && state.queue[state.qi];
   const resume = document.getElementById('mast-resume');
@@ -1194,6 +1228,36 @@ async function drawRotation(rec) {
   slot.appendChild(row);
   const strip = row.querySelector('#rot-row');
   list.slice(0, 12).forEach((t) => strip.appendChild(trackCard(t, list, 'Your rotation')));
+}
+
+/* three records worth pulling out, each with the reason it is there */
+async function loadMastPicks(fresh) {
+  const host = document.getElementById('mast-picks');
+  if (!host) return;
+  try {
+    const d = await api(`/api/home/picks${fresh ? '?fresh=1' : ''}`, { nocache: true });
+    const picks = (d.picks || []).slice(0, 3);
+    if (!picks.length) { host.hidden = true; return; }
+    if (!picks.length) { host.hidden = true; return; }
+    host.hidden = false;
+    host.innerHTML = `<div class="mast-picks-head"><span>On deck</span><button class="mpick-shuffle" type="button" title="Other picks">shuffle</button></div>
+      <div class="mast-picks-row">${picks.map((p) => `
+        <button class="mpick" type="button" data-id="${p.id}">
+          ${p.has_art
+            ? `<img class="mpick-art" src="/api/cover/${p.id}?s=140&v=${state.artV || 0}" alt="" loading="lazy" decoding="async">`
+            : `<span class="mpick-art ph">${esc(String(p.title || '?').charAt(0))}</span>`}
+          <span class="mpick-t"><b>${esc(p.title || '')}</b><i>${esc(p.reason || '')}</i></span>
+        </button>`).join('')}</div>`;
+    host.querySelectorAll('.mpick').forEach((el) => {
+      el.onclick = () => {
+        const i = picks.findIndex((p) => p.id === Number(el.dataset.id));
+        if (i < 0) return;
+        playList(picks.map((p) => ({ ...p, owned: 1 })), i, false, 'On deck');
+      };
+    });
+    const sh = host.querySelector('.mpick-shuffle');
+    if (sh) sh.onclick = () => { sh.disabled = true; loadMastPicks(true); };
+  } catch { host.hidden = true; }
 }
 
 function drawQuick() {
@@ -2677,7 +2741,7 @@ async function renderSearch() {
   };
 
   const drawAsk = async (text) => {
-    res.innerHTML = `<div class="ladder-state">Thinking about "${esc(text)}"...</div>`;
+    res.innerHTML = `<div class="ladder-state thinking">Thinking about "${esc(text)}"</div>`;
     // verbs like create, find, download go to the agent; questions go to the query engine
     const agentish = /\b(create|make|build|download|find|search|show|list|playlist|how many|how much|top rated|top \d)\b/i.test(text);
     if (agentish) {
