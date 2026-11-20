@@ -30,4 +30,22 @@ async function artworkFor(artist, title) {
   return url.replace('100x100bb', '600x600bb');
 }
 
-module.exports = { artworkFor };
+async function artworkForAlbum(album, artist) {
+  if (!album) return artworkFor(artist, '');
+  const term = encodeURIComponent(`${artist || ''} ${album}`.trim());
+  try {
+    const data = await getJson(`https://itunes.apple.com/search?term=${term}&entity=album&limit=8`);
+    const results = (data && data.results) || [];
+    const want = String(album).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const wantArtist = String(artist || '').toLowerCase().split(/[,&]/)[0].trim();
+    const pick = results.find((r) => {
+      const name = String(r.collectionName || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const by = String(r.artistName || '').toLowerCase();
+      return name === want && (!wantArtist || by.includes(wantArtist));
+    }) || results.find((r) => String(r.collectionName || '').toLowerCase().includes(want)) || results[0];
+    const url = pick && pick.artworkUrl100;
+    return url ? url.replace('100x100bb', '600x600bb') : null;
+  } catch { return null; }
+}
+
+module.exports = { artworkFor, artworkForAlbum };

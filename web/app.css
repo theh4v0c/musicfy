@@ -818,3 +818,6 @@ html, body { overflow-x: hidden; max-width: 100%; }
   .view.asking .ask-hint { display: none; }
   .view.asking { padding-top: 10px; }
 }
+
+.view-tabs { margin: -6px 0 18px; }
+.artist-albums { margin: 0 0 16px; }

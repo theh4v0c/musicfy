@@ -207,6 +207,8 @@ function openCtx(t, x, y) {
     <button data-act="play">${IC.play} Play</button>
     <button data-act="next">&#8594; Play next</button>
     <button data-act="queue">&#43; Add to queue</button>
+    ${t.album ? '<button data-act="goalbum">Go to album</button>' : ''}
+    ${t.artist ? '<button data-act="goartist">Go to artist</button>' : ''}
     <div class="ctx-sep"></div>
     <button data-act="like">${liked ? IC.heart + ' Remove from Liked Songs' : IC.heartFull + ' Save to Liked Songs'}</button>
     ${hasAudio(t) ? '' : '<button data-act="dl">Download this track</button>'}
@@ -305,6 +307,8 @@ $('ctx').addEventListener('click', async (e) => {
   if (act === 'play') playList([t], 0);
   if (act === 'next') { state.queue.splice(state.qi + 1, 0, t); toast('Playing next'); }
   if (act === 'queue') { state.queue.push(t); toast('Added to queue'); }
+  if (act === 'goalbum' && t.album) { renderAlbum(t.album); return; }
+  if (act === 'goartist' && t.artist) { renderArtist(t.artist); return; }
   if (act === 'like') toggleLike(t);
   if (act === 'addpl') openAddPl(t);
   if (act === 'radiostart') startRadio(t);
@@ -1622,7 +1626,7 @@ async function renderSongs(push = true) {
       <button class="chip-card sm" data-browse="upload"><b>Upload files</b><span>MP3, FLAC, M4A, WAV</span></button>
       <button class="chip-card sm" data-browse="uploadfolder"><b>Upload a folder</b><span>ADDS EVERY TRACK INSIDE</span></button>
       <button class="chip-card sm" data-browse="fillgenres"><b>Fill genres</b><span>FROM MUSICBRAINZ</span></button>
-      <button class="chip-card sm" data-browse="covers"><b>Find missing covers</b><span>LOOKS UP ARTWORK</span></button>
+      <button class="chip-card sm" data-browse="covers"><b>Fix covers</b><span>OFFICIAL ALBUM ART</span></button>
       <button class="chip-card sm" data-browse="fixmeta"><b>Fix metadata</b><span>YEARS &amp; PLACEHOLDERS</span></button>
       <button class="chip-card sm" data-browse="bpm"><b>Sort by BPM</b><span>${all.filter((t) => t.bpm).length} ANALYSED</span></button>
       <button class="chip-card sm" data-browse="genres"><b>Genres</b><span>BROWSE BY FAMILY</span></button>`;
@@ -1702,17 +1706,21 @@ async function renderSongs(push = true) {
         return;
       }
       if (b.dataset.browse === 'covers') {
-        const missing = all.filter((t) => !t.has_art).length;
-        if (!missing) { toast('Every track has a cover', 4000); return; }
-        toast(`Looking up ${Math.min(missing, 40)} covers`, 6000);
-        api('/api/covers/fill?limit=40', { method: 'POST' }).then((r) => {
+        if (!confirm('Replace album covers with the official artwork? This overwrites existing covers for albums with more than one track.')) return;
+        toast('Fetching official album art', 6000);
+        (async () => {
+          let albums = 0, tracks = 0;
+          try {
+            const r = await api('/api/covers/albums?force=1&limit=25', { method: 'POST' });
+            albums = r.albums || 0; tracks = r.tracks || 0;
+          } catch {}
+          let singles = 0;
+          try { const s = await api('/api/covers/fill?limit=40', { method: 'POST' }); singles = s.found || 0; } catch {}
           bustCache();
           state.artV = Date.now();
-          const names = (r.missing_titles || []).slice(0, 4).join(', ');
-          const more = (r.missing_titles || []).length > 4 ? ` and ${r.missing_titles.length - 4} more` : '';
-          toast((r.found ? `${r.found} covers found. ` : '') + `${r.remaining} still missing` + (names ? `: ${names}${more}` : ''), 12000);
+          toast(`Album art: ${albums} albums, ${tracks} songs. Singles: ${singles} found.`, 9000);
           renderSongs(false);
-        }).catch(() => toast('cover lookup failed', 5000));
+        })().catch(() => toast('cover lookup failed', 5000));
         return;
       }
       if (b.dataset.browse === 'fixmeta') {
@@ -2107,10 +2115,11 @@ function playPreview(t, btn) {
 
 async function renderAskAi() {
   stopPreview();
-  setNav('askai'); state.playlistId = null; state.genreFilter = null; renderSidebar();
+  setNav('search');
+  state.view = 'askai'; state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'Ask';
   const v = $('view');
-  v.innerHTML = `${heroBanner('ASSISTANT', 'Ask', 'Search your library in plain language.')}<div class="search-wrap">
+  v.innerHTML = `${heroBanner('ASSISTANT', 'Ask', 'Search your library in plain language.')}${viewTabs('ask')}<div class="search-wrap">
       <input class="search" id="ai-q" placeholder="Ask anything, for example: create a playlist of 10 ambient tracks" autocomplete="off">
       <div class="ask-hint">
         <button class="ask-ex">how much of my library has audio</button>
@@ -2120,6 +2129,7 @@ async function renderAskAi() {
       </div>
       <div class="ladder-state" id="ai-state"></div>
     </div><div id="ai-res"></div><div id="ask-discover"></div>`;
+  wireViewTabs(v);
   const box = $('ai-q');
   const out = $('ai-res');
   const stateEl = $('ai-state');
@@ -2364,11 +2374,21 @@ async function renderAskAi() {
   }).catch(() => {});
 }
 
+function viewTabs(active) {
+  return `<div class="mode-tabs view-tabs">
+    <button class="mode-tab ${active === 'search' ? 'on' : ''}" data-view="search">Web search</button>
+    <button class="mode-tab ${active === 'ask' ? 'on' : ''}" data-view="ask">Ask your library</button>
+  </div>`;
+}
+function wireViewTabs(root) {
+  root.querySelectorAll('[data-view]').forEach((b) => { b.onclick = () => (b.dataset.view === 'ask' ? renderAskAi() : renderSearch()); });
+}
+
 async function renderSearch() {
   setNav('search'); state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'Search';
   const v = $('view');
-  v.innerHTML = `${heroBanner('SEARCH', 'Search', 'Find artists, tracks and albums, or search the web for new audio.')}<div class="search-wrap">
+  v.innerHTML = `${heroBanner('SEARCH', 'Search', 'Find artists, tracks and albums, or ask your own library.')}${viewTabs('search')}<div class="search-wrap">
       <input class="search" id="q" placeholder="Artists, tracks, albums, or search the web" autocomplete="off">
       <div class="mode-tabs" id="mode-tabs">
         <button class="mode-tab loc on" data-loc="lib"><span class="chk">✓</span>Library</button>
@@ -2377,6 +2397,7 @@ async function renderSearch() {
       </div>
       <div class="ladder-state" id="ladder-state"></div>
     </div><div id="qres"></div>`;
+  wireViewTabs(v);
   const q = $('q'); q.focus();
   if (!state.allTracks) state.allTracks = await api('/api/tracks');
   const all = state.allTracks;
@@ -3265,7 +3286,7 @@ async function renderArtist(name, push = true) {
       <div>
         <div class="plhead-kicker">ARTIST</div>
         <h1 class="plhead-name">${esc(name)}</h1>
-        <div class="plhead-meta"><b id="g-n">...</b> tracks in your library</div>
+        <div class="plhead-meta"><b id="g-n">...</b> tracks <span id="g-albums"></span></div>
         <div class="plhead-actions">
           <button class="btn btn-primary" id="g-play">${IC.play}&nbsp; Play</button>
         </div>
@@ -3276,8 +3297,31 @@ async function renderArtist(name, push = true) {
   state._currentList = list;
   const gnA = $('g-n'); const elA = $('g-list');
   if (!gnA || !elA) return;
+  const albums = [...new Set(list.map((t) => t.album).filter(Boolean))];
   gnA.textContent = list.length;
+  const gaA = $('g-albums');
+  if (gaA) gaA.textContent = albums.length ? `· ${albums.length} album${albums.length === 1 ? '' : 's'}` : '';
   if (!list.length) { elA.innerHTML = `<div class="empty">No owned tracks for this artist yet. Search the web and download some.</div>`; return; }
+  if (albums.length) {
+    const chips = document.createElement('div');
+    chips.className = 'songs-chips artist-albums';
+    albums.slice(0, 12).forEach((al) => {
+      const chip = document.createElement('button');
+      chip.className = 'chip-card sm';
+      const n = list.filter((t) => t.album === al).length;
+      chip.innerHTML = `<b>${esc(al)}</b><span>${n} TRACK${n === 1 ? '' : 'S'}</span>`;
+      chip.onclick = () => renderAlbum(al);
+      chips.appendChild(chip);
+    });
+    if (albums.length > 12) {
+      const more = document.createElement('button');
+      more.className = 'chip-card sm';
+      more.innerHTML = `<b>+${albums.length - 12}</b><span>MORE ALBUMS</span>`;
+      more.onclick = () => toast(`${albums.length} albums, showing the first 12`, 4000);
+      chips.appendChild(more);
+    }
+    v.insertBefore(chips, elA);
+  }
   list.forEach((t, i) => { registerRow(t); elA.appendChild(trow(t, i, list)); });
   const gpA = $('g-play'); if (gpA) gpA.onclick = () => playList(list, 0, false, name);
 }

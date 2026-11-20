@@ -690,6 +690,18 @@ function saveImageCover(buf, destJpg) {
   });
 }
 
+function fetchBuffer(url, timeout = 20000) {
+  return new Promise((resolve) => {
+    if (!url) return resolve(null);
+    https.get(url, { headers: { 'user-agent': 'Mozilla/5.0' }, timeout }, (r) => {
+      if (r.statusCode !== 200) { r.resume(); return resolve(null); }
+      const chunks = [];
+      r.on('data', (c) => chunks.push(c));
+      r.on('end', () => resolve(Buffer.concat(chunks)));
+    }).on('error', () => resolve(null));
+  });
+}
+
 function saveThumb(thumb, trackId) {
   return new Promise((resolve) => {
     if (!thumb) return resolve(false);
@@ -1018,11 +1030,17 @@ function startLadderDownload(jobId, b, onDone) {
       if (b.isrc) db.prepare('UPDATE tracks SET isrc=? WHERE id=?').run(b.isrc, tid);
       const done = () => finish('done', `track ${tid}`);
       // prefer the album art embedded in the file over the source's video thumbnail
-      if (!fs.existsSync(coverFile(tid))) {
-        extractCover(tid, dest)
-          .then((ok) => (ok ? done() : (b.thumb ? saveThumb(b.thumb, tid).then(done).catch(done) : done())))
-          .catch(done);
-      } else done();
+      if (fs.existsSync(coverFile(tid))) return done();
+      (async () => {
+        if (await extractCover(tid, dest)) return done();
+        const albumRow = db.prepare('SELECT album FROM tracks WHERE id=?').get(tid);
+        const album = (albumRow && albumRow.album) || b.album || '';
+        let art = album ? await covers.artworkForAlbum(album, a || b.artist || '').catch(() => null) : null;
+        if (!art) art = await covers.artworkFor(a || b.artist || '', t || b.title || '').catch(() => null);
+        if (art && await saveThumb(art, tid)) return done();
+        if (b.thumb && await saveThumb(b.thumb, tid)) return done();
+        done();
+      })().catch(done);
       } catch (e) {
         finish('error', String((e && e.message) || e).slice(0, 160));
       }
@@ -3045,7 +3063,50 @@ const server = http.createServer(async (req, res) => {
       };
       const q = rows.slice();
       await Promise.all([worker(q), worker(q), worker(q)]);
-      return json(res, 200, { ok: true, tried, found, remaining: db.prepare('SELECT COUNT(*) c FROM tracks WHERE COALESCE(has_art,0)=0').get().c });
+      const remaining = db.prepare('SELECT COUNT(*) c FROM tracks WHERE COALESCE(has_art,0)=0').get().c;
+      const missingTitles = db.prepare(`SELECT title, artist FROM tracks WHERE COALESCE(has_art,0)=0 ORDER BY id LIMIT 8`).all()
+        .map((r) => `${r.title}${r.artist ? ' - ' + r.artist : ''}`);
+      return json(res, 200, { ok: true, tried, found, remaining, missing_titles: missingTitles });
+    }
+
+    // official album artwork applied to every song in that album. This is what makes
+    // an album page and its rows share one cover instead of a video thumbnail per track.
+    if (u.pathname === '/api/covers/albums' && req.method === 'POST') {
+      const limit = Math.min(Number(u.searchParams.get('limit') || 20), 100);
+      const force = u.searchParams.get('force') === '1';
+      const rows = db.prepare(`SELECT id, album, artist, COALESCE(has_art,0) has_art FROM tracks
+        WHERE album IS NOT NULL AND album != '' ORDER BY id`).all();
+      const groups = new Map();
+      for (const r of rows) {
+        const key = String(r.album).toLowerCase();
+        let g = groups.get(key);
+        if (!g) { g = { album: r.album, artist: '', ids: [], missing: [] }; groups.set(key, g); }
+        if (!g.artist && r.artist && r.artist !== '||||||||||||||||||||') g.artist = r.artist;
+        g.ids.push(r.id);
+        if (!r.has_art) g.missing.push(r.id);
+      }
+      const work = [...groups.values()]
+        .filter((g) => g.ids.length > 1)
+        .sort((a, b) => b.missing.length - a.missing.length || b.ids.length - a.ids.length)
+        .slice(0, limit);
+      let albums = 0, tracks = 0;
+      for (const g of work) {
+        const targets = force ? g.ids : g.missing;
+        if (!targets.length) continue;
+        const url = await covers.artworkForAlbum(g.album, g.artist).catch(() => null);
+        if (!url) continue;
+        const buf = await fetchBuffer(url);
+        if (!buf || !buf.length) continue;
+        for (const id of targets) {
+          try {
+            await saveImageCover(buf, coverFile(id));
+            db.prepare('UPDATE tracks SET has_art=1 WHERE id=?').run(id);
+            tracks += 1;
+          } catch {}
+        }
+        albums += 1;
+      }
+      return json(res, 200, { ok: true, albums, tracks, remaining: db.prepare('SELECT COUNT(*) c FROM tracks WHERE COALESCE(has_art,0)=0').get().c });
     }
 
     // rung health: what is actually working right now
