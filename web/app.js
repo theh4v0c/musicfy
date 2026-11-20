@@ -948,23 +948,26 @@ function closeInlinePreview() {
   inlinePreview.remove();
   inlinePreview = null;
 }
-function toggleSuggestionPreview(s, anchor) {
+function toggleSuggestionPreview(s, anchor, opts = {}) {
   const key = `${s.title || ''}|${s.artist || ''}`;
   if (inlinePreview && inlinePreview.dataset.key === key) { closeInlinePreview(); return; }
   closeInlinePreview();
   stopPreview();
+  const owned = !!(opts.owned || s.owned);
   const panel = document.createElement('div');
   panel.className = 'inline-preview';
   panel.dataset.key = key;
   const mins = s.duration ? `${Math.floor(s.duration / 60)}:${String(Math.round(s.duration % 60)).padStart(2, '0')}` : '';
   panel.innerHTML = `<div class="ip-art"></div>
     <div class="ip-meta"><b>${esc(s.title || '')}</b><span>${esc(s.artist || '')}${s.album ? ` · ${esc(s.album)}` : ''}${mins ? ` · ${mins}` : ''}</span></div>
-    <div class="ip-actions"><button class="btn btn-primary" data-dl>Download</button><button class="btn btn-ghost" data-close>Close</button></div>
+    <div class="ip-actions"><button class="btn btn-primary" data-dl${owned ? ' disabled' : ''}>${owned ? 'In your library' : 'Download'}</button><button class="btn btn-ghost" data-close>Close</button></div>
     ${s.preview ? `<audio class="ip-audio" controls preload="none" src="${esc(s.preview)}"></audio>` : '<div class="ip-note">No preview from this source. Details only.</div>'}`;
   const art = panel.querySelector('.ip-art');
   if (s.cover) art.style.backgroundImage = `url("${s.cover}")`;
+  const cardHost = anchor.closest('.ask-action');
   const shelf = anchor.closest('.row-scroller');
-  if (shelf) shelf.insertAdjacentElement('afterend', panel);
+  if (cardHost) cardHost.insertAdjacentElement('afterend', panel);
+  else if (shelf) shelf.insertAdjacentElement('afterend', panel);
   else anchor.insertAdjacentElement('afterend', panel);
   inlinePreview = panel;
   panel.querySelector('[data-close]').onclick = closeInlinePreview;
@@ -972,10 +975,13 @@ function toggleSuggestionPreview(s, anchor) {
   if (audioEl) audioEl.play().catch(() => {});
   const dl = panel.querySelector('[data-dl]');
   dl.onclick = async () => {
+    if (owned) return;
     dl.disabled = true;
     try {
-      const r = await api('/api/ladder/download', { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ rung: 'search', title: s.title, artist: s.artist, duration: s.duration }) });
+      const r = s.id
+        ? await api(`/api/tracks/${s.id}/download`, { method: 'POST' })
+        : await api('/api/ladder/download', { method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ rung: 'search', title: s.title, artist: s.artist, duration: s.duration }) });
       closeInlinePreview();
       toast(`Fetching ${s.title}`, 4000);
       openDownloads();
@@ -2229,7 +2235,8 @@ async function renderAskAi() {
             play.innerHTML = IC.play;
             play.title = t.preview ? 'Preview' : 'No preview for this one';
             play.disabled = !t.preview;
-            play.onclick = (e) => { e.stopPropagation(); playPreview(t, play); };
+            const preview = (e) => { if (e) e.stopPropagation(); toggleSuggestionPreview(t, row, { owned: t.owned }); };
+            play.onclick = preview;
             const title = document.createElement('span');
             title.className = 'apr-title';
             title.textContent = t.title || '';
@@ -2244,6 +2251,8 @@ async function renderAskAi() {
             tag.className = `apr-tag ${t.owned ? 'on' : t.source === 'online' ? 'new' : ''}`;
             tag.textContent = kind;
             row.append(play, art, meta, tag);
+            row.style.cursor = 'pointer';
+            row.onclick = (e) => { if (!e.target.closest('button')) preview(e); };
             list.appendChild(row);
           });
           if (tracks.length > 20) {
