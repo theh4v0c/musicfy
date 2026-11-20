@@ -43,7 +43,7 @@ function searchSoundcloud(seed, { limit = 8 } = {}) {
   return new Promise((resolve, reject) => {
     const args = [
       '--flat-playlist', '--no-warnings', '--quiet',
-      '--print', '%(id)s\t%(url)s\t%(title)s\t%(duration)s\t%(uploader)s',
+      '--print', '%(id)s\t%(url)s\t%(webpage_url)s\t%(title)s\t%(duration)s\t%(uploader)s',
       `scsearch${limit}:${query}`,
     ];
     execFile(YTDLP, args, { timeout: 45000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
@@ -51,7 +51,10 @@ function searchSoundcloud(seed, { limit = 8 } = {}) {
       const out = [];
       for (const line of stdout.split('\n')) {
         if (!line.trim()) continue;
-        const [id, url, title, dur, uploader] = line.split('\t');
+        const [id, apiUrl, pageUrl, title, dur, uploader] = line.split('\t');
+        // flat search sometimes returns an artist page; that is not a track and yt-dlp
+        // would download the whole profile (or nothing). Only keep real track permalinks.
+        const url = pageUrl && /^https:\/\/soundcloud\.com\/[^/]+\/[^/]+/.test(pageUrl) ? pageUrl : null;
         if (!id || !url) continue;
         out.push({
           source: 'soundcloud',
@@ -143,7 +146,7 @@ function searchSoundcloud(seed, { limit = 8 } = {}) {
   return new Promise((resolve, reject) => {
     const args = [
       '--flat-playlist', '--no-warnings', '--quiet',
-      '--print', '%(id)s\t%(url)s\t%(title)s\t%(duration)s\t%(uploader)s',
+      '--print', '%(id)s\t%(url)s\t%(webpage_url)s\t%(title)s\t%(duration)s\t%(uploader)s',
       `scsearch${limit}:${query}`,
     ];
     execFile(YTDLP, args, { timeout: 45000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
@@ -151,7 +154,10 @@ function searchSoundcloud(seed, { limit = 8 } = {}) {
       const out = [];
       for (const line of stdout.split('\n')) {
         if (!line.trim()) continue;
-        const [id, url, title, dur, uploader] = line.split('\t');
+        const [id, apiUrl, pageUrl, title, dur, uploader] = line.split('\t');
+        // flat search sometimes returns an artist page; that is not a track and yt-dlp
+        // would download the whole profile (or nothing). Only keep real track permalinks.
+        const url = pageUrl && /^https:\/\/soundcloud\.com\/[^/]+\/[^/]+/.test(pageUrl) ? pageUrl : null;
         if (!id || !url) continue;
         out.push({
           source: 'soundcloud',

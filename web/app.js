@@ -955,11 +955,12 @@ function openSuggestionPreview(s) {
   if (dl) dl.onclick = async () => {
     dl.disabled = true;
     try {
-      await api('/api/ladder/download', { method: 'POST', headers: { 'content-type': 'application/json' },
+      const r = await api('/api/ladder/download', { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ rung: 'search', title: s.title, artist: s.artist, duration: s.duration }) });
       closeCtx(true);
       toast(`Fetching ${s.title}`, 4000);
       openDownloads();
+      if (r.job) waitForJob(r.job, s.title);
     } catch { dl.disabled = false; toast('Could not start', 3000); }
   };
 }

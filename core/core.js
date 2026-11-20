@@ -6,6 +6,7 @@ const zlib = require('node:zlib');
 const https = require('node:https');
 const fs = require('node:fs');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 const { execFile, execFileSync, spawn } = require('node:child_process');
 const { normalize, scoreCandidate, QUALITY_RANK } = require('./ladder');
 const ytdlp = require('./ytdlp');
@@ -402,7 +403,7 @@ async function resumeQueuedDownloads() {
       const t = db.prepare('SELECT id,title,artist FROM tracks WHERE id=?').get(p.trackId);
       if (!t) continue;
       try {
-        const best = await resolveBest({ title: t.title, artist: t.artist, duration: null });
+        const best = await resolveBest({ title: t.title, artist: t.artist, duration: null }, 1800, { download: true });
         if (!best) {
           db.prepare("UPDATE jobs SET state='error', detail='no source', finished_at=? WHERE payload LIKE ?").run(now(), `%${p.jobId}%`);
           continue;
@@ -436,32 +437,57 @@ try {
 
 
 // aac 160 or 128 mp3 transcode, and refuse the 30 second previews
-function soundcloudFallbackDownload(b, dir, finish, ingestDownloaded, setProgress) {
-  setProgress(5);
-  execFile('/opt/musicfy/ytdlp-venv/bin/yt-dlp',
-    ['--no-warnings', '--print', '%(duration)s', '-f', 'bestaudio/best', b.url],
-    { timeout: 90000, maxBuffer: 1024 * 1024 }, (probeErr, probeOut) => {
-      const probed = Number(String(probeOut || '').trim().split('\n')[0]) || 0;
-      const expected = Number(b.duration) || 0;
-      if (probed && expected && probed < expected * 0.6 && probed < 60) {
-        return finish('error', `soundcloud preview only (${Math.round(probed)}s)`);
-      }
-      execFile('/opt/musicfy/ytdlp-venv/bin/yt-dlp',
-        ['--no-warnings', '-f', 'hls_aac_160k/hls_aac_96k/hls_mp3_128/bestaudio',
-          '-x', '--audio-format', 'm4a',
-          '-o', path.join(dir, '%(title)s.%(ext)s'), b.url],
-        { timeout: 15 * 60 * 1000, maxBuffer: 4 * 1024 * 1024 }, (err) => {
-          if (!err) return ingestDownloaded();
-          // the 160k selector is missing on some tracks: retry with the default choice
-          execFile('/opt/musicfy/ytdlp-venv/bin/yt-dlp',
-            ['--no-warnings', '-f', 'bestaudio/best', '-x', '--audio-format', 'm4a',
-              '-o', path.join(dir, '%(title)s.%(ext)s'), b.url],
-            { timeout: 30 * 60 * 1000, maxBuffer: 4 * 1024 * 1024 }, (err2) => {
-              if (err2) return finish('error', String(err2.message).slice(0, 200));
-              ingestDownloaded();
-            });
-        });
+// SoundCloud now serves many tracks as DRM protected. Fall through to YouTube
+// instead of leaving the job failed; the search rung already trusted this source.
+function searchDownloadFallback(b, dir, finish, ingestDownloaded) {
+  const query = [b.artist, b.title].filter(Boolean).join(' ');
+  const args = ['--no-warnings', '-f', 'bestaudio/best', '-x', '--audio-format', 'm4a',
+    '--max-downloads', '1', '--match-filter', 'duration > 2',
+    '--extractor-args', 'youtube:player_client=android',
+    '-o', path.join(dir, '%(title)s.%(ext)s'), `ytsearch3:${query}`];
+  execFile('/opt/musicfy/ytdlp-venv/bin/yt-dlp', args,
+    { timeout: 10 * 60 * 1000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (!err) return ingestDownloaded();
+      const tail = String(stderr || '').split('\n').filter(Boolean).slice(-3).join(' | ').slice(0, 300);
+      finish('error', `soundcloud DRM; youtube failed: ${tail || err.message}`.slice(0, 600));
     });
+}
+
+function soundcloudFallbackDownload(b, dir, finish, ingestDownloaded, setProgress) {
+  const run = (url) => {
+    setProgress(5);
+    execFile('/opt/musicfy/ytdlp-venv/bin/yt-dlp',
+      ['--no-warnings', '--print', '%(duration)s', '-f', 'bestaudio/best', url],
+      { timeout: 90000, maxBuffer: 1024 * 1024 }, (probeErr, probeOut) => {
+        const probed = Number(String(probeOut || '').trim().split('\n')[0]) || 0;
+        const expected = Number(b.duration) || 0;
+        if (probed && expected && probed < expected * 0.6 && probed < 60) {
+          return finish('error', `soundcloud preview only (${Math.round(probed)}s)`);
+        }
+        execFile('/opt/musicfy/ytdlp-venv/bin/yt-dlp',
+          ['--no-warnings', '-f', 'hls_aac_160k/hls_aac_96k/hls_mp3_128/bestaudio',
+            '-x', '--audio-format', 'm4a',
+            '-o', path.join(dir, '%(title)s.%(ext)s'), url],
+          { timeout: 15 * 60 * 1000, maxBuffer: 4 * 1024 * 1024 }, (err) => {
+            if (!err) return ingestDownloaded();
+            execFile('/opt/musicfy/ytdlp-venv/bin/yt-dlp',
+              ['--no-warnings', '-f', 'bestaudio/best', '-x', '--audio-format', 'm4a',
+                '-o', path.join(dir, '%(title)s.%(ext)s'), url],
+              { timeout: 30 * 60 * 1000, maxBuffer: 4 * 1024 * 1024 }, (err2) => {
+                if (err2) return searchDownloadFallback(b, dir, finish, ingestDownloaded);
+                ingestDownloaded();
+              });
+          });
+      });
+  };
+  const candidate = String(b.url || '');
+  if (/^https:\/\/soundcloud\.com\/[^/]+\/[^/]+/.test(candidate)) return run(candidate);
+  // an api URL or an artist page: ask the API for the real track permalink first
+  const m = String(b.id || '').match(/(\d+)/);
+  if (!m) return finish('error', 'soundcloud candidate is not a track');
+  soundcloud.trackInfo(`https://api.soundcloud.com/tracks/${m[1]}`)
+    .then((t) => (t && t.permalink_url ? run(t.permalink_url) : finish('error', 'soundcloud track has no permalink')))
+    .catch((e) => finish('error', `soundcloud resolve: ${String(e.message).slice(0, 120)}`));
 }
 
 // ---------- rung health ----------
@@ -746,7 +772,7 @@ function maybeAutoDownload(trackId) {
   db.prepare('INSERT INTO jobs (kind,payload,state,created_at) VALUES (?,?,?,?)')
     .run('track-download', JSON.stringify({ jobId, trackId, auto: true }), 'running', now());
   const t = db.prepare('SELECT title, artist, duration FROM tracks WHERE id=?').get(trackId);
-  resolveBest({ title: t.title, artist: t.artist, duration: t.duration })
+  resolveBest({ title: t.title, artist: t.artist, duration: t.duration }, 1800, { download: true })
     .then((best) => {
       if (!best) throw new Error('no source found');
       enqueueDownload(jobId, { trackId, rung: best.rung, id: best.id, url: best.url, thumb: best.thumb, file: best.handle?.file || best.file, title: t.title, artist: t.artist });
@@ -769,7 +795,7 @@ function enqueueTrackDownload(t) {
   const jobId = crypto.randomUUID();
   db.prepare('INSERT INTO jobs (kind,payload,state,progress,created_at) VALUES (?,?,?,0,?)')
     .run('track-download', JSON.stringify({ jobId, trackId: t.id, title: t.title, artist: t.artist }), 'queued', now());
-  resolveBest({ title: t.title, artist: t.artist, duration: t.duration || null })
+  resolveBest({ title: t.title, artist: t.artist, duration: t.duration || null }, 1800, { download: true })
     .then((best) => {
       const payload = best
         ? { trackId: t.id, rung: best.rung, id: best.id, url: best.url, thumb: best.thumb, isrc: best.isrc,
@@ -878,7 +904,8 @@ function fileQuality(ext, bitrate) {
 
 // ---------- ladder downloads ----------
 function startLadderDownload(jobId, b, onDone) {
-  const dir = path.join(OWNED, 'web', String(jobId).slice(0, 8));
+  // hash the full id: retry ids append '-r' and would otherwise share a directory
+  const dir = path.join(OWNED, 'web', createHash('sha1').update(String(jobId)).digest('hex').slice(0, 10));
   fs.mkdirSync(dir, { recursive: true });
   const finish = (state, detail) => {
     runningChildren.delete(jobId);
@@ -899,13 +926,16 @@ function startLadderDownload(jobId, b, onDone) {
     if (child.stdout) child.stdout.on('data', onChunk);
     if (child.stderr) child.stderr.on('data', onChunk);
   };
-  const ingestDownloaded = async () => {
-    const files = fs.readdirSync(dir)
+  let ingested = false;
+  const ingestFrom = async (from) => {
+    if (ingested) return;   // a retry path may call this after the file already landed
+    ingested = true;
+    const files = fs.readdirSync(from)
       .filter((f) => !f.startsWith('.') && /\.(mp3|m4a|aac|opus|ogg|flac|wav|webm|mp4|m4b|mkv|aiff?)$/i.test(f))
       // yt-dlp writes a .part file while it works; never treat that as a result
       .filter((f) => !/\.part$/i.test(f));
-    if (!files.length) return finish('error', 'no audio file produced');
-    let fp = path.join(dir, files[0]);
+    if (!files.length) { ingested = false; return finish('error', 'no audio file produced'); }
+    let fp = path.join(from, files[0]);
     // Safari cannot play webm: convert the container before it enters the library
     const rawExt = (files[0].split('.').pop() || '').toLowerCase();
     if (['webm', 'mkv', 'ogg', 'opus'].includes(rawExt)) {
@@ -998,6 +1028,7 @@ function startLadderDownload(jobId, b, onDone) {
       }
     });
   };
+  const ingestDownloaded = () => ingestFrom(dir).catch((e) => finish('error', `ingest: ${String(e && e.message || e).slice(0, 160)}`));
 
   if (b.rung === 'search') {
     const query = [b.artist, b.title].filter(Boolean).join(' ');
@@ -1012,7 +1043,7 @@ function startLadderDownload(jobId, b, onDone) {
       child.on('error', next);
       child.on('close', (code) => { if (code === 0 && fs.readdirSync(dir).some((f) => /\.(mp3|m4a)$/i.test(f))) return ingestDownloaded(); next(); });
     };
-    trySource(`scsearch3:${query}`, () => trySource(`ytsearch3:${query}`, () => finish('error', 'no source in search')));
+    trySource(`ytsearch3:${query}`, () => trySource(`scsearch3:${query}`, () => finish('error', 'no source in search')));
     return;
   }
 
@@ -1118,7 +1149,7 @@ function startLadderDownload(jobId, b, onDone) {
 }
 
 // best ladder candidate for a seed: shared by per-track and playlist downloads
-async function resolveBest(seed, cap = 1800) {
+async function resolveBest(seed, cap = 1800, opts = {}) {
   // ask the catalogue who this is first: exact title, artist and length make every
   // later filter meaningful. iTunes answers in half a second, MusicBrainz does not.
   let canon = null;
@@ -1144,6 +1175,8 @@ async function resolveBest(seed, cap = 1800) {
       return { ...c, ...scoreCandidate(c, searchSeed) };
     })
     .filter((c) => c.score > 0 && (!cap || !c.duration || c.duration <= cap))
+    // downloads skip SoundCloud: most tracks are DRM protected now and stall the job
+    .filter((c) => !opts.download || c.rung !== 'soundcloud')
     .filter((c) => !(c.rung === 'archive' && !c.duration))   // whole collections, not tracks
     .filter((c) => {
       if (!expected || !c.duration) return true;
@@ -1155,7 +1188,10 @@ async function resolveBest(seed, cap = 1800) {
     .map((c) => ({ ...c, isrc: (canonical && canonical.isrc) || null, verified: !!(expected && c.duration && Math.abs(c.duration - expected) <= 4) }))
     .sort((a, b) => {
       const near = (x) => (expected && x.duration ? Math.abs(x.duration - expected) : 9999);
-      return b.score - a.score || near(a) - near(b) || QUALITY_RANK(b) - QUALITY_RANK(a);
+      // SoundCloud now DRMs a large share of tracks. Use it only when nothing else
+      // matched, so a download does not start with a source that will fail.
+      const src = (x) => (x.rung === 'soundcloud' ? -1 : 0);
+      return src(b) - src(a) || b.score - a.score || near(a) - near(b) || QUALITY_RANK(b) - QUALITY_RANK(a);
     });
   if (scored.length) return scored[0];
 
@@ -1651,7 +1687,7 @@ const server = http.createServer(async (req, res) => {
           // catalogue rows arrive with only a title and artist: resolve them first
           let payload = b;
           if (!payload.id && !payload.url) {
-            const best = await resolveBest({ title: payload.title, artist: payload.artist, duration: payload.duration || null });
+            const best = await resolveBest({ title: payload.title, artist: payload.artist, duration: payload.duration || null }, 1800, { download: true });
             if (!best) return json(res, 200, { error: 'no source' });
             payload = { ...payload, ...best, rung: best.rung, id: best.id, url: best.url };
           }
@@ -1726,7 +1762,7 @@ const server = http.createServer(async (req, res) => {
       const jobId = crypto.randomUUID();
       db.prepare('INSERT INTO jobs (kind,payload,state,created_at) VALUES (?,?,?,?)')
         .run('track-download', JSON.stringify({ jobId, trackId: tid }), 'queued', now());
-      resolveBest({ title: t.title, artist: t.artist, duration: t.duration })
+      resolveBest({ title: t.title, artist: t.artist, duration: t.duration }, 1800, { download: true })
         .then((best) => {
           if (!best) {
             db.prepare('UPDATE jobs SET state=?,detail=?,finished_at=? WHERE payload LIKE ?')
@@ -2738,7 +2774,7 @@ const server = http.createServer(async (req, res) => {
           while (cursor < jobs.length) {
             const { jobId, t } = jobs[cursor++];
             try {
-              const best = await resolveBest({ title: t.title, artist: t.artist, duration: t.duration });
+              const best = await resolveBest({ title: t.title, artist: t.artist, duration: t.duration }, 1800, { download: true });
               if (!best) {
                 db.prepare("UPDATE jobs SET state='error', detail='no source', finished_at=? WHERE payload LIKE ?").run(now(), `%${jobId}%`);
                 continue;
@@ -2774,7 +2810,7 @@ const server = http.createServer(async (req, res) => {
         const jobId = crypto.randomUUID();
         db.prepare('INSERT INTO jobs (kind,payload,state,progress,created_at) VALUES (?,?,?,0,?)')
           .run('track-download', JSON.stringify({ jobId, trackId: t.id, title: t.title, artist: t.artist }), 'queued', now());
-        resolveBest({ title: t.title, artist: t.artist, duration: null })
+        resolveBest({ title: t.title, artist: t.artist, duration: null }, 1800, { download: true })
           .then((best) => enqueueDownload(jobId, best
             ? { trackId: t.id, rung: best.rung, id: best.id, url: best.url, thumb: best.thumb, isrc: best.isrc, file: best.handle?.file || best.file, title: t.title, artist: t.artist }
             : { trackId: t.id, rung: 'search', title: t.title, artist: t.artist }))
@@ -2799,7 +2835,7 @@ const server = http.createServer(async (req, res) => {
       const jobId = crypto.randomUUID();
       db.prepare('INSERT INTO jobs (kind,payload,state,progress,created_at) VALUES (?,?,?,0,?)')
         .run('track-download', JSON.stringify({ jobId, trackId: t.id, title: t.title, artist: t.artist }), 'queued', now());
-      resolveBest({ title: t.title, artist: t.artist, duration: null })
+      resolveBest({ title: t.title, artist: t.artist, duration: null }, 1800, { download: true })
         .then((best) => {
           if (!best) { db.prepare("UPDATE jobs SET state='error', detail='no source', finished_at=? WHERE payload LIKE ?").run(now(), `%${jobId}%`); return; }
           enqueueDownload(jobId, { trackId: t.id, rung: best.rung, id: best.id, url: best.url, thumb: best.thumb, isrc: best.isrc, file: best.handle?.file || best.file, title: t.title, artist: t.artist });
