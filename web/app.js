@@ -200,10 +200,6 @@ function ctxRename(t) {
 
 function openCtx(t, x, y) {
   markCtxOpen();
-  const ctxEl = $('ctx');
-  ctxEl.classList.remove('goo');
-  void ctxEl.offsetWidth;
-  ctxEl.classList.add('goo');
   ctxTarget = t;
   const m = $('ctx');
   const liked = isLiked(t);
@@ -230,6 +226,10 @@ function openCtx(t, x, y) {
     <button data-act="radiostart">Start track radio</button>`;
   m.classList.add('open');
   placeCtx(x, y);
+  // the goo runs after the sheet is measured at full size, or the clamp is wrong
+  m.classList.remove('goo');
+  void m.offsetWidth;
+  m.classList.add('goo');
 }
 // keep the sheet fully on screen, even when it is taller than the space below the finger
 function placeCtx(x, y) {
@@ -922,10 +922,7 @@ async function renderHome() {
     }
     if (note) {
       const fact = String(g.fact || g.sub || '').replace(/\s*·\s*$/, '');
-      const chips = [];
-      if (g.last && g.last.bpm) chips.push(`${g.last.bpm} BPM`);
-      if (g.last && g.last.key) chips.push(`${g.last.key}${g.last.key_scale === 'minor' ? 'm' : ''}`);
-      note.innerHTML = `${fact ? `<span class="mast-fact">${esc(fact)}</span>` : ''}${chips.map((c) => `<span class="mast-chip">${esc(c)}</span>`).join('')}`;
+      note.innerHTML = fact ? `<span class="mast-fact">${esc(fact)}</span>` : '';
     }
     // the greeting already counts this week's additions; the library list may not be
     // loaded yet when the tiles first render
@@ -941,7 +938,7 @@ async function renderHome() {
   const resume = document.getElementById('mast-resume');
   if (resume && rq) {
     resume.hidden = false;
-    resume.innerHTML = `Resume <b>${esc(rq.title || 'last track')}</b>`;
+    resume.innerHTML = `<span class="mast-resume-k">Resume</span><b>${esc(rq.title || 'last track')}</b>`;
     resume.onclick = () => { playAt(state.qi); };
   }
   drawQuick();
@@ -2601,7 +2598,7 @@ async function renderSearch() {
   setNav('search'); state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'Search';
   const v = $('view');
-  v.innerHTML = `${heroBanner('SEARCH', 'Search', 'Search your library and the web, or ask for a playlist.')}<div class="search-wrap">
+  v.innerHTML = `<div class="search-head"><div class="search-kicker">SEARCH</div><p class="search-sub">Search your library and the web, or ask it a question.</p></div><div class="search-wrap">
       <input class="search" id="q" placeholder="Search tracks or ask: create a playlist of 10 ambient tracks" autocomplete="off">
       <div class="ask-hint" id="search-hints">
         <button class="ask-ex">tracks in Dm between 120 and 130 bpm</button>
@@ -2612,6 +2609,7 @@ async function renderSearch() {
         <button class="mode-tab loc on" data-loc="lib"><span class="chk">✓</span>Library</button>
         <button class="mode-tab loc on" data-loc="web"><span class="chk">✓</span>Web sources</button>
         <button class="mode-tab" id="long-sets" data-on="false" title="Include DJ mixes, sets and long recordings"><span class="chk"></span>Long sets</button>
+        <button class="mode-tab ask-mode" id="ask-mode" type="button" title="Ask a question about your library"><span class="chk"></span>Ask</button>
       </div>
       <div class="ladder-state" id="ladder-state"></div>
     </div><div id="qres"></div><div id="search-discover"></div>`;
@@ -2638,16 +2636,33 @@ async function renderSearch() {
       draw();
     };
   });
-  const assistantish = /\b(create|make|build|download|playlist|how many|how much|top rated|top \d|what can|help)\b/i;
+  // a question about the library, not a search for a word: tempo, key, counting, making
+  const assistantish = /\b(create|make|build|download|playlist|how many|how much|top rated|top \d|what can|help|which|who|when)\b|\b(tracks?|songs?)\b[^.]*\b(in|between|around|with|from)\b|\bbpm\b/i;
+  const disc = $('search-discover');
+  const askBtn = $('ask-mode');
+  const paintAsk = () => {
+    if (!askBtn) return;
+    askBtn.classList.toggle('on', !!state.askMode);
+    const c = askBtn.querySelector('.chk'); if (c) c.textContent = state.askMode ? '✓' : '';
+    q.placeholder = state.askMode
+      ? 'Ask about your library: how many tracks are analysed, what is in Dm at 124'
+      : 'Search tracks or ask: create a playlist of 10 ambient tracks';
+  };
+  if (askBtn) askBtn.onclick = () => { state.askMode = !state.askMode; paintAsk(); q.focus(); };
+  paintAsk();
   const submit = () => {
     const text = q.value.trim();
-    if (!text) { draw(); return; }
-    if (assistantish.test(text)) { runAssistant(text, res, $('ladder-state'), q); q.focus(); return; }
+    if (!text) { if (disc) disc.hidden = false; draw(); return; }
+    if (disc) disc.hidden = true;   // suggestions are for browsing, not for answering
+    if (state.askMode || assistantish.test(text)) { drawAsk(text); q.focus(); return; }
     $('view').classList.remove('asking');
     draw();
   };
   document.querySelectorAll('#search-hints .ask-ex').forEach((b) => b.onclick = () => {
     q.value = b.textContent;
+    // every example is phrased as a question, so it is answered as one
+    state.askMode = true;
+    paintAsk();
     submit();
     q.focus();
   });
@@ -2741,7 +2756,7 @@ async function renderSearch() {
   };
 
   const drawAsk = async (text) => {
-    res.innerHTML = `<div class="ladder-state thinking">Thinking about "${esc(text)}"</div>`;
+    res.innerHTML = `<div class="ladder-state thinking">Reading your library</div>`;
     // verbs like create, find, download go to the agent; questions go to the query engine
     const agentish = /\b(create|make|build|download|find|search|show|list|playlist|how many|how much|top rated|top \d)\b/i.test(text);
     if (agentish) {
@@ -2751,23 +2766,35 @@ async function renderSearch() {
       } catch { a = null; }
       if (a && a.spoken) {
         res.innerHTML = '';
-        const head = document.createElement('div');
-        head.innerHTML = `<div class="sec-title" style="margin-top:0">Result <small>${esc(String(a.plan.intent).replace('_', ' ').toUpperCase())}</small></div>
-          <div class="ask-meta"><span class="ask-pill">${esc(a.spoken)}</span><span class="ask-src">${a.source === 'llm' ? 'planned by model' : 'planned locally'}</span></div>`;
-        res.appendChild(head);
+        const card = document.createElement('section');
+        card.className = 'answer';
+        card.innerHTML = `<div class="answer-head">
+            <span class="answer-kicker">Answer</span>
+            <span class="answer-q">${esc(text)}</span>
+            <span class="answer-src">${a.source === 'llm' ? 'model' : 'local'}</span>
+          </div>
+          <p class="answer-said">${esc(a.spoken)}</p>`;
+        res.appendChild(card);
+        if (a.plan && a.plan.intent) {
+          const meta = document.createElement('div');
+          meta.className = 'answer-notes';
+          meta.innerHTML = `<span class="mast-chip">${esc(String(a.plan.intent).replace(/_/g, ' '))}</span>`;
+          card.appendChild(meta);
+        }
         if (a.data && a.data.playlist) {
           const open = document.createElement('button');
-          open.className = 'btn';
+          open.className = 'btn answer-open';
           open.textContent = `Open "${a.data.playlist.name}"`;
           open.onclick = async () => { afterWrite(); await loadPlaylists(); openPlaylist(a.data.playlist.id, false); };
-          res.appendChild(open);
+          card.appendChild(open);
         }
         const lib = (a.data && a.data.library) || [];
         if (lib.length) {
           const wrap = document.createElement('div');
+          wrap.className = 'answer-body';
           const tracks = lib.map((r) => ({ ...r, rung: r.owned ? 'local' : null }));
           tracks.forEach((t, i) => { registerRow(t); wrap.appendChild(trow(t, i, tracks)); });
-          res.appendChild(wrap);
+          card.appendChild(wrap);
         }
         const cat = (a.data && a.data.catalogue) || [];
         if (cat.length) {
@@ -2794,7 +2821,7 @@ async function renderSearch() {
             row.querySelector('.tmore').onclick = preview;
             sec.appendChild(row);
           }
-          res.appendChild(sec);
+          card.appendChild(sec);
         }
         return;
       }
@@ -2809,19 +2836,26 @@ async function renderSearch() {
     }
     res.innerHTML = '';
     state.askPrevious = d.filters || null;
-    const head = document.createElement('div');
     const notes = (d.filters && d.filters.notes) || [];
-    head.innerHTML = `<div class="sec-title" style="margin-top:0">Answer <small>${d.count} TRACKS</small></div>
-      <div class="ask-meta">${notes.length ? notes.map((n) => `<span class="ask-pill">${esc(n)}</span>`).join('') : '<span class="ask-pill">no filters</span>'}
-      <span class="ask-src">${d.source === 'llm' ? 'parsed by model' : 'parsed locally'}</span>
-      ${d.relaxed ? '<span class="ask-pill warn">' + esc(String(d.relaxed)) + '</span>' : ''}</div>`;
-    res.appendChild(head);
+    const card = document.createElement('section');
+    card.className = 'answer';
+    const said = d.count
+      ? `${d.count} track${d.count === 1 ? '' : 's'} in your library match${d.count === 1 ? 'es' : ''} that.`
+      : 'Nothing in your library matches that.';
+    card.innerHTML = `<div class="answer-head">
+        <span class="answer-kicker">Answer</span>
+        <span class="answer-q">${esc(text)}</span>
+        <span class="answer-src">${d.source === 'llm' ? 'model' : 'local'}</span>
+      </div>
+      <p class="answer-said">${esc(said)}</p>
+      ${(notes.length || d.relaxed) ? `<div class="answer-notes">${notes.map((n) => `<span class="mast-chip">${esc(n)}</span>`).join('')}${d.relaxed ? `<span class="mast-chip warn">${esc(String(d.relaxed))}</span>` : ''}</div>` : ''}`;
+    res.appendChild(card);
 
     if (d.count) {
       const bar = document.createElement('div');
       bar.className = 'ask-actions';
       bar.innerHTML = `<button class="btn" id="ask-create">Create playlist from these ${d.count}</button>`;
-      res.appendChild(bar);
+      card.appendChild(bar);
       bar.querySelector('#ask-create').onclick = async () => {
         const name = prompt('Playlist name:', text.slice(0, 60));
         if (!name) return;
@@ -2834,16 +2868,17 @@ async function renderSearch() {
       };
     }
 
+    if (!d.count) return;
     const list = document.createElement('div');
-    if (!d.count) { list.innerHTML = `<div class="empty">Nothing in the library matches that.</div>`; res.appendChild(list); return; }
+    list.className = 'answer-body';
     const tracks = d.results.map((r) => ({ ...r, rung: r.owned ? 'local' : null, owned: r.owned }));
     tracks.forEach((t, i) => { registerRow(t); list.appendChild(trow(t, i, tracks)); });
-    res.appendChild(list);
+    card.appendChild(list);
     if (d.count > tracks.length) {
       const more = document.createElement('div');
       more.className = 'ladder-state';
       more.textContent = `Showing ${tracks.length} of ${d.count}. Narrow the question to see the rest.`;
-      res.appendChild(more);
+      card.appendChild(more);
     }
   };
 
@@ -3212,7 +3247,8 @@ async function renderSearch() {
   let deb = null;
   q.oninput = () => {
     clearTimeout(deb);
-    if (assistantish.test(q.value)) return;
+    if (!q.value.trim() && disc) disc.hidden = false;
+    if (state.askMode || assistantish.test(q.value)) return;
     $('view').classList.remove('asking');
     deb = setTimeout(draw, 350);
   };
