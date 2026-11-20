@@ -69,7 +69,8 @@ function status(db) {
   ensureColumns(db);
   const total = db.prepare("SELECT COUNT(*) c FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned'").get().c;
   const done = db.prepare("SELECT COUNT(*) c FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned' WHERE t.analyzed_at IS NOT NULL").get().c;
-  return { total, analysed: done, remaining: total - done, active: running.active };
+  const prepped = db.prepare("SELECT COUNT(*) c FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned' WHERE t.analyzed_at IS NOT NULL AND t.beat_grid IS NOT NULL AND t.beat_grid != ''").get().c;
+  return { total, analysed: done, prepped, remaining: total - done, active: running.active };
 }
 
 // analyse one track on demand: only set tracks need BPM/key, not the whole library

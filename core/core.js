@@ -2796,8 +2796,8 @@ const server = http.createServer(async (req, res) => {
       const pid = decodeURIComponent(mCrateAnalyze[1]);
       const ids = db.prepare(`SELECT t.id FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
         JOIN files f ON f.track_id=t.id AND f.tier='owned'
-        WHERE pt.playlist_id=? AND t.analyzed_at IS NULL`).all(pid).map((r) => r.id);
-      if (!ids.length) return json(res, 200, { started: false, count: 0, note: 'this crate has no unanalyzed tracks' });
+        WHERE pt.playlist_id=? AND (t.analyzed_at IS NULL OR t.beat_grid IS NULL OR t.beat_grid = '')`).all(pid).map((r) => r.id);
+      if (!ids.length) return json(res, 200, { started: false, count: 0, note: 'this crate has no tracks missing a beat grid' });
       (async () => {
         let done = 0;
         for (const id of ids) { try { await analyser.runOne(db, id); done += 1; } catch {} }
@@ -3508,6 +3508,10 @@ const server = http.createServer(async (req, res) => {
         (SELECT COUNT(*) FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
            JOIN files f ON f.track_id=t.id AND f.tier='owned'
            WHERE pt.playlist_id=p.id AND t.analyzed_at IS NOT NULL) analyzed,
+        (SELECT COUNT(*) FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
+           JOIN files f ON f.track_id=t.id AND f.tier='owned'
+           WHERE pt.playlist_id=p.id AND t.analyzed_at IS NOT NULL
+             AND t.beat_grid IS NOT NULL AND t.beat_grid != '') prepped,
         (SELECT COUNT(*) FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
            JOIN files f ON f.track_id=t.id AND f.tier='owned'
            WHERE pt.playlist_id=p.id) owned

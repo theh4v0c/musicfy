@@ -1521,7 +1521,7 @@ async function renderDjExport() {
     const cov = document.getElementById('prep-cov');
     const fill = document.getElementById('prep-fill');
     const pct = st.total ? Math.round((st.analysed / st.total) * 100) : 0;
-    if (cov) cov.textContent = `${st.analysed}/${st.total} analyzed · ${st.remaining} left`;
+    if (cov) cov.textContent = `${st.prepped || 0}/${st.total} prepped · ${Math.max(0, st.total - (st.prepped || 0))} left`;
     if (fill) fill.style.width = pct + '%';
     const ab = document.getElementById('dj-analyze');
     if (ab) ab.textContent = remaining ? `Analyze ${remaining} unanalyzed` : 'All analyzed';
@@ -1540,7 +1540,7 @@ async function renderDjExport() {
   const list = document.getElementById('dj-list');
   if (!list) return;
   for (const p of state.playlists) {
-    const cov = p.owned ? Math.round(((p.analyzed || 0) / p.owned) * 100) : 0;
+    const cov = p.owned ? Math.round(((p.prepped || 0) / p.owned) * 100) : 0;
     const card = document.createElement('div');
     card.className = 'crate';
     card.innerHTML = `
@@ -1550,7 +1550,7 @@ async function renderDjExport() {
       </div>
       <div class="crate-name">${esc(p.name)}</div>
       <div class="crate-ready"><i style="width:${cov}%"></i></div>
-      <div class="crate-meta"><span>${p.n_tracks || 0} tracks · ${cov}% analyzed</span>${(p.owned && cov < 100) ? '<button class="crate-analyze">Analyze</button>' : '<span class="crate-ready-tag">ready</span>'}</div>
+      <div class="crate-meta"><span>${p.n_tracks || 0} tracks · ${p.prepped || 0}/${p.owned || 0} prepped</span>${(p.owned && cov < 100) ? `<button class="crate-analyze">Prep ${Math.max(0, (p.owned || 0) - (p.prepped || 0))}</button>` : '<span class="crate-ready-tag">ready</span>'}</div>
       <div class="crate-acts">
         <button class="crate-btn" data-rb title="Download a ZIP with the audio + rekordbox XML">Rekordbox</button>
         <button class="crate-btn" data-tr title="Download a ZIP with the audio + Traktor NML">Traktor</button>
