@@ -557,6 +557,7 @@ function setNav(v) {
   const pill = $('pill'); if (pill) pill.hidden = !(v === 'library' || v === 'settings');
 }
 function nav(v, push = true) {
+  stopPreview();
   const qd = $('queue-drawer'); if (qd) qd.hidden = true;
   if (typeof clearSelection === 'function') clearSelection();
   if (push && state.view && v !== state.view) state.history.push({ v: state.view, pid: state.playlistId });
@@ -935,14 +936,16 @@ async function renderExternalInto(host) {
 /* the algorithm, visible: radio built from what you actually played */
 /* a suggestion is auditioned before it is downloaded: cover, details, 30s preview */
 function openSuggestionPreview(s) {
+  stopPreview();
   markCtxOpen();
   const m = $('ctx');
   const mins = s.duration ? `${Math.floor(s.duration / 60)}:${String(Math.round(s.duration % 60)).padStart(2, '0')}` : '';
   m.innerHTML = `<div class="sugg">
       ${s.cover ? `<img class="sugg-art" src="${esc(s.cover)}" alt="" loading="lazy" onerror="this.remove()">` : ''}
+      <div class="sugg-kicker">PREVIEW</div>
       <div class="sugg-meta"><b>${esc(s.title || '')}</b><span>${esc(s.artist || '')}${s.album ? ` · ${esc(s.album)}` : ''}${mins ? ` · ${mins}` : ''}</span></div>
       ${s.preview ? `<audio class="sugg-audio" controls preload="none" src="${esc(s.preview)}"></audio>` : '<div class="sugg-note">No 30 second preview from this source. Details only.</div>'}
-      <div class="ctx-row"><button class="btn btn-primary" id="sugg-dl">Download to library</button><button class="btn btn-ghost" id="sugg-cancel">Cancel</button></div>
+      <div class="sugg-btns"><button class="btn btn-primary" id="sugg-dl">Download to library</button><button class="btn btn-ghost" id="sugg-cancel">Cancel</button></div>
     </div>`;
   m.classList.add('open');
   m.style.left = '50%'; m.style.top = '50%'; m.style.transform = 'translate(-50%,-50%)';
@@ -2078,7 +2081,31 @@ async function renderSettings() {
   };
 }
 
+let previewAudio = null;
+let previewBtn = null;
+function stopPreview() {
+  if (previewAudio) {
+    try { previewAudio.pause(); previewAudio.removeAttribute('src'); previewAudio.load(); } catch {}
+  }
+  if (previewBtn) { previewBtn.classList.remove('on'); previewBtn.innerHTML = IC.play; }
+  previewAudio = null;
+  previewBtn = null;
+}
+function playPreview(t, btn) {
+  if (!t.preview) return;
+  if (previewAudio && previewBtn === btn && !previewAudio.paused) { stopPreview(); return; }
+  stopPreview();
+  previewAudio = new Audio(t.preview);
+  try { previewAudio.volume = Math.min(1, Number(audio.volume) || 0.9); } catch {}
+  previewBtn = btn;
+  btn.classList.add('on');
+  btn.innerHTML = IC.pause;
+  previewAudio.onended = stopPreview;
+  previewAudio.play().catch(() => { stopPreview(); toast('No preview for this one', 3000); });
+}
+
 async function renderAskAi() {
+  stopPreview();
   setNav('askai'); state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'Ask';
   const v = $('view');
@@ -2098,6 +2125,8 @@ async function renderAskAi() {
 
   const run = async (text) => {
     if (!text.trim()) return;
+    stopPreview();
+    v.classList.add('asking');
     stateEl.textContent = 'Searching';
     stateEl.classList.add('thinking');
     out.innerHTML = '';
@@ -2134,17 +2163,27 @@ async function renderAskAi() {
             const art = document.createElement('div');
             art.className = 'apr-art';
             if (t.cover) art.style.backgroundImage = `url("${t.cover}")`;
+            const play = document.createElement('button');
+            play.className = 'apr-play';
+            play.type = 'button';
+            play.innerHTML = IC.play;
+            play.title = t.preview ? 'Preview' : 'No preview for this one';
+            play.disabled = !t.preview;
+            play.onclick = (e) => { e.stopPropagation(); playPreview(t, play); };
             const title = document.createElement('span');
             title.className = 'apr-title';
             title.textContent = t.title || '';
             const artist = document.createElement('span');
             artist.className = 'apr-artist';
             artist.textContent = t.artist || '';
+            const meta = document.createElement('div');
+            meta.className = 'apr-meta';
+            meta.append(title, artist);
             const tag = document.createElement('span');
             const kind = t.owned ? 'local' : t.source === 'online' ? 'new' : 'missing';
             tag.className = `apr-tag ${t.owned ? 'on' : t.source === 'online' ? 'new' : ''}`;
             tag.textContent = kind;
-            row.append(art, title, artist, tag);
+            row.append(play, art, meta, tag);
             list.appendChild(row);
           });
           if (tracks.length > 20) {
@@ -2162,6 +2201,7 @@ async function renderAskAi() {
           acts.className = 'ask-action-btns';
           const missing = tracks.filter((t) => !t.owned).length;
           const confirm = async (btn, alsoDownload) => {
+            stopPreview();
             btn.disabled = true;
             try {
               const r = await api(`/api/agent/action/${a.action.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirm: true, download: !!alsoDownload }), nocache: true });
@@ -2193,6 +2233,7 @@ async function renderAskAi() {
           no.className = 'btn btn-ghost';
           no.textContent = 'Cancel';
           no.onclick = async () => {
+            stopPreview();
             try { await api(`/api/agent/action/${a.action.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cancel: true }), nocache: true }); } catch {}
             card.remove();
             stateEl.textContent = 'Cancelled';
@@ -2200,6 +2241,7 @@ async function renderAskAi() {
           acts.append(no);
           card.appendChild(acts);
           out.appendChild(card);
+          try { card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {}
           return;
         }
         if (a.data && a.data.album) {

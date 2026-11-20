@@ -227,7 +227,7 @@ async function onlineFill(db, localPicks, need) {
         seen.add(key);
         out.push({
           title: t.title, artist: t.artist.name, album: (t.album && t.album.title) || '',
-          duration: t.duration, key, source: 'online', owned: false, cover: (t.album && t.album.cover_medium) || null,
+          duration: t.duration, key, source: 'online', owned: false, cover: (t.album && t.album.cover_medium) || null, preview: t.preview || null,
         });
       }
     }
@@ -268,6 +268,7 @@ async function propose(db, plan) {
       ...local.map((t) => ({
         id: t.id, title: t.title, artist: t.artist, album: t.album,
         bpm: t.bpm, key: t.key, key_scale: t.key_scale, owned: !!t.owned, source: 'library', cover: `/api/cover/${t.id}`,
+        preview: t.owned ? `/api/stream/${t.id}` : null,
       })),
       ...online,
     ];
