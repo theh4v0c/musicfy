@@ -2518,6 +2518,26 @@ const server = http.createServer(async (req, res) => {
         const question = String(b.q || '').trim();
         if (!question) return json(res, 400, { error: 'q required' });
 
+        // capability questions are answered directly: they are not a library search,
+        // and letting the text parser turn "can you assist" into keywords is nonsense
+        const ql = question.toLowerCase().replace(/[?.!]+$/, '').trim();
+        const wantsHelp = /^(help|capabilities|what can you do|what do you do|what can you (?:assist|help)(?: me)? with|how can you help|who are you|what is this|what are you)$/.test(ql)
+          || /^what can you (?:do|assist|help)\b/.test(ql);
+        if (wantsHelp) {
+          const examples = [
+            'tracks in Dm between 120 and 130 bpm',
+            'techno I never played',
+            'create a playlist of 20 ambient tracks',
+            'how much of my library has audio',
+            'download the album Random Access Memories',
+          ];
+          return json(res, 200, {
+            question, source: 'help', count: 0, results: [], filters: null,
+            answer: 'I search your library and build things from it. I can find tracks by key, tempo, year, genre, play count or whether the audio is downloaded; find by title, artist or album; create a playlist from any of those filters; report library coverage; and download a missing album or missing audio. I do not browse the web or answer general questions.',
+            examples,
+          });
+        }
+
         // follow-ups: carry the previous filters and apply only what the new words change
         const prev = b.previous && typeof b.previous === 'object' ? b.previous : null;
         let filters = null;

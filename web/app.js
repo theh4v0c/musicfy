@@ -2125,6 +2125,24 @@ async function renderAskAi() {
       }
       const d = await api('/api/ask', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: text }), nocache: true });
       stateEl.classList.remove('thinking');
+      if (d.source === 'help') {
+        stateEl.textContent = 'What I can do';
+        const said = document.createElement('div');
+        said.className = 'ai-said';
+        said.textContent = d.answer || '';
+        out.appendChild(said);
+        const hint = document.createElement('div');
+        hint.className = 'ask-hint';
+        (d.examples || []).forEach((ex) => {
+          const b = document.createElement('button');
+          b.className = 'ask-ex';
+          b.textContent = ex;
+          b.onclick = () => { box.value = ex; run(ex); };
+          hint.appendChild(b);
+        });
+        out.appendChild(hint);
+        return;
+      }
       const f = d.filters || {};
       const bits = [];
       if (f.key) bits.push(`key ${f.key}${f.scale ? ' ' + f.scale : ''}`);

@@ -72,5 +72,15 @@ ok('search_tracks', find.body && find.body.plan.intent === 'search_tracks', JSON
 const alb = await post('/api/agent', { q: 'download the album Pinkfong Animal Songs' });
 ok('download_album', alb.body && alb.body.plan.intent === 'download_album', JSON.stringify(alb.body?.plan));
 
+console.log('ask capabilities');
+const h1 = await post('/api/ask', { q: 'what can you do for me' });
+ok('capability question gets help', h1.body && h1.body.source === 'help', JSON.stringify(h1.body?.source));
+ok('help answer is prose', typeof h1.body?.answer === 'string' && h1.body.answer.length > 40);
+ok('help offers examples', Array.isArray(h1.body?.examples) && h1.body.examples.length >= 3);
+const h2 = await post('/api/ask', { q: 'what can you assist me with' });
+ok('assist phrasing also gets help', h2.body && h2.body.source === 'help', JSON.stringify(h2.body?.source));
+const h3 = await post('/api/ask', { q: 'tracks in Dm between 120 and 130 bpm' });
+ok('a real query is still a query', h3.body && h3.body.source !== 'help' && h3.body.filters && h3.body.filters.key === 'D');
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
