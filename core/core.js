@@ -190,6 +190,8 @@ function weatherWord(code) {
 // one weather call per 10 minutes, not one per home screen load
 let weatherCache = { at: 0, key: '', data: null };
 let picksCache = { at: 0, data: null };
+// live progress for a crate prep, so the card can say what is happening
+const crateJobs = new Map();
 
 // metadata to write into a track's file: Traktor PRIV + standard ID3. MP3 only.
 function trackTagMeta(db, tid) {
@@ -3118,16 +3120,48 @@ const server = http.createServer(async (req, res) => {
 
     // analyse only the unanalyzed tracks in one playlist (a crate), in the background
     const mCrateAnalyze = u.pathname.match(/^\/api\/playlists\/([^/]+)\/analyze$/);
+    // what the card needs to show: how many of how many, and whether it is still going
+    if (mCrateAnalyze && req.method === 'GET') {
+      const pid = decodeURIComponent(mCrateAnalyze[1]);
+      const j = crateJobs.get(pid);
+      if (!j) return json(res, 200, { running: false, total: 0, done: 0, failed: 0 });
+      return json(res, 200, { running: !j.finishedAt, total: j.total, done: j.done, active: j.active || 0, failed: j.failed, at: j.at });
+    }
     if (mCrateAnalyze && req.method === 'POST') {
       const pid = decodeURIComponent(mCrateAnalyze[1]);
+      if (crateJobs.has(pid) && !crateJobs.get(pid).finishedAt) {
+        const j = crateJobs.get(pid);
+        return json(res, 200, { started: false, count: j.total - j.done, note: 'this crate is already prepping' });
+      }
       const ids = db.prepare(`SELECT t.id FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
         JOIN files f ON f.track_id=t.id AND f.tier='owned'
         WHERE pt.playlist_id=? AND (t.analyzed_at IS NULL OR t.beat_grid IS NULL OR t.beat_grid = '')`).all(pid).map((r) => r.id);
       if (!ids.length) return json(res, 200, { started: false, count: 0, note: 'this crate has no tracks missing a beat grid' });
+      crateJobs.set(pid, { total: ids.length, done: 0, failed: 0, at: Date.now(), finishedAt: 0 });
       (async () => {
-        let done = 0;
-        for (const id of ids) { try { await analyser.runOne(db, id); done += 1; } catch {} }
-        console.log('[crate analyze]', pid, `${done}/${ids.length}`);
+        // two at a time: the analyser is one process per track, and a crate of forty
+        // would otherwise keep the card counting for five minutes
+        const queue = [...ids];
+        const worker = async () => {
+          for (;;) {
+            const id = queue.shift();
+            if (id == null) return;
+            const j = crateJobs.get(pid);
+            if (!j) return;
+            j.active = (j.active || 0) + 1;
+            try {
+              const r = await analyser.runOne(db, id);
+              if (r && r.error) j.failed += 1; else j.done += 1;
+            } catch { j.failed += 1; }
+            finally { j.active = Math.max(0, (j.active || 1) - 1); }
+          }
+        };
+        await Promise.all([worker(), worker()]);
+        const j = crateJobs.get(pid);
+        if (j) { j.finishedAt = Date.now(); j.last = db.prepare(`SELECT COUNT(*) c FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
+          JOIN files f ON f.track_id=t.id AND f.tier='owned'
+          WHERE pt.playlist_id=? AND t.beat_grid IS NOT NULL AND t.beat_grid != ''`).get(pid).c; }
+        console.log('[crate analyze]', pid, `${j ? j.done : 0}/${ids.length}`, j && j.failed ? `${j.failed} failed` : '');
       })();
       return json(res, 202, { started: true, count: ids.length });
     }

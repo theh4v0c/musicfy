@@ -1732,16 +1732,38 @@ async function renderDjExport() {
     const abt = card.querySelector('.crate-analyze');
     if (abt) abt.onclick = async (e) => {
       e.stopPropagation();
-      abt.disabled = true; abt.textContent = 'starting…';
+      const meta = card.querySelector('.crate-meta span');
+      const label0 = abt.textContent;
+      abt.disabled = true;
+      abt.textContent = 'Starting';
       try {
         const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/analyze`, { method: 'POST' });
-        if (r.count) {
-          const pp = progressPill(`Analyzing ${r.count} track${r.count === 1 ? '' : 's'} in ${p.name}…`);
-          setTimeout(() => pp.done(), 8000);
-        } else {
-          toast(r.note || 'Nothing to analyze in this crate', 5000);
+        if (!r.count) {
+          toast(r.note || 'Nothing to prep in this crate', 5000);
+          abt.disabled = false;
+          abt.textContent = label0;
+          return;
         }
-      } catch { toast('Could not start'); abt.disabled = false; abt.textContent = 'Analyze'; }
+        // the analyser takes seconds per track: count them off instead of going quiet
+        const tick = async () => {
+          let j = null;
+          try { j = await api(`/api/playlists/${encodeURIComponent(p.id)}/analyze`, { nocache: true }); } catch {}
+          if (!j) { setTimeout(tick, 2500); return; }
+          const done = Number(j.done) || 0;
+          const total = Number(j.total) || r.count;
+          // one track at a time: counting the one in flight is the honest number
+          const shown = Math.min(total, done + (Number(j.active) || (j.running ? 1 : 0)));
+          abt.textContent = `Prepping ${shown}/${total}`;
+          // the card's own count is a render behind while a job runs: say what the job is doing
+          if (meta) meta.textContent = `${p.n_tracks || 0} tracks · prepping ${shown}/${total}`;
+          if (j.running) { setTimeout(tick, 1500); return; }
+          abt.disabled = false;
+          abt.textContent = done ? `Prepped ${done}` : label0;
+          toast(`${done} of ${total} prepped${j.failed ? ` · ${j.failed} failed` : ''}`, 5000);
+          setTimeout(() => refreshView(), 900);
+        };
+        setTimeout(tick, 800);
+      } catch { toast('Could not start'); abt.disabled = false; abt.textContent = label0; }
     };
     card.onclick = () => openPlaylist(p.id);
     list.appendChild(card);
