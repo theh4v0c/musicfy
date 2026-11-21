@@ -295,12 +295,16 @@ async function propose(db, plan) {
     const reasonBits = [picked.reason];
     if (local.length) reasonBits.push(`${played} of ${local.length} you already play.`);
     const sourceName = picked.ctx.text.join(' ');
-    reasonBits.push(online.length ? (local.length ? `${online.length} new from artists around your rotation.` : `${online.length} new from ${sourceName || 'the name in your request'}.`) : (targetOnline ? 'Nothing new turned up this time.' : 'All from your library.'));
+    reasonBits.push(online.length ? (local.length ? `${online.length} new from artists around your rotation.` : `${online.length} new from ${sourceName ? `“${sourceName}”` : 'the catalogue'}.`) : (targetOnline ? 'Nothing new turned up this time.' : 'All from your library.'));
     return {
       kind: 'playlist', name, trackIds: local.map((t) => t.id), online, tracks,
       download: !!plan.args.download,
       title: name,
-      reason: reasonBits.join(' ').replace(/^[a-z]/, (c) => c.toUpperCase()),
+      // fragments are sentences: every one of them starts with a capital
+      reason: reasonBits.join(' ')
+        .replace(/\s*\.\s*/g, '. ')
+        .replace(/(^|[.!?]\s+)([a-z])/g, (m, pre, c) => pre + c.toUpperCase())
+        .trim(),
       summary: `${tracks.length} track${tracks.length === 1 ? '' : 's'} · ${tracks.length - missing} local · ${missing} new`,
     };
   }

@@ -2599,7 +2599,10 @@ async function renderSearch() {
   $('view-title').textContent = 'Search';
   const v = $('view');
   v.innerHTML = `<div class="search-head"><div class="search-kicker">SEARCH</div><p class="search-sub">Search your library and the web, or ask it a question.</p></div><div class="search-wrap">
-      <input class="search" id="q" placeholder="Search tracks or ask: create a playlist of 10 ambient tracks" autocomplete="off">
+      <div class="search-field">
+        <input class="search" id="q" placeholder="Search tracks or ask: create a playlist of 10 ambient tracks" autocomplete="off">
+        <span class="search-status status" id="search-status" hidden></span>
+      </div>
       <div class="ask-hint" id="search-hints">
         <button class="ask-ex">tracks in Dm between 120 and 130 bpm</button>
         <button class="ask-ex">create a playlist of 10 ambient tracks</button>
@@ -2639,6 +2642,12 @@ async function renderSearch() {
   // a question about the library, not a search for a word: tempo, key, counting, making
   const assistantish = /\b(create|make|build|download|playlist|how many|how much|top rated|top \d|what can|help|which|who|when)\b|\b(tracks?|songs?)\b[^.]*\b(in|between|around|with|from)\b|\bbpm\b/i;
   const disc = $('search-discover');
+  const statusEl = $('search-status');
+  const setSearchStatus = (text, kind) => {
+    if (!statusEl) return;
+    statusEl.innerHTML = text ? `<span class="status-orb${kind === 'thinking' ? ' on' : ''}"></span>${esc(text)}` : '';
+    statusEl.hidden = !text;
+  };
   const askBtn = $('ask-mode');
   const paintAsk = () => {
     if (!askBtn) return;
@@ -2684,6 +2693,7 @@ async function renderSearch() {
 
   const draw = async () => {
     closeInlinePreview();
+    if (statusEl && q.value.trim()) setSearchStatus('Searching', 'thinking');
     mode = searchLib && searchWeb ? 'all' : searchLib ? 'library' : 'ladder';
     const s = q.value.trim().toLowerCase();
     if (state.genreFilter) { renderGenreView(res, all, 60); return; }
@@ -2753,18 +2763,22 @@ async function renderSearch() {
       res.appendChild(box);
     }
     if (mode === 'all' && (!inLibrary || scored[0].score < 100)) await drawLadder(s, inLibrary);
+    setSearchStatus('');
   };
 
   const drawAsk = async (text) => {
-    res.innerHTML = `<div class="ladder-state thinking">Reading your library</div>`;
+    res.innerHTML = '';
+    setSearchStatus('Reading your library', 'thinking');
     // verbs like create, find, download go to the agent; questions go to the query engine
     const agentish = /\b(create|make|build|download|find|search|show|list|playlist|how many|how much|top rated|top \d)\b/i.test(text);
     if (agentish) {
+      setSearchStatus('Working out what to do', 'thinking');
       let a;
       try {
         a = await api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: text }), nocache: true });
       } catch { a = null; }
       if (a && a.spoken) {
+        setSearchStatus('');
         res.innerHTML = '';
         const card = document.createElement('section');
         card.className = 'answer';
@@ -2831,9 +2845,11 @@ async function renderSearch() {
       d = await api('/api/ask', { method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ q: text, previous: state.askPrevious || null }), nocache: true });
     } catch (e) {
+      setSearchStatus('');
       res.innerHTML = `<div class="empty">Could not answer that.</div>`;
       return;
     }
+    setSearchStatus('');
     res.innerHTML = '';
     state.askPrevious = d.filters || null;
     const notes = (d.filters && d.filters.notes) || [];
@@ -3247,9 +3263,13 @@ async function renderSearch() {
   let deb = null;
   q.oninput = () => {
     clearTimeout(deb);
-    if (!q.value.trim() && disc) disc.hidden = false;
-    if (state.askMode || assistantish.test(q.value)) return;
+    const value = q.value.trim();
+    if (!value && disc) disc.hidden = false;
+    if (!value) { setSearchStatus(''); return; }
+    if (state.askMode) { setSearchStatus('Press Enter to ask', 'idle'); return; }
+    if (assistantish.test(value)) { setSearchStatus('Press Enter to ask', 'idle'); return; }
     $('view').classList.remove('asking');
+    setSearchStatus('Searching', 'thinking');
     deb = setTimeout(draw, 350);
   };
   q.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
