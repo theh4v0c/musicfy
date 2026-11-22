@@ -868,6 +868,34 @@ document.addEventListener('pointerdown', (e) => {
 /* ============ views ============ */
 const greetPart = () => { const h = new Date().getHours(); return h < 5 ? 'night' : h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'; };
 
+/* one control vocabulary: the same three views everywhere a list can be shown */
+const VIEW_ICONS = {
+  list: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 3h9M5 8h9M5 13h9"/><circle cx="2" cy="3" r=".9" fill="currentColor" stroke="none"/><circle cx="2" cy="8" r=".9" fill="currentColor" stroke="none"/><circle cx="2" cy="13" r=".9" fill="currentColor" stroke="none"/></svg>',
+  grid: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>',
+  compact: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="3" height="3" rx="1"/><rect x="7" y="2" width="3" height="3" rx="1"/><rect x="12" y="2" width="2" height="3" rx="1"/><rect x="2" y="7" width="3" height="3" rx="1"/><rect x="7" y="7" width="3" height="3" rx="1"/><rect x="12" y="7" width="2" height="3" rx="1"/><rect x="2" y="12" width="3" height="2" rx="1"/><rect x="7" y="12" width="3" height="2" rx="1"/><rect x="12" y="12" width="2" height="2" rx="1"/></svg>',
+};
+const VIEW_LABELS = { list: 'List', grid: 'Grid', compact: 'Compact' };
+const songView = () => { try { return localStorage.getItem('mf-view-songs') || 'list'; } catch { return 'list'; } };
+const libView = () => { try { return localStorage.getItem('mf-view-library') || 'grid'; } catch { return 'grid'; } };
+function viewSwitch(scope, current) {
+  return `<div class="view-switch" data-scope="${esc(scope)}" role="group" aria-label="View">${['list', 'grid', 'compact']
+    .map((v) => `<button class="vw${current === v ? ' on' : ''}" data-v="${v}" title="${VIEW_LABELS[v]}" aria-pressed="${current === v}">${VIEW_ICONS[v]}</button>`)
+    .join('')}</div>`;
+}
+function bindViewSwitch(scope, onChange) {
+  document.querySelectorAll(`.view-switch[data-scope="${scope}"] .vw`).forEach((b) => {
+    b.onclick = () => {
+      localStorage.setItem(`mf-view-${scope}`, b.dataset.v);
+      document.querySelectorAll(`.view-switch[data-scope="${scope}"] .vw`).forEach((x) => {
+        const on = x === b;
+        x.classList.toggle('on', on);
+        x.setAttribute('aria-pressed', String(on));
+      });
+      onChange(b.dataset.v);
+    };
+  });
+}
+
 function heroBanner(kicker, title, sub) {
   return `<div class="prep-hero"><div class="prep-kicker">${esc(kicker)}</div><div class="prep-title">${esc(title)}</div><p class="prep-sub">${esc(sub)}</p></div>`;
 }
@@ -1311,6 +1339,28 @@ async function loadRecentlyPlayed() {
   try { return await api('/api/recent?limit=20'); } catch { return []; }
 }
 
+function plistRow(p) {
+  const el = document.createElement('div');
+  el.className = 'lrow';
+  const liked = p.liked || p.id === '__liked';
+  el.innerHTML = `${liked
+    ? `<div class="lrow-art ph" style="background:linear-gradient(135deg,#ff6b47,#8a1d12)">${IC.heartFull}</div>`
+    : `<img class="lrow-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=120&v=${state.artV || 0}" alt="" loading="lazy" decoding="async">`}
+    <div class="lrow-t"><b>${esc(p.name)}</b><i>${p.n_tracks || 0} track${Number(p.n_tracks) === 1 ? '' : 's'}</i></div>
+    <button class="lrow-play" aria-label="Play">${IC.play}</button>`;
+  el.querySelector('.lrow-play').onclick = (e) => {
+    e.stopPropagation();
+    if (liked) playLiked(); else playPlaylist(p.id);
+  };
+  if (liked) el.onclick = () => nav('liked');
+  else {
+    el.onclick = () => openPlaylist(p.id);
+    el.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); openPlaylistMenu(p, e.clientX, e.clientY); };
+    longPress(el, () => openPlaylistMenu(p, innerWidth / 2 - 110, innerHeight / 2 - 80));
+  }
+  return el;
+}
+
 function pcard(p) {
   const el = document.createElement('div');
   el.className = 'pcard';
@@ -1573,43 +1623,32 @@ async function renderLibrary() {
       <button class="btn btn-primary" id="lib-upload">Upload track</button>
       <button class="btn btn-ghost" id="lib-newpl">New playlist</button>
       <button class="btn btn-ghost" id="hist-import">Playlist from most-played</button>
-      <button class="btn btn-ghost" id="meta-repair">Repair metadata</button>
     </div>
-    <details class="advanced">
-      <summary>Advanced &amp; maintenance</summary>
-      <div class="lib-actions">
-        <span class="meta-line" id="cache-pill">cache -</span>
-        <button class="btn btn-ghost" id="cache-clear">Clear cache</button>
-        <span class="meta-line" id="rung-health">sources -</span>
-        <label class="auto-save" title="Save a track to disk automatically after it is played this many times. 0 turns it off.">
-          Auto-save after <input id="auto-dl" class="mini-num" type="number" min="0" max="20" value="2"> plays
-        </label>
-      </div>
-    </details>
-    <div class="sec-title" style="margin-top:0">Playlists <small>${state.playlists.length} TOTAL</small></div>${orderControls()}<div class="pgrid" id="lib-grid"></div>`;
-  const g = $('lib-grid');
-  const liked = document.createElement('div');
-  liked.className = 'pcard';
-  liked.innerHTML = `<div class="pcard-art ph liked-art" style="background:linear-gradient(135deg,#ff6b47,#8a1d12)">${IC.heartFull}</div><div class="pcard-name">Liked Songs</div><div class="pcard-sub">${state.liked.size} songs</div><button class="pcard-play">${IC.play}</button>`;
-  liked.querySelector('.pcard-play').onclick = (e) => { e.stopPropagation(); playLiked(); };
-  liked.onclick = () => nav('liked');
-  g.appendChild(liked);
-  for (const p of sortedPlaylists().filter(matchesPlFilter)) g.appendChild(pcard(p));
-  bindOrderControls(() => renderLibrary());
-  const paintCache = () => {
-    const s = cacheSize();
-    const el = $('cache-pill');
-    if (el) el.textContent = `${(s.bytes / 1024).toFixed(0)} KB cached · ${s.keys} items`;
-  };
-  paintCache();
-  $('lib-upload').onclick = () => pickFile('audio/*', uploadTrack);
-  $('cache-clear').onclick = async () => {
-    clearAppCache();
-    if (window.caches && caches.keys) {
-      try { for (const k of await caches.keys()) await caches.delete(k); } catch {}
+    <div class="sec-title" style="margin-top:0">Playlists <small>${state.playlists.length} TOTAL</small></div>
+    <div class="list-bar">${orderControls()}${viewSwitch('library', libView())}</div>
+    <div class="pgrid" id="lib-grid"></div>`;
+  const drawGrid = (view) => {
+    const g = $('lib-grid');
+    if (!g) return;
+    g.className = view === 'list' ? 'plist' : view === 'compact' ? 'pgrid compact' : 'pgrid';
+    g.innerHTML = '';
+    const rows = sortedPlaylists().filter(matchesPlFilter);
+    if (view === 'list') {
+      g.appendChild(plistRow({ id: '__liked', name: 'Liked Songs', n_tracks: state.liked.size, liked: true }));
+      for (const p of rows) g.appendChild(plistRow(p));
+      return;
     }
-    paintCache();
+    const liked = document.createElement('div');
+    liked.className = 'pcard';
+    liked.innerHTML = `<div class="pcard-art ph liked-art" style="background:linear-gradient(135deg,#ff6b47,#8a1d12)">${IC.heartFull}</div><div class="pcard-name">Liked Songs</div><div class="pcard-sub">${state.liked.size} songs</div><button class="pcard-play">${IC.play}</button>`;
+    liked.querySelector('.pcard-play').onclick = (e) => { e.stopPropagation(); playLiked(); };
+    liked.onclick = () => nav('liked');
+    g.appendChild(liked);
+    for (const p of rows) g.appendChild(pcard(p));
   };
+  drawGrid(libView());
+  bindViewSwitch('library', (v) => drawGrid(v));
+  bindOrderControls(() => renderLibrary());
   $('hist-import').onclick = async () => {
     const name = prompt('Playlist name for your most played tracks:', 'From your history');
     if (!name) return;
@@ -1621,29 +1660,6 @@ async function renderLibrary() {
       if (r.playlist) { toast(`${r.added} tracks added`); openPlaylist(r.playlist, false); }
       else toast(r.note || 'nothing to import');
     } catch { toast('import failed'); }
-  };
-  $('meta-repair').onclick = async () => {
-    toast('Repairing metadata');
-    try {
-      const r = await api('/api/maintenance/repair', { method: 'POST' });
-      toast(`Years fixed ${r.fixed_year}, placeholders cleared ${r.cleared_placeholder_album}`);
-      state.allTracks = null;
-    } catch { toast('repair failed'); }
-  };
-  const paintRungs = () => api('/api/health/rungs').then((h) => {
-    const el = $('rung-health');
-    if (!el) return;
-    const parts = Object.entries(h.rungs || {}).map(([k, v]) => `${k} ${v.ok ? 'ok' : 'down'}`);
-    el.textContent = parts.length ? `sources: ${parts.join(', ')}` : 'sources: -';
-    el.classList.toggle('warn', Object.values(h.rungs || {}).some((v) => !v.ok));
-  }).catch(() => {});
-  paintRungs();
-  api('/api/settings', { nocache: true }).then((d) => { const v = d && d.settings ? d.settings.auto_download_plays : d.auto_download_plays; if (v != null) $('auto-dl').value = v; }).catch(() => {});
-  $('auto-dl').onchange = (e) => {
-    const v = Math.max(0, Math.min(20, Number(e.target.value) || 0));
-    api('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ auto_download_plays: v }) })
-      .then(() => toast(v ? `Auto download after ${v} plays` : 'Auto download off'))
-      .catch(() => toast('setting failed'));
   };
   $('lib-upload').onclick = () => pickFile('audio/*', uploadTrack);
   $('lib-newpl').onclick = async () => {
@@ -1825,6 +1841,7 @@ async function renderSongs(push = true) {
         <button class="mode-tab" data-f="owned">Downloaded</button>
         <button class="mode-tab" data-f="mirror" title="In the catalogue, but the audio is not downloaded to this server yet">Not downloaded</button>
       </div>
+      ${viewSwitch('songs', songView())}
       <span class="meta-line" id="songs-stats"></span>
     </div>
     <div class="thead" id="songs-thead">
@@ -1858,15 +1875,11 @@ async function renderSongs(push = true) {
       <button class="chip-card sm" data-browse="artists"><b>Artists</b><span>${artists.size}</span></button>
       <button class="chip-card sm" data-browse="albums"><b>Albums</b><span>${albums.size}</span></button>
       <button class="chip-card sm" data-browse="import"><b>Import track</b><span>SPOTIFY LINK</span></button>
-      <button class="chip-card sm" data-browse="dedupe"><b>Remove duplicates</b><span>KEEPS BEST QUALITY</span></button>
       <button class="chip-card sm" data-browse="picks"><b>For you</b><span>FROM WHAT YOU PLAY</span></button>
       <button class="chip-card sm" data-browse="importpl"><b>Import playlist</b><span>PASTE A LIST OR A LINK</span></button>
       <button class="chip-card sm" data-browse="recentdl"><b>Recently downloaded</b><span>NEWEST FIRST</span></button>
       <button class="chip-card sm" data-browse="upload"><b>Upload files</b><span>MP3, FLAC, M4A, WAV</span></button>
       <button class="chip-card sm" data-browse="uploadfolder"><b>Upload a folder</b><span>ADDS EVERY TRACK INSIDE</span></button>
-      <button class="chip-card sm" data-browse="fillgenres"><b>Fill genres</b><span>FROM MUSICBRAINZ</span></button>
-      <button class="chip-card sm" data-browse="covers"><b>Fix covers</b><span>OFFICIAL ALBUM ART</span></button>
-      <button class="chip-card sm" data-browse="fixmeta"><b>Fix metadata</b><span>YEARS &amp; PLACEHOLDERS</span></button>
       <button class="chip-card sm" data-browse="bpm"><b>Sort by BPM</b><span>${all.filter((t) => t.bpm).length} ANALYSED</span></button>
       <button class="chip-card sm" data-browse="genres"><b>Genres</b><span>BROWSE BY FAMILY</span></button>`;
     chips.querySelectorAll('[data-browse]').forEach((b) => b.onclick = async () => {
@@ -2121,10 +2134,23 @@ async function renderSongs(push = true) {
     el.innerHTML = '';
     if (drawBrowse(el)) return;
     if (!list.length) { el.innerHTML = `<div class="empty">Nothing matches that filter.</div>`; return; }
+    const view = songView();
     const theadBack = document.getElementById('songs-thead');
-    if (theadBack) theadBack.style.display = '';
+    if (theadBack) theadBack.style.display = view === 'grid' ? 'none' : '';
     const shown = list.slice(0, limit);
-    shown.forEach((t, i) => { registerRow(t); el.appendChild(trow(t, i, list)); });
+    if (view === 'grid') {
+      const grid = document.createElement('div');
+      grid.className = 'sg-grid';
+      shown.forEach((t) => { registerRow(t); grid.appendChild(trackCard(t, list, 'Songs')); });
+      el.appendChild(grid);
+    } else {
+      shown.forEach((t, i) => {
+        registerRow(t);
+        const row = trow(t, i, list);
+        if (view === 'compact') row.classList.add('compact');
+        el.appendChild(row);
+      });
+    }
     if (list.length > limit) {
       const more = document.createElement('button');
       more.className = 'btn btn-ghost show-all';
@@ -2146,6 +2172,7 @@ async function renderSongs(push = true) {
     document.querySelectorAll('#songs-filter .mode-tab').forEach((x) => x.classList.toggle('on', x === b));
     draw();
   });
+  bindViewSwitch('songs', () => { limit = 60; draw(); });
   const sth2 = $('songs-thead');
   if (sth2) sth2.querySelectorAll('.th').forEach((th) => th.onclick = () => {
     const k = th.dataset.key; if (!k) return;
@@ -2245,6 +2272,21 @@ async function renderSettings() {
         <label>Artists you love<input id="set-taste-artists" value="${esc(s.taste_artists || '')}" placeholder="Burial, Overmono, Floating Points"></label>
         <label>Usually listening<input id="set-taste-context" value="${esc(s.taste_context || '')}" placeholder="long drives, focus work, evening sets"></label>
         <label>Keep out of picks<input id="set-taste-avoid" value="${esc(s.taste_avoid || '')}" placeholder="christmas music, metalcore"></label>
+      </section>
+      <section class="set-card">
+        <h2>Maintenance</h2>
+        <p class="set-note">Housekeeping for the library itself. Nothing here changes your files unless it says so.</p>
+        <div class="set-actions">
+          <button class="btn btn-ghost" id="set-repair" type="button">Repair metadata</button>
+          <button class="btn btn-ghost" id="set-genres" type="button">Fill genres</button>
+          <button class="btn btn-ghost" id="set-covers" type="button">Fix covers</button>
+          <button class="btn btn-ghost" id="set-dedupe" type="button">Remove duplicate files</button>
+          <button class="btn btn-ghost" id="set-cache-clear" type="button">Clear cache</button>
+        </div>
+        <p class="set-note" id="set-cache">cache -</p>
+        <p class="set-note" id="set-rungs">sources -</p>
+        <label>Auto-save after plays<input id="set-auto-dl" type="number" min="0" max="20" value="${Number(s.auto_download_plays ?? 2)}"></label>
+        <p class="set-note">0 turns automatic saving off.</p>
       </section>
       <section class="set-card">
         <h2>Model endpoint</h2>
@@ -2360,6 +2402,72 @@ async function renderSettings() {
     try { clearAppCache(); } catch {}
     try { if (window.caches && caches.keys) for (const k of await caches.keys()) await caches.delete(k); } catch {}
     toast('Buffer cleared', 3000);
+  };
+
+  /* maintenance: housekeeping used to sit on the Library page, where it was noise */
+  const paintCache = () => {
+    const el = document.getElementById('set-cache');
+    if (!el) return;
+    const c = cacheSize();
+    el.textContent = `${(c.bytes / 1024).toFixed(0)} KB cached · ${c.keys} items`;
+  };
+  paintCache();
+  const setCacheClear = document.getElementById('set-cache-clear');
+  if (setCacheClear) setCacheClear.onclick = async () => {
+    clearAppCache();
+    try { if (window.caches && caches.keys) for (const k of await caches.keys()) await caches.delete(k); } catch {}
+    paintCache();
+    toast('Cache cleared', 3000);
+  };
+  const setRepair = document.getElementById('set-repair');
+  if (setRepair) setRepair.onclick = async () => {
+    setRepair.disabled = true;
+    toast('Repairing metadata');
+    try {
+      const r = await api('/api/maintenance/repair', { method: 'POST' });
+      toast(`Years fixed ${r.fixed_year}, placeholders cleared ${r.cleared_placeholder_album}`);
+      state.allTracks = null;
+    } catch { toast('repair failed'); }
+    setRepair.disabled = false;
+  };
+  const setGenres = document.getElementById('set-genres');
+  if (setGenres) setGenres.onclick = async () => {
+    setGenres.disabled = true;
+    toast('Tagging genres from MusicBrainz, this runs in the background', 6000);
+    try { await api('/api/genre/run?limit=200', { method: 'POST' }); } catch { toast('could not start genre pass'); }
+    setGenres.disabled = false;
+  };
+  const setCovers = document.getElementById('set-covers');
+  if (setCovers) setCovers.onclick = async () => {
+    setCovers.disabled = true;
+    toast('Fetching official album art in the background', 6000);
+    try { await api('/api/covers/fill', { method: 'POST' }); } catch { toast('could not start cover repair'); }
+    setCovers.disabled = false;
+  };
+  const setDedupe = document.getElementById('set-dedupe');
+  if (setDedupe) setDedupe.onclick = async () => {
+    if (!confirm('Keep the best copy of every duplicated file and delete the rest? This removes files from disk.')) return;
+    setDedupe.disabled = true;
+    try {
+      const r = await api('/api/maintenance/dedupe-files', { method: 'POST' });
+      toast(`${r.removed} extra file${r.removed === 1 ? '' : 's'} removed`);
+      state.allTracks = null;
+    } catch { toast('could not dedupe'); }
+    setDedupe.disabled = false;
+  };
+  const rungs = document.getElementById('set-rungs');
+  if (rungs) {
+    api('/api/health/rungs').then((h) => {
+      const parts = Object.entries(h.rungs || {}).map(([k, v]) => `${k} ${v.ok ? 'ok' : 'down'}`);
+      rungs.textContent = parts.length ? `Sources: ${parts.join(', ')}` : 'Sources: not checked yet';
+    }).catch(() => {});
+  }
+  const autoDl = document.getElementById('set-auto-dl');
+  if (autoDl) autoDl.onchange = (e) => {
+    const v = Math.max(0, Math.min(20, Number(e.target.value) || 0));
+    api('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ auto_download_plays: v }) })
+      .then(() => toast(v ? `Auto-save after ${v} plays` : 'Auto-save off'))
+      .catch(() => toast('setting failed'));
   };
 }
 
@@ -2632,7 +2740,7 @@ async function renderSearch() {
   setNav('search'); state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'Search';
   const v = $('view');
-  v.innerHTML = `<div class="search-head"><div class="search-kicker">SEARCH</div><p class="search-sub">Find a track, or ask the library a question.</p></div>
+  v.innerHTML = `${heroBanner('SEARCH', 'Search', 'Find a track, or ask the library a question.')}
     <div class="search-modes" role="tablist">
       <span class="s-thumb" aria-hidden="true"></span>
       <button class="s-mode on" data-mode="search" role="tab">Search</button>
