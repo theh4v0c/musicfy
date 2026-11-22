@@ -247,9 +247,11 @@ main.main { grid-area: main; display: flex; flex-direction: column; overflow: hi
 .trow.playing .tt, .trow.playing .tno-num { color: var(--acc); }
 .tno { position: relative; font-family: var(--mono); font-size: 11px; color: var(--fg-mute); text-align: center; height: 20px; }
 .tno-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
-.tno-play { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: none; border: none; color: var(--fg); font-size: 10px; }
+/* the row play control is one thing everywhere: a small round button */
+.tno-play { position: absolute; inset: 0; margin: auto; width: 26px; height: 26px; display: none; align-items: center; justify-content: center;
+  background: none; border: 1px solid transparent; border-radius: 50%; color: var(--fg); font-size: 10px; }
 .trow:hover .tno-num { display: none; }
-.trow:hover .tno-play { display: inline-flex; }
+.trow:hover .tno-play { display: inline-flex; border-color: var(--line); }
 /* harmonic key chips: same colour family for neighbouring keys */
 .genrechip { align-self: flex-start; margin: 2px 0 0; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0)); color: var(--fg-soft); border-radius: 99px; padding: 1px 8px; font-size: 9px; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; font-family: inherit; }
 .genrechip:hover { color: var(--fg); border-color: var(--fg-mute); }
@@ -290,7 +292,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
 /* the play control has to be hittable with a thumb */
 @media (max-width: 760px) {
   .tno { min-height: 52px; }
-  .tno-play { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; }
+  .tno-play { width: 30px; height: 30px; display: inline-flex; border-color: var(--line); }
   .trow { padding-top: 6px; padding-bottom: 6px; min-height: 56px; }
   .ctx { max-width: min(92vw, 340px); }
   .ctx button { padding: 12px 14px; font-size: 14px; }
@@ -397,7 +399,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .lrow-t { min-width: 0; flex: 1; display: flex; flex-direction: column; }
 .lrow-t b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lrow-t i { font-style: normal; font-size: 11px; color: var(--fg-mute); }
-.lrow-play { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--fg-soft); display: grid; place-items: center; cursor: pointer; }
+.lrow-play { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--fg); display: grid; place-items: center; cursor: pointer; }
 .lrow-play:hover { border-color: var(--acc); color: var(--acc); }
 /* compact keeps the time on the right, so the row has an anchor instead of empty space */
 .trow.compact { grid-template-columns: 30px 34px minmax(0,1fr) 34px 52px 34px; }
