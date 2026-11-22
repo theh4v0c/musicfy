@@ -879,7 +879,7 @@ async function renderHome() {
   v.innerHTML = `
     <section class="mast">
       <div class="mast-glow" id="mast-glow"></div>
-      <div class="mast-meta"><span id="mast-clock"></span><span class="mast-flex"></span><span id="mast-hour"></span></div>
+      <div class="mast-meta"><span id="mast-clock"></span><span class="mast-flex"></span></div>
       <div class="mast-main">
         <div class="mast-copy">
           <h1 class="mast-greet" id="mast-greet">Good ${greetPart()}.</h1>
@@ -942,24 +942,7 @@ async function renderHome() {
       state._addedWeek = Number(g.stats.addedWeek);
       drawQuick();
     }
-    // the hour has a sound: offer it, don't just describe it
-    const hourEl = document.getElementById('mast-hour');
-    if (hourEl && g.hourFamily && g.hourFamily.family) {
-      const h = new Date().getHours();
-      hourEl.innerHTML = `<button class="mast-hour-btn" type="button">${String(h).padStart(2, '0')}:00 sounds like ${esc(g.hourFamily.family)}</button>`;
-      hourEl.querySelector('button').onclick = async (e) => {
-        e.stopPropagation();
-        const b = e.currentTarget;
-        b.disabled = true;
-        b.textContent = 'Building';
-        try {
-          const r = await api('/api/ask', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: g.hourFamily.family }), nocache: true });
-          if (r.results && r.results.length) playList(r.results.map((t) => ({ ...t, owned: t.owned })), 0, false, `${h}:00 · ${g.hourFamily.family}`);
-          else toast('Nothing in that lane yet');
-        } catch { toast('Could not build that'); }
-        b.disabled = false;
-      };
-    }
+
   }).catch(() => {});
   loadMastPicks();
   // a queue survives the session: offer to pick it up instead of starting cold
@@ -2651,6 +2634,7 @@ async function renderSearch() {
   const v = $('view');
   v.innerHTML = `<div class="search-head"><div class="search-kicker">SEARCH</div><p class="search-sub">Find a track, or ask the library a question.</p></div>
     <div class="search-modes" role="tablist">
+      <span class="s-thumb" aria-hidden="true"></span>
       <button class="s-mode on" data-mode="search" role="tab">Search</button>
       <button class="s-mode" data-mode="ask" role="tab">Ask</button>
     </div><div class="search-wrap">
@@ -2665,9 +2649,10 @@ async function renderSearch() {
         <button class="ask-ex">how much of my library has audio</button>
       </div>
       <div class="mode-tabs" id="mode-tabs">
-        <button class="mode-tab loc on" data-loc="lib"><span class="chk">✓</span>Library</button>
-        <button class="mode-tab loc on" data-loc="web"><span class="chk">✓</span>Web sources</button>
-        <button class="mode-tab" id="long-sets" data-on="false" title="Include DJ mixes, sets and long recordings"><span class="chk"></span>Long sets</button>
+        <span class="filters-label">Include</span>
+        <button class="mode-tab loc on" data-loc="lib" aria-pressed="true">Library</button>
+        <button class="mode-tab loc on" data-loc="web" aria-pressed="true">Web sources</button>
+        <button class="mode-tab" id="long-sets" data-on="false" aria-pressed="false" title="Include DJ mixes, sets and long recordings">Long sets</button>
       </div>
       <div class="ladder-state" id="ladder-state"></div>
     </div><div id="qres"></div><div id="search-discover"></div>`;
@@ -2683,7 +2668,7 @@ async function renderSearch() {
 
   const setLoc = (b, on) => {
     b.classList.toggle('on', on);
-    const c = b.querySelector('.chk'); if (c) c.textContent = on ? '✓' : '';
+    b.setAttribute('aria-pressed', String(on));
   };
   document.querySelectorAll('.mode-tab.loc').forEach((b) => {
     setLoc(b, b.dataset.loc === 'lib' ? searchLib : searchWeb);
@@ -2705,6 +2690,7 @@ async function renderSearch() {
     statusEl.hidden = !text;
   };
   const modeBtns = [...document.querySelectorAll('.s-mode')];
+  const thumb = document.querySelector('.s-thumb');
   const askNote = $('ask-note');
   const tabsRow = $('mode-tabs');
   const hints = $('search-hints');
@@ -2718,6 +2704,12 @@ async function renderSearch() {
     q.placeholder = ask
       ? 'Ask about your library: what is in Dm at 124, how many tracks are analysed'
       : 'Search tracks, artists and albums';
+    // the thumb sits under the active word, so the state is positional, not colour alone
+    if (thumb) {
+      const active = modeBtns.find((b) => b.classList.contains('on')) || modeBtns[0];
+      thumb.style.width = `${active.offsetWidth}px`;
+      thumb.style.transform = `translateX(${active.offsetLeft - modeBtns[0].offsetLeft}px)`;
+    }
     if (askNote) askNote.hidden = !ask;
     // the library/web filters only mean something for a search
     if (tabsRow) tabsRow.style.display = ask ? 'none' : '';
@@ -2753,7 +2745,7 @@ async function renderSearch() {
     if (!ls) return;
     ls.dataset.on = String(!!state.longSets);
     ls.classList.toggle('on', !!state.longSets);
-    const c = ls.querySelector('.chk'); if (c) c.textContent = state.longSets ? '✓' : '';
+    ls.setAttribute('aria-pressed', String(!!state.longSets));
   };
   paintLS();
   const lsBtn = $('long-sets');
