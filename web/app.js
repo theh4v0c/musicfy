@@ -2202,18 +2202,14 @@ async function renderSongs(push = true) {
     const theadBack = document.getElementById('songs-thead');
     if (theadBack) theadBack.style.display = view === 'list' ? '' : 'none';
     const shown = list.slice(0, limit);
-    if (view === 'grid') {
+    if (view !== 'list') {
+      // compact is a denser grid of the same cards, not a denser list
       const grid = document.createElement('div');
-      grid.className = 'sg-grid';
+      grid.className = view === 'compact' ? 'sg-grid compact' : 'sg-grid';
       shown.forEach((t) => { registerRow(t); grid.appendChild(trackCard(t, list, 'Songs')); });
       el.appendChild(grid);
     } else {
-      shown.forEach((t, i) => {
-        registerRow(t);
-        const row = trow(t, i, list);
-        if (view === 'compact') row.classList.add('compact');
-        el.appendChild(row);
-      });
+      shown.forEach((t, i) => { registerRow(t); el.appendChild(trow(t, i, list)); });
     }
     if (list.length > limit) {
       const more = document.createElement('button');
