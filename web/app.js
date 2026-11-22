@@ -2200,7 +2200,7 @@ async function renderSongs(push = true) {
     if (!list.length) { el.innerHTML = `<div class="empty">Nothing matches that filter.</div>`; return; }
     const view = songView();
     const theadBack = document.getElementById('songs-thead');
-    if (theadBack) theadBack.style.display = view === 'grid' ? 'none' : '';
+    if (theadBack) theadBack.style.display = view === 'list' ? '' : 'none';
     const shown = list.slice(0, limit);
     if (view === 'grid') {
       const grid = document.createElement('div');
@@ -2340,7 +2340,7 @@ async function renderSettings() {
       <section class="set-card">
         <h2>Maintenance</h2>
         <p class="set-note">Housekeeping for the library itself. Nothing here changes your files unless it says so.</p>
-        <div class="set-actions">
+        <div class="set-tools">
           <button class="btn btn-ghost" id="set-repair" type="button">Repair metadata</button>
           <button class="btn btn-ghost" id="set-genres" type="button">Fill genres</button>
           <button class="btn btn-ghost" id="set-covers" type="button">Fix covers</button>
