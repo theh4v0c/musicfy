@@ -663,7 +663,7 @@ function renderSlibItems() {
   if (!el) return;
   el.querySelectorAll('.slib-item').forEach((r) => r.remove());
   const liked = { id: 'liked', name: 'Liked Songs', n: state.liked.size, liked: true };
-  const items = [liked, ...sortedPlaylists(state.playlists)].filter(matchesPlFilter);
+  const items = [liked, ...numberedPlaylists(state.playlists)].filter(matchesPlFilter);
   for (const p of items) {
     const row = document.createElement('div');
     row.className = 'slib-item' + (state.playlistId === p.id ? ' on' : '');
@@ -671,7 +671,7 @@ function renderSlibItems() {
       ? `<div class="slib-art ph" style="display:flex;align-items:center;justify-content:center;color:var(--liked)">${IC.heartFull}</div>
          <div style="min-width:0"><div class="slib-name">Liked Songs</div><div class="slib-sub">${p.n} songs</div></div>`
       : `<img class="slib-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=88&v=${state.artV || 0}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
-         <div style="min-width:0"><div class="slib-name">${esc(p.name)}</div><div class="slib-sub">playlist &middot; ${p.n_tracks}</div></div>`;
+         <div style="min-width:0"><div class="slib-name"><span class="pl-idx">${idxLabel(p.idx)}</span>${esc(p.name)}</div><div class="slib-sub">${p.n_tracks} tracks</div></div>`;
     row.onclick = () => p.liked ? nav('liked') : openPlaylist(p.id);
     if (!p.liked) {
       row.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); openPlaylistMenu(p, e.clientX, e.clientY); };
@@ -1346,6 +1346,7 @@ function plistRow(p) {
   el.innerHTML = `${liked
     ? `<div class="lrow-art ph" style="background:linear-gradient(135deg,#ff6b47,#8a1d12)">${IC.heartFull}</div>`
     : `<img class="lrow-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=120&v=${state.artV || 0}" alt="" loading="lazy" decoding="async">`}
+    ${p.idx ? `<span class="lrow-idx">${idxLabel(p.idx)}</span>` : ''}
     <div class="lrow-t"><b>${esc(p.name)}</b><i>${p.n_tracks || 0} track${Number(p.n_tracks) === 1 ? '' : 's'}</i></div>
     <button class="lrow-play" aria-label="Play">${IC.play}</button>`;
   el.querySelector('.lrow-play').onclick = (e) => {
@@ -1361,11 +1362,12 @@ function plistRow(p) {
   return el;
 }
 
-function pcard(p) {
+function pcard(p, idx) {
   const el = document.createElement('div');
   el.className = 'pcard';
   el.innerHTML = `
     <img class="pcard-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=340&v=${state.artV || 0}" alt="" loading="lazy" draggable="false">
+    ${idx ? `<span class="pcard-idx">${idxLabel(idx)}</span>` : ''}
     <div class="pcard-name">${esc(p.name)}</div>
     <div class="pcard-sub">${p.n_tracks} tracks</div>
     <button class="pcard-play" aria-label="Play ${esc(p.name)}">${IC.play}</button>`;
@@ -1391,10 +1393,11 @@ async function openPlaylist(pid, push = true) {
   renderSidebar();
   $('view-title').textContent = p.name;
   const v = $('view');
+  const plNo = (numberedPlaylists().find((x) => x.id === pid) || {}).idx;
   v.innerHTML = `<div class="plhead">
       ${plHeadArt(pid, p.name)}
       <div>
-        <div class="plhead-kicker">PLAYLIST</div>
+        <div class="plhead-kicker">PLAYLIST${plNo ? ` <span class="pl-idx">${idxLabel(plNo)}</span>` : ''}</div>
         <h1 class="plhead-name">${esc(p.name)}</h1>
         <div class="plhead-meta"><b id="pln">...</b> tracks &middot; <span id="pldur"></span></div>
         <div class="plhead-actions">
@@ -1577,6 +1580,13 @@ const PL_ORDERS = [
 const plOrder = () => localStorage.getItem('mf-pl-order') || 'alpha';
 const plFilter = () => (state.plFilter || '').toLowerCase().trim();
 
+/* every playlist carries the number of its place in the current order, so a crate can
+   be referred to as "the 5th" without renaming anything */
+function numberedPlaylists(list) {
+  return sortedPlaylists(list).map((p, i) => ({ ...p, idx: i + 1 }));
+}
+const idxLabel = (n) => String(n).padStart(2, '0');
+
 function sortedPlaylists(list) {
   const mode = plOrder();
   const out = (list || state.playlists).slice();
@@ -1632,7 +1642,7 @@ async function renderLibrary() {
     if (!g) return;
     g.className = view === 'list' ? 'plist' : view === 'compact' ? 'pgrid compact' : 'pgrid';
     g.innerHTML = '';
-    const rows = sortedPlaylists().filter(matchesPlFilter);
+    const rows = numberedPlaylists().filter(matchesPlFilter);
     if (view === 'list') {
       g.appendChild(plistRow({ id: '__liked', name: 'Liked Songs', n_tracks: state.liked.size, liked: true }));
       for (const p of rows) g.appendChild(plistRow(p));
@@ -1644,7 +1654,7 @@ async function renderLibrary() {
     liked.querySelector('.pcard-play').onclick = (e) => { e.stopPropagation(); playLiked(); };
     liked.onclick = () => nav('liked');
     g.appendChild(liked);
-    for (const p of rows) g.appendChild(pcard(p));
+    for (const p of rows) g.appendChild(pcard(p, p.idx));
   };
   drawGrid(libView());
   bindViewSwitch('library', (v) => drawGrid(v));
@@ -1670,6 +1680,28 @@ async function renderLibrary() {
 }
 
 // DJ export: analysis coverage, a batch analyse for electronic, and per-playlist export
+const PREP_ORDERS = [
+  ['alpha', 'Name A-Z'],
+  ['alphaDesc', 'Name Z-A'],
+  ['size', 'Most tracks'],
+  ['todo', 'Least prepped'],
+  ['ready', 'Most prepped'],
+];
+const prepOrder = () => { try { return localStorage.getItem('mf-prep-order') || 'alpha'; } catch { return 'alpha'; } };
+const prepView = () => { try { return localStorage.getItem('mf-view-prep') || 'grid'; } catch { return 'grid'; } };
+const crateCoverage = (p) => (p.owned ? (p.prepped || 0) / p.owned : 0);
+function sortedCrates() {
+  const out = [...state.playlists];
+  const mode = prepOrder();
+  const byName = (a, b) => String(a.name).localeCompare(String(b.name));
+  if (mode === 'alphaDesc') out.sort((a, b) => byName(b, a));
+  else if (mode === 'size') out.sort((a, b) => (b.n_tracks || 0) - (a.n_tracks || 0));
+  else if (mode === 'todo') out.sort((a, b) => crateCoverage(a) - crateCoverage(b) || (b.owned || 0) - (a.owned || 0));
+  else if (mode === 'ready') out.sort((a, b) => crateCoverage(b) - crateCoverage(a));
+  else out.sort(byName);
+  return out.map((p, i) => ({ ...p, idx: i + 1 }));
+}
+
 async function renderDjExport() {
   setNav('djexport'); state.playlistId = null; renderSidebar();
   $('view-title').textContent = 'Prep';
@@ -1686,6 +1718,9 @@ async function renderDjExport() {
       </div>
     </div>
     <div class="sec-title">Crates <small>EXPORT READY</small></div>
+    <div class="list-bar"><div class="mode-tabs" id="crate-order">
+      ${PREP_ORDERS.map(([v, label]) => `<button class="mode-tab${prepOrder() === v ? ' on' : ''}" data-order="${v}">${label}</button>`).join('')}
+    </div>${viewSwitch('prep', prepView())}</div>
     <div class="crate-grid" id="dj-list"></div>`;
   let remaining = 0;
   try {
@@ -1730,23 +1765,42 @@ async function renderDjExport() {
   } catch {}
   const list = document.getElementById('dj-list');
   if (!list) return;
-  for (const p of state.playlists) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const prepLabel = (p) => Math.max(0, (p.owned || 0) - (p.prepped || 0));
+  const drawCrates = (view) => {
+    list.className = view === 'list' ? 'crate-list' : view === 'compact' ? 'crate-grid compact' : 'crate-grid';
+    list.innerHTML = '';
+    for (const p of sortedCrates()) {
     const cov = p.owned ? Math.round(((p.prepped || 0) / p.owned) * 100) : 0;
-    const card = document.createElement('div');
-    card.className = 'crate';
-    card.innerHTML = `
+    const card = document.createElement(view === 'list' ? 'div' : 'div');
+    card.className = view === 'list' ? 'crate-row' : 'crate';
+    if (view === 'list') {
+      card.innerHTML = `
+        <span class="lrow-idx">${pad(p.idx)}</span>
+        <img class="crate-row-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=120&v=${state.artV || 0}" alt="" loading="lazy">
+        <div class="crate-row-t"><b>${esc(p.name)}</b><i>${p.n_tracks || 0} tracks · ${p.prepped || 0}/${p.owned || 0} prepped</i></div>
+        ${(p.owned && cov < 100) ? `<button class="crate-btn crate-analyze">Prep ${prepLabel(p)}</button>` : '<span class="crate-ready-tag">ready</span>'}
+        <div class="crate-row-acts">
+          <button class="crate-btn" data-rb title="rekordbox XML + audio">Rekordbox</button>
+          <button class="crate-btn" data-tr title="Traktor NML + audio">Traktor</button>
+          <button class="crate-btn" data-usb title="CDJ USB">USB</button>
+        </div>`;
+    } else {
+      card.innerHTML = `
       <div class="crate-artwrap">
         <img class="crate-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=340&v=${state.artV || 0}" alt="" loading="lazy">
+        <span class="crate-idx">${pad(p.idx)}</span>
         <span class="crate-badge">${p.owned || 0}/${p.n_tracks || 0} audio</span>
       </div>
       <div class="crate-name">${esc(p.name)}</div>
       <div class="crate-ready"><i style="width:${cov}%"></i></div>
-      <div class="crate-meta"><span>${p.n_tracks || 0} tracks · ${p.prepped || 0}/${p.owned || 0} prepped</span>${(p.owned && cov < 100) ? `<button class="crate-analyze">Prep ${Math.max(0, (p.owned || 0) - (p.prepped || 0))}</button>` : '<span class="crate-ready-tag">ready</span>'}</div>
+      <div class="crate-meta"><span>${p.n_tracks || 0} tracks · ${p.prepped || 0}/${p.owned || 0} prepped</span>${(p.owned && cov < 100) ? `<button class="crate-analyze">Prep ${prepLabel(p)}</button>` : '<span class="crate-ready-tag">ready</span>'}</div>
       <div class="crate-acts">
         <button class="crate-btn" data-rb title="Download a ZIP with the audio + rekordbox XML">Rekordbox</button>
         <button class="crate-btn" data-tr title="Download a ZIP with the audio + Traktor NML">Traktor</button>
         <button class="crate-btn" data-usb title="ZIP of the audio under Contents/ for a CDJ USB">USB</button>
       </div>`;
+    }
     const missingPrep = Math.max(0, (p.owned || 0) - (p.prepped || 0));
     const exportCrate = (fmt) => {
       if (missingPrep && !confirm(`${missingPrep} track${missingPrep === 1 ? '' : 's'} in "${p.name}" have no beat grid. Cues will be missing. Export anyway?`)) return;
@@ -1795,8 +1849,18 @@ async function renderDjExport() {
     };
     card.onclick = () => openPlaylist(p.id);
     list.appendChild(card);
-  }
-  if (!state.playlists.length) list.innerHTML = '<div class="empty">No playlists yet.</div>';
+    }
+    if (!state.playlists.length) list.innerHTML = '<div class="empty">No playlists yet.</div>';
+  };
+  drawCrates(prepView());
+  bindViewSwitch('prep', (v) => drawCrates(v));
+  document.querySelectorAll('#crate-order .mode-tab').forEach((b) => {
+    b.onclick = () => {
+      localStorage.setItem('mf-prep-order', b.dataset.order);
+      document.querySelectorAll('#crate-order .mode-tab').forEach((x) => x.classList.toggle('on', x === b));
+      drawCrates(prepView());
+    };
+  });
 }
 
 /* every track the server knows about, playlist membership or not */
