@@ -235,12 +235,18 @@ function openCtx(t, x, y) {
 function placeCtx(x, y) {
   const m = $('ctx');
   if (!m) return;
+  // desktop has a transport docked at the bottom: a menu that ends under it looks cut
+  const bar = document.querySelector('.playerbar');
+  const dock = bar && getComputedStyle(bar).display !== 'none' ? bar.offsetHeight : 0;
+  const floor = innerHeight - dock - 8;
   const r = m.getBoundingClientRect();
-  const maxH = Math.max(160, innerHeight - 24);
+  const maxH = Math.max(160, floor - 8);
   m.style.maxHeight = maxH + 'px';
   const h = m.getBoundingClientRect().height;
   m.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 8)) + 'px';
-  m.style.top = Math.max(8, Math.min(y, innerHeight - h - 8)) + 'px';
+  m.style.top = Math.max(8, Math.min(y, floor - h)) + 'px';
+  // tell the reader there is more when the list is taller than the space
+  m.classList.toggle('scrolls', m.scrollHeight > m.clientHeight + 1);
 }
 function showBack() {}
 function closeCtx(force = false) {
@@ -873,7 +879,7 @@ async function renderHome() {
   v.innerHTML = `
     <section class="mast">
       <div class="mast-glow" id="mast-glow"></div>
-      <div class="mast-meta"><span id="mast-clock"></span><span id="mast-place"></span><span class="mast-flex"></span></div>
+      <div class="mast-meta"><span id="mast-clock"></span><span class="mast-flex"></span><span id="mast-hour"></span></div>
       <div class="mast-main">
         <div class="mast-copy">
           <h1 class="mast-greet" id="mast-greet">Good ${greetPart()}.</h1>
@@ -899,17 +905,23 @@ async function renderHome() {
       <div class="pgrid" id="home-grid"></div>
     </div>`;
   // the masthead reports the session, not the weather: time, place, what was last on
-  const nowD = new Date();
-  const clock = document.getElementById('mast-clock');
-  if (clock) {
-    const day = nowD.toLocaleDateString(undefined, { weekday: 'short' });
-    const hm = nowD.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const paintClock = () => {
+    const clock = document.getElementById('mast-clock');
+    if (!clock) return;
+    const d = new Date();
+    const day = d.toLocaleDateString(undefined, { weekday: 'short' });
+    const hm = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
     clock.textContent = `${day} ${hm}`;
-  }
+  };
+  paintClock();
+  if (state._clockTimer) clearInterval(state._clockTimer);
+  state._clockTimer = setInterval(() => {
+    if (!document.getElementById('mast-clock')) { clearInterval(state._clockTimer); state._clockTimer = null; return; }
+    paintClock();
+  }, 30000);
   api('/api/greeting', { nocache: true }).then((g) => {
     const greet = document.getElementById('mast-greet');
     const note = document.getElementById('mast-note');
-    const place = document.getElementById('mast-place');
     if (greet) {
       // small hours get their own line: "Good evening" at 2am is a lie
       const late = Number(g.hour) >= 23 || Number(g.hour) < 5;
@@ -930,7 +942,24 @@ async function renderHome() {
       state._addedWeek = Number(g.stats.addedWeek);
       drawQuick();
     }
-    if (place && g.city) place.textContent = g.city;
+    // the hour has a sound: offer it, don't just describe it
+    const hourEl = document.getElementById('mast-hour');
+    if (hourEl && g.hourFamily && g.hourFamily.family) {
+      const h = new Date().getHours();
+      hourEl.innerHTML = `<button class="mast-hour-btn" type="button">${String(h).padStart(2, '0')}:00 sounds like ${esc(g.hourFamily.family)}</button>`;
+      hourEl.querySelector('button').onclick = async (e) => {
+        e.stopPropagation();
+        const b = e.currentTarget;
+        b.disabled = true;
+        b.textContent = 'Building';
+        try {
+          const r = await api('/api/ask', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: g.hourFamily.family }), nocache: true });
+          if (r.results && r.results.length) playList(r.results.map((t) => ({ ...t, owned: t.owned })), 0, false, `${h}:00 · ${g.hourFamily.family}`);
+          else toast('Nothing in that lane yet');
+        } catch { toast('Could not build that'); }
+        b.disabled = false;
+      };
+    }
   }).catch(() => {});
   loadMastPicks();
   // a queue survives the session: offer to pick it up instead of starting cold
@@ -2620,11 +2649,16 @@ async function renderSearch() {
   setNav('search'); state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'Search';
   const v = $('view');
-  v.innerHTML = `<div class="search-head"><div class="search-kicker">SEARCH</div><p class="search-sub">Search your library and the web, or ask it a question.</p></div><div class="search-wrap">
+  v.innerHTML = `<div class="search-head"><div class="search-kicker">SEARCH</div><p class="search-sub">Find a track, or ask the library a question.</p></div>
+    <div class="search-modes" role="tablist">
+      <button class="s-mode on" data-mode="search" role="tab">Search</button>
+      <button class="s-mode" data-mode="ask" role="tab">Ask</button>
+    </div><div class="search-wrap">
       <div class="search-field">
         <input class="search" id="q" placeholder="Search tracks or ask: create a playlist of 10 ambient tracks" autocomplete="off">
         <span class="search-status status" id="search-status" hidden></span>
       </div>
+      <p class="ask-note" id="ask-note" hidden>Ask answers from your library: counts, keys, tempo, what to play next.</p>
       <div class="ask-hint" id="search-hints">
         <button class="ask-ex">tracks in Dm between 120 and 130 bpm</button>
         <button class="ask-ex">create a playlist of 10 ambient tracks</button>
@@ -2634,7 +2668,6 @@ async function renderSearch() {
         <button class="mode-tab loc on" data-loc="lib"><span class="chk">✓</span>Library</button>
         <button class="mode-tab loc on" data-loc="web"><span class="chk">✓</span>Web sources</button>
         <button class="mode-tab" id="long-sets" data-on="false" title="Include DJ mixes, sets and long recordings"><span class="chk"></span>Long sets</button>
-        <button class="mode-tab ask-mode" id="ask-mode" type="button" title="Ask a question about your library"><span class="chk"></span>Ask</button>
       </div>
       <div class="ladder-state" id="ladder-state"></div>
     </div><div id="qres"></div><div id="search-discover"></div>`;
@@ -2665,27 +2698,45 @@ async function renderSearch() {
   const assistantish = /\b(create|make|build|download|playlist|how many|how much|top rated|top \d|what can|help|which|who|when)\b|\b(tracks?|songs?)\b[^.]*\b(in|between|around|with|from)\b|\bbpm\b/i;
   const disc = $('search-discover');
   const statusEl = $('search-status');
-  const setSearchStatus = (text, kind) => {
+  if (state.askMode == null) state.askMode = false;
+  const setSearchStatus = (text) => {
     if (!statusEl) return;
-    statusEl.innerHTML = text ? `<span class="status-orb${kind === 'thinking' ? ' on' : ''}"></span>${esc(text)}` : '';
+    statusEl.innerHTML = text ? `${esc(text)}<span class="dots"><i></i><i></i><i></i></span>` : '';
     statusEl.hidden = !text;
   };
-  const askBtn = $('ask-mode');
+  const modeBtns = [...document.querySelectorAll('.s-mode')];
+  const askNote = $('ask-note');
+  const tabsRow = $('mode-tabs');
+  const hints = $('search-hints');
   const paintAsk = () => {
-    if (!askBtn) return;
-    askBtn.classList.toggle('on', !!state.askMode);
-    const c = askBtn.querySelector('.chk'); if (c) c.textContent = state.askMode ? '✓' : '';
-    q.placeholder = state.askMode
-      ? 'Ask about your library: how many tracks are analysed, what is in Dm at 124'
-      : 'Search tracks or ask: create a playlist of 10 ambient tracks';
+    const ask = !!state.askMode;
+    modeBtns.forEach((b) => {
+      const on = (b.dataset.mode === 'ask') === ask;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', String(on));
+    });
+    q.placeholder = ask
+      ? 'Ask about your library: what is in Dm at 124, how many tracks are analysed'
+      : 'Search tracks, artists and albums';
+    if (askNote) askNote.hidden = !ask;
+    // the library/web filters only mean something for a search
+    if (tabsRow) tabsRow.style.display = ask ? 'none' : '';
+    if (hints) hints.style.display = ask ? 'none' : '';
   };
-  if (askBtn) askBtn.onclick = () => { state.askMode = !state.askMode; paintAsk(); q.focus(); };
+  modeBtns.forEach((b) => b.onclick = () => {
+    state.askMode = b.dataset.mode === 'ask';
+    paintAsk();
+    const text = q.value.trim();
+    if (text) submit();
+    q.focus();
+  });
   paintAsk();
   const submit = () => {
     const text = q.value.trim();
     if (!text) { if (disc) disc.hidden = false; draw(); return; }
     if (disc) disc.hidden = true;   // suggestions are for browsing, not for answering
-    if (state.askMode || assistantish.test(text)) { drawAsk(text); q.focus(); return; }
+    if (assistantish.test(text) && !state.askMode) { state.askMode = true; paintAsk(); }
+    if (state.askMode) { drawAsk(text); q.focus(); return; }
     $('view').classList.remove('asking');
     draw();
   };
@@ -3511,11 +3562,12 @@ function targetVolume() {
 function setStatus(text) {
   // dedicated elements only: the artist line is not ours to rewrite. The mobile player
   // hides the bar, so it needs its own status or a stall there is completely silent.
+  // the word is followed by three dots that carry the movement, not a dot before it
   const value = String(text || '').replace(/\.{2,}$/, '');
   for (const id of ['pb-status', 'np-status', 'mini-status']) {
     const el = document.getElementById(id);
     if (!el) continue;
-    el.textContent = value;
+    el.innerHTML = value ? `${esc(value)}<span class="dots"><i></i><i></i><i></i></span>` : '';
     el.hidden = !value;
   }
 }
@@ -3891,6 +3943,8 @@ async function renderDownloads() {
   const items = all.slice(0, 120);
   const lib = d.library || { total: 0, with_audio: 0, missing: 0 };
   const pct = lib.total ? Math.round((lib.with_audio / lib.total) * 100) : 0;
+  const missingOpen = state.missingOpen === true;
+  const missingPrompt = !!(lib.missing && localStorage.getItem('mf-missing-hidden') !== '1');
   const queueLine = [
     lib.catalogue ? `${lib.catalogue} catalogue-only` : '',
     `${d.active} running`,
@@ -3904,9 +3958,12 @@ async function renderDownloads() {
     <div class="dl-tools">
       ${d.failed ? `<button class="dl-act" id="dl-retry-all">Retry all failed (${d.failed})</button>` : ''}
       ${(d.active + d.queued) ? `<button class="dl-act" id="dl-cancel-all">Cancel all (${d.active + d.queued})</button>` : ''}
-      ${lib.missing && !(d.active + d.queued) ? `<button class="dl-act" id="dl-fill">Fill ${lib.missing} missing track${lib.missing === 1 ? '' : 's'}</button>` : ''}
+      ${missingPrompt && !(d.active + d.queued) ? `<button class="dl-act" id="dl-see-missing">${missingOpen ? 'Hide the list' : `See the ${lib.missing} missing`}</button>
+      <button class="dl-act" id="dl-fill">Fill ${lib.missing} missing track${lib.missing === 1 ? '' : 's'}</button>
+      <button class="dl-act" id="dl-hide-missing">Not now</button>` : ''}
       ${d.failed ? `<button class="dl-act" id="dl-clear-failed">Dismiss failed (${d.failed})</button>` : ''}
-    </div>` + (items.length ? items.map((i) => {
+    </div>
+    <div class="dl-missing" id="dl-missing-list" ${missingOpen ? '' : 'hidden'}></div>` + (items.length ? items.map((i) => {
       const label = i.state === 'running' ? `${i.progress}%`
         : i.state === 'queued' ? 'waiting'
         : i.state === 'unavailable' ? 'no source'
@@ -3944,6 +4001,36 @@ async function renderDownloads() {
   if (cancelAll) cancelAll.onclick = async () => {
     cancelAll.disabled = true;
     try { const r = await api('/api/downloads/cancel-all', { method: 'POST' }); toast(`${r.cancelled} downloads cancelled`, 5000); } catch { toast('cancel failed', 4000); }
+    renderDownloads();
+  };
+  const seeMissing = host.querySelector('#dl-see-missing');
+  if (seeMissing) seeMissing.onclick = async () => {
+    state.missingOpen = !state.missingOpen;
+    await renderDownloads();          // the list only exists after the redraw
+    if (!state.missingOpen) return;
+    const box = document.getElementById('dl-missing-list');
+    if (!box) return;
+    box.innerHTML = '<div class="dl-missing-empty">Reading the library…</div>';
+    try {
+      const r = await api('/api/downloads/missing', { nocache: true });
+      box.innerHTML = (r.tracks || []).map((t) => `<div class="dl-missing-row">
+          <div class="dl-missing-t"><b>${esc(t.title || '')}</b><i>${esc(t.artist || '')}</i></div>
+          <button class="dl-act" data-grab="${t.id}">Download</button>
+        </div>`).join('') || '<div class="dl-missing-empty">Nothing is missing.</div>';
+      box.querySelectorAll('[data-grab]').forEach((b) => {
+        b.onclick = async () => {
+          b.disabled = true;
+          b.textContent = 'Queued';
+          try { await api(`/api/tracks/${b.dataset.grab}/download`, { method: 'POST' }); } catch { b.textContent = 'Failed'; }
+        };
+      });
+    } catch { box.innerHTML = '<div class="dl-missing-empty">Could not read the list.</div>'; }
+  };
+  const hideMissing = host.querySelector('#dl-hide-missing');
+  if (hideMissing) hideMissing.onclick = () => {
+    localStorage.setItem('mf-missing-hidden', '1');
+    state.missingOpen = false;
+    toast('Missing tracks stay hidden until you clear this', 4000);
     renderDownloads();
   };
   const fill = host.querySelector('#dl-fill');
@@ -4242,7 +4329,13 @@ function paintRows() {
   });
 }
 
-const togglePlay = () => state.current ? (audio.paused ? audio.play() : audio.pause()) : null;
+// a restored queue has a current track but no audio loaded yet: pressing play used to
+// do nothing until you skipped and came back
+const togglePlay = () => {
+  if (!state.current) return null;
+  if (!audio.getAttribute('src')) return playAt(state.qi);
+  return audio.paused ? audio.play().catch(() => {}) : audio.pause();
+};
 let continuing = false;
 function nextTrack() {
   if (!state.queue.length) return;

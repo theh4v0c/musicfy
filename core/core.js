@@ -2642,7 +2642,12 @@ const server = http.createServer(async (req, res) => {
         bpm: last.bpm ? Math.round(last.bpm) : null, key: last.key || null,
         key_scale: last.key_scale || null, has_art: !!last.has_art, at: last.played_at,
       } : null;
-      return json(res, 200, { name, part, hour, weather, city, sub, line, fact, last: lastOut, stats: { plays, tracks, artists, addedWeek } });
+      return json(res, 200, {
+        name, part, hour, weather, city, sub, line, fact, last: lastOut,
+        // what this listener usually reaches for at this hour: useful, not decorative
+        hourFamily: hourFamily ? { family: hourFamily.f, count: hourFamily.n } : null,
+        stats: { plays, tracks, artists, addedWeek },
+      });
     }
 
     // dynamic Ask suggestions from what you actually play this week
@@ -2670,6 +2675,15 @@ const server = http.createServer(async (req, res) => {
       const uniq = [...new Set(pool)];
       for (let i = uniq.length - 1; i > 0; i -= 1) { const j = Math.floor(Math.random() * (i + 1)); [uniq[i], uniq[j]] = [uniq[j], uniq[i]]; }
       return json(res, 200, { prompts: uniq.slice(0, 4) });
+    }
+
+    // the tracks the library count is missing, so the drawer can show them
+    if (u.pathname === '/api/downloads/missing' && req.method === 'GET') {
+      const rows = db.prepare(`SELECT t.id, t.title, t.artist, t.album FROM tracks t
+        WHERE NOT EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')
+          AND COALESCE(t.format,'') != 'catalogue'
+        ORDER BY t.artist, t.title LIMIT 200`).all();
+      return json(res, 200, { count: rows.length, tracks: rows });
     }
 
     // what arrived most recently, newest first
