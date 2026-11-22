@@ -2735,6 +2735,9 @@ const server = http.createServer(async (req, res) => {
         // read-only intents answer now; mutations become a proposal until confirmed
         if (plan.intent === 'report_library' || plan.intent === 'search_tracks') {
           const result = await agent.execute(db, plan, { enqueueTrackDownload });
+          // a discovery draft needs the same one-time id a playlist draft gets, or the
+          // confirm button has nothing to confirm
+          if (result && result.action) result.action = { ...result.action, id: stashAction(result.action) };
           return json(res, 200, { question: q, plan, source, ...result });
         }
         const proposal = await agent.propose(db, plan);
@@ -2744,6 +2747,10 @@ const server = http.createServer(async (req, res) => {
           }
           const result = await agent.execute(db, plan, { enqueueTrackDownload });
           return json(res, 200, { question: q, plan, source, ...result });
+        }
+        // a proposal that turned out to need nothing: answer, do not offer a draft
+        if (proposal.kind === 'none') {
+          return json(res, 200, { question: q, plan, source, spoken: proposal.reason, data: {} });
         }
         const id = stashAction(proposal);
         return json(res, 200, { question: q, plan, source, spoken: proposal.reason, action: { id, ...proposal } });

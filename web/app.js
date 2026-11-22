@@ -2616,7 +2616,10 @@ function renderActionCard(a, out, stateEl) {
   } else {
     const ok = document.createElement('button');
     ok.className = 'btn btn-primary';
-    ok.textContent = a.action.kind === 'playlist' ? 'Create playlist' : a.action.kind === 'album' ? 'Download album' : 'Download missing';
+    ok.textContent = a.action.kind === 'playlist' ? 'Create playlist'
+      : a.action.kind === 'album' ? 'Download album'
+      : a.action.kind === 'download' ? `Download ${tracks.length}`
+      : 'Download missing';
     ok.onclick = () => confirm(ok, a.action.kind !== 'playlist');
     acts.append(ok);
   }
@@ -3028,6 +3031,8 @@ async function renderSearch() {
           meta.innerHTML = `<span class="mast-chip">${esc(String(a.plan.intent).replace(/_/g, ' '))}</span>`;
           card.appendChild(meta);
         }
+        // a draft worth approving goes straight under the sentence, with its buttons
+        if (a.action) { renderActionCard(a, res, null); return; }
         if (a.data && a.data.playlist) {
           const open = document.createElement('button');
           open.className = 'btn answer-open';

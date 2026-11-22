@@ -170,6 +170,36 @@ async function catalog(query, { songs = 40, albums = 12, artists = 6 } = {}) {
   };
 }
 
+/* the songs of one artist, by artist id. Searching for a name returns tracks whose
+   *title* matches it — ask for Burial and you get songs called Burial. This asks for
+   the artist, then for their catalogue. */
+async function artistSongs(name, limit = 20) {
+  const term = String(name || '').trim();
+  if (!term) return [];
+  await throttle();
+  let found = null;
+  try {
+    const data = await getJson(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=musicArtist&limit=8`);
+    const want = norm(term);
+    found = ((data && data.results) || []).find((r) => norm(r.artistName) === want) || null;
+  } catch { return []; }
+  if (!found) return [];
+  await throttle();
+  try {
+    const look = await getJson(`https://itunes.apple.com/lookup?id=${found.artistId}&entity=song&limit=${Math.min(50, limit)}`);
+    return ((look && look.results) || [])
+      .filter((r) => r.wrapperType === 'track')
+      .map((r) => ({
+        title: r.trackName, artist: r.artistName, album: r.collectionName,
+        duration: r.trackTimeMillis ? r.trackTimeMillis / 1000 : null,
+        genre: r.primaryGenreName || null, family: familyOf(r.primaryGenreName),
+        year: r.releaseDate ? Number(String(r.releaseDate).slice(0, 4)) : null,
+        cover: r.artworkUrl100 ? r.artworkUrl100.replace('100x100bb', '300x300bb') : null,
+        preview: r.previewUrl || null,
+      }));
+  } catch { return []; }
+}
+
 // the ordered tracklist of one album, from iTunes, so album pages can sort by track number
 async function albumTracklist(name, artist) {
   const key = 'albtrk2:' + norm(name) + '|' + norm(artist || '');
@@ -204,4 +234,4 @@ async function albumTracklist(name, artist) {
   return list;
 }
 
-module.exports = { canon, canonQuery, familyOf, catalog, albumTracklist };
+module.exports = { canon, canonQuery, familyOf, catalog, artistSongs, albumTracklist };

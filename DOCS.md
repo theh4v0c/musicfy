@@ -363,6 +363,16 @@ Plays are only counted after 30 seconds or half the track, so the recency input 
 UI: "Fix metadata" in the track context menu, "For you" in Songs builds the playlist from
 what is being played now, and the Ask tab keeps context between questions.
 
+## Ask: three outcomes, not one
+
+Ask is one box with three kinds of answer, and the difference matters:
+
+- **A question** ("how much of my library has audio") gets a sentence and, when it is about tracks, the rows behind it.
+- **A build** ("create a playlist of 10 ambient tracks") gets a draft under the sentence: the mix of tracks you already own and tracks from outside, each tagged LOCAL or NEW, with **Create + download N** / **Playlist only** / **Cancel**. Nothing is saved until you pick one.
+- **A discovery** ("find 8 tracks like Burial that I don't have") gets a draft of tracks from outside the library, tagged NEW, with **Download N**. "Like Burial" is resolved as the *artist* through iTunes (`identity.artistSongs`), not as the word in a title.
+
+A genre the library does not use no longer empties the result: ask for "ambient" in a library tagged electronic and the style decides, keeping the tempo filter only where BPM is known. Instructions ("include some I don't have") are stripped before anything is used as a name.
+
 ## Asking the library questions
 
 `core/query.js` turns a sentence into SQL. It is deterministic, offline and instant, and it is

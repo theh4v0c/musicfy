@@ -25,7 +25,7 @@ function planLocally(text) {
   if (/\b(find|search|show|which|list|what)\b/.test(t) && !/\bplaylist\b/.test(t)) {
     return { intent: 'search_tracks', args: { query: text, limit: count } };
   }
-  if (wantsDownload) return { intent: 'download_missing', args: {} };
+  if (wantsDownload) return { intent: 'download_missing', args: { query: text } };
   return { intent: 'report_library', args: {} };
 }
 
@@ -51,7 +51,11 @@ async function execute(db, plan, deps) {
   }
 
   if (plan.intent === 'search_tracks') {
-    const words = String(plan.args.query || '').replace(/\b(find|search|show|which|list|what|me|my|songs?|tracks?|music|in|the|library|outside|from|that|are|is|do|i|have|any)\b/gi, ' ').trim();
+    const words = String(plan.args.query || '')
+      .replace(/\b(find|search|show|which|list|what|me|my|songs?|tracks?|music|in|the|library|outside|from|that|are|is|do|i|have|any|like|similar|to|don'?t|doesn'?t|dont|not|new|missing|discover|unheard)\b/gi, ' ')
+      .replace(/\b\d+\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
     const filters = queryEngine.parse(words || plan.args.query || '', db);
     filters.limit = Math.min(Number(plan.args.limit) || 40, 100);
     let library = queryEngine.run(db, filters);
@@ -65,7 +69,32 @@ async function execute(db, plan, deps) {
         ORDER BY t.title LIMIT ?`).all(like, like, filters.limit);
     }
     let catalogue = [];
-    try { catalogue = (await identity.catalog(words || '', { songs: 10, albums: 0, artists: 0 })).songs || []; } catch {}
+    const likeArtist = /\b(like|similar to|in the style of|sounds like)\s+([a-z0-9 .&'_-]{2,40})/i.exec(String(plan.args.query || ''));
+    try {
+      if (likeArtist) {
+        // "like Burial that I don't have" is about the artist Burial, not that sentence
+        const who = String(likeArtist[2] || '').split(/\s+(?:that|which|who|i|in|from|to|and|but|not|do|dont|don'?t)\s+/i)[0].trim();
+        catalogue = (await identity.artistSongs(who, 30)).slice(0, Math.min(Number(plan.args.limit) || 20, 30));
+      }
+      if (!catalogue.length) catalogue = (await identity.catalog(words || '', { songs: 10, albums: 0, artists: 0 })).songs || [];
+    } catch {}
+    const wantsNew = /\b(don'?t have|not in (?:my|the) library|outside|discover|unheard|new|missing)\b/i.test(String(plan.args.query || ''));
+    if (wantsNew && catalogue.length) {
+      const tracks = catalogue.slice(0, 20).map((t) => ({
+        key: `${String(t.artist || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${String(t.title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}`,
+        title: t.title, artist: t.artist, album: t.album || '', duration: t.duration || null,
+        cover: t.cover || null, preview: t.preview || null, owned: false, source: 'online',
+      }));
+      return {
+        spoken: `${tracks.length} tracks outside your library match that. Nothing is downloaded until you say so.`,
+        data: { library, catalogue, filters: filters.notes || [] },
+        action: {
+          kind: 'download', title: `Outside your library`, summary: `${tracks.length} new tracks`,
+          reason: `Found in the catalogue for “${String(plan.args.query || '').trim().slice(0, 60)}”.`,
+          tracks, id: null,
+        },
+      };
+    }
     return {
       spoken: `${library.length} tracks in your library, ${catalogue.length} in the catalogue.`,
       data: { library, catalogue, filters: filters.notes || [] },
@@ -294,7 +323,9 @@ async function propose(db, plan) {
     const played = local.filter((t) => Number(t.plays) > 0).length;
     const reasonBits = [picked.reason];
     if (local.length) reasonBits.push(`${played} of ${local.length} you already play.`);
-    const sourceName = picked.ctx.text.join(' ');
+    // 'include some I don't have' is an instruction, not a search term
+    const FILLER = /^(include|including|some|any|ones|tracks|songs|track|song|that|which|i|dont|don't|have|has|not|no|in|my|library|new|find|more|from|the|a|an|and|or|with|of|for|to|please|create|make|build|playlist|crate|set)$/i;
+    const sourceName = picked.ctx.text.filter((w) => !FILLER.test(w)).join(' ');
     reasonBits.push(online.length ? (local.length ? `${online.length} new from artists around your rotation.` : `${online.length} new from ${sourceName ? `“${sourceName}”` : 'the catalogue'}.`) : (targetOnline ? 'Nothing new turned up this time.' : 'All from your library.'));
     return {
       kind: 'playlist', name, trackIds: local.map((t) => t.id), online, tracks,
@@ -348,8 +379,24 @@ async function propose(db, plan) {
   }
 
   if (plan.intent === 'download_missing') {
-    const missing = db.prepare(`SELECT t.id, t.title, t.artist, t.album FROM tracks t
-      WHERE NOT EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned') LIMIT 100`).all();
+    const q = String(plan.args.query || '').trim();
+    const term = q.toLowerCase().replace(/\b(the|download|missing|tracks?|songs?|from|of|in|my|library|album|by)\b/g, ' ').replace(/\s+/g, ' ').trim();
+    const like = `%${term}%`;
+    const base = `SELECT t.id, t.title, t.artist, t.album FROM tracks t
+      WHERE NOT EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')`;
+    const scoped = q && like.length > 4
+      ? db.prepare(`${base} AND (lower(COALESCE(t.album,'')) LIKE ? OR lower(COALESCE(t.artist,'')) LIKE ? OR lower(t.title) LIKE ?) LIMIT 100`).all(like, like, like)
+      : [];
+    let missing = scoped;
+    if (!missing.length) {
+      if (q && like.length > 4) {
+        // nothing missing under that name: say it is complete instead of dumping the
+        // whole library's gaps on someone who asked about one album
+        const any = db.prepare(`SELECT COUNT(*) c FROM tracks WHERE lower(COALESCE(album,'')) LIKE ? OR lower(COALESCE(artist,'')) LIKE ?`).get(like, like).c;
+        if (any) return { kind: 'none', reason: `Everything matching “${term || q}” is already in your library.` };
+      }
+      missing = db.prepare(`${base} LIMIT 100`).all();
+    }
     return {
       kind: 'missing', trackIds: missing.map((t) => t.id), tracks: missing.map((t) => ({ ...t, owned: false })),
       download: true,
@@ -403,6 +450,18 @@ function commit(db, proposal, deps) {
     }
     const name = proposal.album ? proposal.album.name : 'album';
     return { spoken: `Queueing ${queued} tracks from "${name}".`, data: { album: proposal.album, queued } };
+  }
+  if (proposal.kind === 'download') {
+    for (const t of proposal.tracks || []) {
+      let row = ownedIdFor(db, t.key);
+      if (!row) {
+        const r = db.prepare(`INSERT INTO tracks (uid,dup_key,title,artist,album,year,duration,format,added_at,updated_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?)`).run(t.key, t.key, t.title, t.artist || '', t.album || '', null, t.duration || null, 'catalogue', at, at);
+        row = { id: Number(r.lastInsertRowid), owned: 0 };
+      }
+      if (!row.owned && deps.enqueueTrackDownload({ id: row.id, title: t.title, artist: t.artist, duration: t.duration })) queued += 1;
+    }
+    return { spoken: `Queued ${queued} track${queued === 1 ? '' : 's'} from outside your library.`, data: { queued } };
   }
   if (proposal.kind === 'missing') {
     for (const id of proposal.trackIds) {

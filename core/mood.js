@@ -103,7 +103,12 @@ function score(t, ctx) {
 
 function reason(ctx, picked) {
   const bits = [];
-  if (ctx.text && ctx.text.length && picked.length) bits.push(`${ctx.text.join(' ')} from your library`);
+  if (ctx.text && ctx.text.length && picked.length) {
+    // instructions are not search terms: "set of 12, some I dont have" is not a title
+    const FILLER = /^(include|including|some|any|ones|tracks|songs|track|song|that|which|i|dont|don't|have|has|not|no|in|my|library|new|find|more|from|the|a|an|and|or|with|of|for|to|please|create|make|build|playlist|crate|set|me|of)$/i;
+    const words = ctx.text.filter((w) => !FILLER.test(String(w)));
+    if (words.length) bits.push(`${words.join(' ')} from your library`);
+  }
   if (ctx.style) bits.push(ctx.style.label);
   if (ctx.mood) bits.push(ctx.mood.label);
   if (ctx.referenceProfile) bits.push(`follows ${ctx.referenceProfile.artist}: ${ctx.referenceProfile.avgBpm} BPM, ${ctx.referenceProfile.family || 'mixed family'}`);
@@ -143,8 +148,17 @@ function select(db, query, count) {
       return !avoid.some((w) => hay.includes(w));
     });
   }
-  if (ctx.genre) rows = rows.filter((t) => String(t.genre || '').toLowerCase() === String(ctx.genre).toLowerCase());
-  if (ctx.family) rows = rows.filter((t) => String(t.genre_family || '').toLowerCase() === String(ctx.family).toLowerCase());
+  // a genre word that the library does not use must not empty the result: ask for
+  // "ambient" in a library tagged electronic and you still want the ambient-leaning
+  // tracks, not a shrug. The style below decides when the family is unknown.
+  if (ctx.genre) {
+    const hit = rows.filter((t) => String(t.genre || '').toLowerCase() === String(ctx.genre).toLowerCase());
+    if (hit.length) rows = hit;
+  }
+  if (ctx.family) {
+    const hit = rows.filter((t) => String(t.genre_family || '').toLowerCase() === String(ctx.family).toLowerCase());
+    if (hit.length) rows = hit;
+  }
   if (!ctx.style && !ctx.mood && !ctx.reference && ctx.text.length) {
     const words = ctx.text.map((w) => w.toLowerCase());
     rows = rows.filter((t) => {
@@ -172,7 +186,12 @@ function select(db, query, count) {
   // a downtempo request must not return a 123 BPM track
   if (ctx.style && ctx.style.bpm) {
     const inside = pool.filter((t) => t.bpm && inBpm(Number(t.bpm), ctx.style.bpm));
-    if (inside.length) pool = inside;
+    if (inside.length >= ctx.count) pool = inside;
+    else if (inside.length) {
+      // most of a young library has no BPM yet: keep what fits and let the unanalysed
+      // ones in behind it rather than returning three tracks when ten were asked for
+      pool = [...inside, ...pool.filter((t) => !t.bpm)];
+    }
   }
   // a reference artist with a known family stays in that family, even if short;
   // silently swapping metal for house because the BPM matches is worse than saying so
