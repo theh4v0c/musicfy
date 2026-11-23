@@ -861,7 +861,7 @@ function rippleAt(el, x, y) {
   setTimeout(() => span.remove(), 700);
 }
 document.addEventListener('pointerdown', (e) => {
-  const el = e.target.closest('.btn, .flow-key, .mpick, .mtile, .tcard, .pcard, .qtile, .crate, .snav-btn, .bn-btn, .dl-act, .mode-tab, .ask-ex, .chip-card');
+  const el = e.target.closest('.btn, .flow-key, .mpick, .mtile, .tcard, .pcard, .qtile, .crate, .snav-btn, .bn-btn, .dl-act, .mode-tab, .ask-ex, .action-chip');
   if (el) rippleAt(el, e.clientX, e.clientY);
 }, { passive: true });
 
@@ -1246,8 +1246,8 @@ async function drawAllTime() {
   const row = slot.querySelector('#at-row');
   h.top_artists.slice(0, 14).forEach((a) => {
     const c = document.createElement('button');
-    c.className = 'chip-card';
-    c.innerHTML = `<b>${esc(a.artist)}</b><span>${a.plays} plays</span>`;
+    c.className = 'cat-card';
+    c.innerHTML = `<span class="cat-art">${esc(String(a.artist || '?').charAt(0).toUpperCase())}</span><b>${esc(a.artist)}</b><span>${a.plays} plays</span>`;
     c.onclick = () => renderArtist(a.artist);
     row.appendChild(c);
   });
@@ -1940,16 +1940,16 @@ async function renderSongs(push = true) {
     const artists = new Set(all.map((t) => t.artist).filter(Boolean));
     const albums = new Set(all.map((t) => t.album).filter(Boolean));
     chips.innerHTML = `
-      <button class="chip-card sm" data-browse="artists"><b>Artists</b><span>${artists.size}</span></button>
-      <button class="chip-card sm" data-browse="albums"><b>Albums</b><span>${albums.size}</span></button>
-      <button class="chip-card sm" data-browse="import"><b>Import track</b><span>SPOTIFY LINK</span></button>
-      <button class="chip-card sm" data-browse="picks"><b>For you</b><span>FROM WHAT YOU PLAY</span></button>
-      <button class="chip-card sm" data-browse="importpl"><b>Import playlist</b><span>PASTE A LIST OR A LINK</span></button>
-      <button class="chip-card sm" data-browse="recentdl"><b>Recently downloaded</b><span>NEWEST FIRST</span></button>
-      <button class="chip-card sm" data-browse="upload"><b>Upload files</b><span>MP3, FLAC, M4A, WAV</span></button>
-      <button class="chip-card sm" data-browse="uploadfolder"><b>Upload a folder</b><span>ADDS EVERY TRACK INSIDE</span></button>
-      <button class="chip-card sm" data-browse="bpm"><b>Sort by BPM</b><span>${all.filter((t) => t.bpm).length} ANALYSED</span></button>
-      <button class="chip-card sm" data-browse="genres"><b>Genres</b><span>BROWSE BY FAMILY</span></button>`;
+      <button class="action-chip" data-browse="artists"><b>Artists</b><span>${artists.size}</span></button>
+      <button class="action-chip" data-browse="albums"><b>Albums</b><span>${albums.size}</span></button>
+      <button class="action-chip" data-browse="import"><b>Import track</b><span>SPOTIFY LINK</span></button>
+      <button class="action-chip" data-browse="picks"><b>For you</b><span>FROM WHAT YOU PLAY</span></button>
+      <button class="action-chip" data-browse="importpl"><b>Import playlist</b><span>PASTE A LIST OR A LINK</span></button>
+      <button class="action-chip" data-browse="recentdl"><b>Recently downloaded</b><span>NEWEST FIRST</span></button>
+      <button class="action-chip" data-browse="upload"><b>Upload files</b><span>MP3, FLAC, M4A, WAV</span></button>
+      <button class="action-chip" data-browse="uploadfolder"><b>Upload a folder</b><span>ADDS EVERY TRACK INSIDE</span></button>
+      <button class="action-chip" data-browse="bpm"><b>Sort by BPM</b><span>${all.filter((t) => t.bpm).length} ANALYSED</span></button>
+      <button class="action-chip" data-browse="genres"><b>Genres</b><span>BROWSE BY FAMILY</span></button>`;
     chips.querySelectorAll('[data-browse]').forEach((b) => b.onclick = async () => {
       if (b.dataset.browse === 'import') { importSpotifyTrack(); return; }
       if (b.dataset.browse === 'picks') {
@@ -4037,6 +4037,54 @@ function paintPill() {
 
 function afterWrite() { try { bustCache(); } catch {} try { paintPill(); } catch {} }
 
+/* patch only the rows whose audio state changed, so filters and scroll survive */
+async function refreshRowsInPlace() {
+  const all = await api('/api/tracks', { nocache: true });
+  state.allTracks = all;
+  const byId = new Map(all.map((t) => [t.id, t]));
+  for (const row of [...document.querySelectorAll('.trow[data-tid]')]) {
+    const t = byId.get(Number(row.dataset.tid));
+    if (!t) continue;
+    const badge = row.querySelector('.trbadge');
+    const hadAudio = !!(badge && !badge.classList.contains('rung-mirror'));
+    const hasAudioNow = !!(t.owned || t.rung === 'local');
+    if (hadAudio === hasAudioNow) continue;
+    const list = state._currentList && state._currentList.length ? state._currentList : all;
+    const idx = Math.max(0, list.findIndex((x) => x.id === t.id));
+    const withState = { ...t, owned: hasAudioNow ? 1 : 0 };
+    row.replaceWith(trow(withState, idx, list));
+  }
+}
+
+/* A download landing changes the library, the playlists and any open list. The drawer
+   polled only while it was open, so a closed drawer left every view stale until reload. */
+let dlWatchTimer = null;
+let dlLastDone = null;
+async function watchDownloads() {
+  try {
+    const d = await api('/api/downloads', { nocache: true });
+    const busy = (d.active || 0) + (d.queued || 0);
+    // any change in the queue's outcome means a view may be stale, not just a success
+    const done = (Number(d.done) || 0) * 1000 + (Number(d.failed) || 0) * 10 + (Number(d.skipped) || 0);
+    if (dlLastDone != null && done !== dlLastDone) {
+      bustCache();
+      try { await loadPlaylists(); } catch {}
+      try { paintPill(); } catch {}
+      // a list the user is filtering must not be rebuilt under them: patch the rows
+      if (state.view === 'songs' || state.view === 'search') { try { await refreshRowsInPlace(); } catch {} }
+      else { try { refreshView(); } catch {} }
+      if (!$('dl-drawer').hidden) renderDownloads();
+    }
+    dlLastDone = done;
+    const want = busy ? 4000 : 15000;
+    if (dlWatchTimer) clearInterval(dlWatchTimer);
+    dlWatchTimer = setInterval(watchDownloads, want);
+  } catch {
+    if (dlWatchTimer) clearInterval(dlWatchTimer);
+    dlWatchTimer = setInterval(watchDownloads, 15000);
+  }
+}
+
 async function addTracksToPlaylist(pid, ids) {
   for (const id of ids) {
     await api(`/api/playlists/${encodeURIComponent(pid)}/tracks`, {
@@ -4921,6 +4969,7 @@ async function loadPlaylists() {
     paintPill();
     // do not stomp a view the user opened while boot was loading playlists
     if (state.view === bootView) renderHome();
+    try { watchDownloads(); } catch {}
   } catch (e) {
     $('view').innerHTML = `<div class="empty">core unreachable: ${esc(e.message)}</div>`;
   }
