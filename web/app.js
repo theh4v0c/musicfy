@@ -1368,12 +1368,16 @@ function plistRow(p) {
 function pcard(p, idx) {
   const el = document.createElement('div');
   el.className = 'pcard';
+  // the play button belongs to the cover, not to the card: otherwise every view
+  // size needs its own offset and they never line up
   el.innerHTML = `
-    <img class="pcard-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=340&v=${state.artV || 0}" alt="" loading="lazy" draggable="false">
-    ${idx ? `<span class="pcard-idx">${idxLabel(idx)}</span>` : ''}
+    <div class="pcard-artwrap">
+      <img class="pcard-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=340&v=${state.artV || 0}" alt="" loading="lazy" draggable="false">
+      ${idx ? `<span class="pcard-idx">${idxLabel(idx)}</span>` : ''}
+      <button class="pcard-play" aria-label="Play ${esc(p.name)}">${IC.play}</button>
+    </div>
     <div class="pcard-name">${esc(p.name)}</div>
-    <div class="pcard-sub">${p.n_tracks} tracks</div>
-    <button class="pcard-play" aria-label="Play ${esc(p.name)}">${IC.play}</button>`;
+    <div class="pcard-sub">${p.n_tracks} tracks</div>`;
   el.querySelector('.pcard-play').onclick = (e) => { e.stopPropagation(); playPlaylist(p.id); };
   el.onclick = () => openPlaylist(p.id);
   el.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); openPlaylistMenu(p, e.clientX, e.clientY); };
@@ -1653,7 +1657,7 @@ async function renderLibrary() {
     }
     const liked = document.createElement('div');
     liked.className = 'pcard';
-    liked.innerHTML = `<div class="pcard-art ph liked-art" style="background:linear-gradient(135deg,#ff6b47,#8a1d12)">${IC.heartFull}</div><div class="pcard-name">Liked Songs</div><div class="pcard-sub">${state.liked.size} songs</div><button class="pcard-play">${IC.play}</button>`;
+    liked.innerHTML = `<div class="pcard-artwrap"><div class="pcard-art ph liked-art" style="background:linear-gradient(135deg,#ff6b47,#8a1d12)">${IC.heartFull}</div><button class="pcard-play" aria-label="Play Liked Songs">${IC.play}</button></div><div class="pcard-name">Liked Songs</div><div class="pcard-sub">${state.liked.size} songs</div>`;
     liked.querySelector('.pcard-play').onclick = (e) => { e.stopPropagation(); playLiked(); };
     liked.onclick = () => nav('liked');
     g.appendChild(liked);
