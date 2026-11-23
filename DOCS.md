@@ -371,6 +371,19 @@ Ask is one box with three kinds of answer, and the difference matters:
 - **A build** ("create a playlist of 10 ambient tracks") gets a draft under the sentence: the mix of tracks you already own and tracks from outside, each tagged LOCAL or NEW, with **Create + download N** / **Playlist only** / **Cancel**. Nothing is saved until you pick one.
 - **A discovery** ("find 8 tracks like Burial that I don't have") gets a draft of tracks from outside the library, tagged NEW, with **Download N**. "Like Burial" is resolved as the *artist* through iTunes (`identity.artistSongs`), not as the word in a title.
 
+**Briefs go to the model.** A request that names a person, an age, an occasion or several
+likes ("a playlist for my 5yo daughter, she likes unicorns, robots and Imagine Dragons") is
+read by the model into `{artists, themes, allowExternal}`, because the rules planner only
+hears verbs. `themes` are search phrases a catalogue can use ("unicorn song for kids"), not
+the words from the sentence. If the model is unreachable the rules plan still runs; the call
+is capped at 9 seconds and only fires for briefs or coverage questions, so a simple command
+never waits on it.
+
+`briefFill` then splits the outside slots between the named artists and the themes, taking
+them in turn so a two-subject brief gets both, and keeps only theme results that actually
+mention the theme. The draft is named after the brief ("Unicorn, robot · Imagine Dragons"),
+not after the sentence.
+
 A genre the library does not use no longer empties the result: ask for "ambient" in a library tagged electronic and the style decides, keeping the tempo filter only where BPM is known. Instructions ("include some I don't have") are stripped before anything is used as a name.
 
 ## Asking the library questions

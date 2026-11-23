@@ -2726,11 +2726,20 @@ const server = http.createServer(async (req, res) => {
         // pays the model round trip, so a 5 second provider cannot slow a simple command
         let plan = agent.planLocally(q);
         let source = 'rules';
-        if (plan.intent === 'report_library' && llm.available()) {
+        // a brief naming people, ages or several likes needs the model to read it: the
+        // rules planner only hears verbs. Everything keeps a local fallback.
+        const richBrief = /\b(for my|for a|for the|she likes|he likes|they like|likes|don'?t limit|birthday|wedding|party for|kids?|children|year old|\d+\s*yo)\b/i.test(q)
+          || q.split(/\s+/).length >= 9;
+        const askModel = llm.available() && (plan.intent === 'report_library' || (plan.intent === 'build_playlist' && richBrief));
+        if (askModel) {
           try {
-            const modelPlan = await Promise.race([agent.planWithModel(llm, q), new Promise((r) => setTimeout(() => r(null), 2000))]);
-            if (modelPlan) { plan = modelPlan; source = 'llm'; }
-          } catch {}
+            const modelPlan = await Promise.race([agent.planWithModel(llm, q), new Promise((r) => setTimeout(() => r(null), 9000))]);
+            if (modelPlan && modelPlan.intent) {
+              modelPlan.args = { query: q, ...(plan.args || {}), ...(modelPlan.args || {}), query: q };
+              plan = modelPlan;
+              source = 'llm';
+            }
+          } catch (e) { console.log('[agent] model plan failed:', String(e.message || e).slice(0, 120)); }
         }
         // read-only intents answer now; mutations become a proposal until confirmed
         if (plan.intent === 'report_library' || plan.intent === 'search_tracks') {

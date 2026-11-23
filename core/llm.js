@@ -74,7 +74,7 @@ function askRaw(prompt, timeoutMs = 10000) {
   const c = config();
   if (!c) return Promise.reject(new Error('llm not configured'));
   const url = new URL('/v1/chat/completions', c.base_url.endsWith('/v1') ? c.base_url.replace(/\/$/, '') : c.base_url);
-  const body = JSON.stringify({ model: c.model || 'Auto', temperature: 0, max_tokens: 300, messages: [{ role: 'user', content: prompt }] });
+  const body = JSON.stringify({ model: c.model || 'Auto', temperature: 0, max_tokens: 700, messages: [{ role: 'user', content: prompt }] });
   return new Promise((resolve, reject) => {
     const req = https.request(url, { method: 'POST', timeout: timeoutMs, headers: {
       'content-type': 'application/json', 'content-length': Buffer.byteLength(body), authorization: `Bearer ${c.api_key}` } }, (res) => {

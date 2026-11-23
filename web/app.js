@@ -2543,10 +2543,13 @@ function renderActionCard(a, out, stateEl) {
   head.className = 'ask-action-head';
   head.innerHTML = `<div><div class="ask-action-kicker">ON DECK</div><b>${esc(a.action.title)}</b></div><span>${esc(a.action.summary || '')}</span>`;
   card.appendChild(head);
-  const meta = document.createElement('div');
-  meta.className = 'ask-action-meta';
-  meta.textContent = a.action.reason || '';
-  card.appendChild(meta);
+  const said = (out.querySelector('.answer-said') || {}).textContent || '';
+  if (a.action.reason && a.action.reason !== said) {
+    const meta = document.createElement('div');
+    meta.className = 'ask-action-meta';
+    meta.textContent = a.action.reason;
+    card.appendChild(meta);
+  }
   const tracks = a.action.tracks || [];
   const list = document.createElement('div');
   list.className = 'ask-preview';

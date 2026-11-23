@@ -30,14 +30,31 @@ function planLocally(text) {
 }
 
 async function planWithModel(llm, text) {
-  const prompt = `Choose one intent and arguments for a music library request.
-Intents: build_playlist {query, count, download}, search_tracks {query, limit}, download_album {query}, download_missing {}, report_library {}.
-Reply with JSON only: {"intent":"...","args":{...}}.
-Rules: prefer search_tracks when the user asks to find, show or list songs, especially songs not in playlists. Prefer build_playlist only when they ask to create a playlist. Prefer report_library for questions about counts or coverage.
+  const prompt = `Turn a music request into JSON. Reply with JSON only, no prose.
+{"intent":"build_playlist|search_tracks|download_album|download_missing|report_library","args":{...}}
+args by intent:
+- build_playlist: {"query":"the request as written","count":20,"download":false,
+   "brief":true|false,
+   "artists":["real artist names named or implied, e.g. the band Imagine Dragons"],
+   "themes":["1-4 short search phrases that find real recordings for this brief, e.g. 'children's music', 'unicorn song for kids'"],
+   "genres":["broad genres if named"],"allowExternal":true|false}
+  brief is true only when the request describes a person, an age, an occasion or several
+  likes. A genre or a tempo ("a dance playlist", "techno around 130") is not a brief:
+  leave brief false, artists and themes empty, and let the style handle it.
+- search_tracks: {"query":"words to search","limit":20}
+- download_album: {"query":"artist or album"}
+- download_missing: {"query":"album or artist if named"}
+Rules:
+- A brief with a person, an age, an occasion or several likes is build_playlist even without the word playlist.
+- themes must be things a catalogue can actually search: not 'unicorns' alone but "unicorn song for kids".
+- artists only real artists; never invent.
+- allowExternal is true when they say not to limit to the library, or ask for things they do not have.
+- count defaults to 20. download is true only if they ask to download.
 Request: ${text}`;
-  const out = await llm.askRaw(prompt, 8000);
+  const out = await llm.askRaw(prompt, 20000);
   const parsed = JSON.parse(String(out).replace(/^```(json)?/i, '').replace(/```$/, '').trim());
   if (!INTENTS.includes(parsed.intent)) throw new Error('unknown intent');
+  if (!parsed.args || typeof parsed.args !== 'object') parsed.args = {};
   return parsed;
 }
 
@@ -282,10 +299,78 @@ async function onlineFill(db, localPicks, need, queryText) {
   return out;
 }
 
+/* a brief names people and things, not a tempo. "unicorns and robots for a five year
+   old who likes Imagine Dragons" is not a keyword search, so it gets its own path:
+   match the named artists and themes locally, then go and find the rest outside. */
+const BRIEF_STOP = new Set(['the', 'and', 'for', 'with', 'her', 'his', 'she', 'he', 'likes', 'like', 'song', 'songs', 'kids', 'kid', 'children', 'child', 'music', 'band', 'from', 'that', 'this', 'about', 'into']);
+function briefWords(themes) {
+  const out = new Set();
+  for (const t of themes || []) {
+    for (const w of String(t).toLowerCase().split(/[^a-z0-9']+/)) {
+      if (w.length > 3 && !BRIEF_STOP.has(w)) out.add(w);
+    }
+  }
+  return [...out];
+}
+
+async function briefFill(db, { artists = [], themes = [], need = 0 }) {
+  if (need <= 0) return [];
+  const inLib = new Set(db.prepare('SELECT dup_key FROM tracks').all().map((r) => r.dup_key));
+  const seen = new Set();
+  const words = briefWords(themes);
+  const out = [];
+  const push = (t) => {
+    if (!t || !t.title || !t.artist || out.length >= need) return;
+    const key = dupOf(t.artist, t.title);
+    if (inLib.has(key) || seen.has(key)) return;
+    seen.add(key);
+    out.push({
+      key, title: t.title, artist: t.artist, album: t.album || '', duration: t.duration || null,
+      cover: t.cover || null, preview: t.preview || null, source: 'online', owned: false,
+    });
+  };
+  // named artists and themes share the outside slots; otherwise the artist fills the
+  // list and the unicorns never arrive
+  const artistBudget = themes.length ? Math.max(2, Math.floor(need / 2)) : need;
+  let artistCount = 0;
+  for (const a of artists) {
+    if (artistCount >= artistBudget) break;
+    const list = await identity.artistSongs(a, 10).catch(() => []);
+    for (const t of list) { if (artistCount >= artistBudget) break; push(t); artistCount += 1; }
+  }
+  // the themes take turns, so a brief with two subjects gets both of them
+  const lists = [];
+  for (const th of themes) {
+    const res = await identity.catalog(th, { songs: 12, albums: 0, artists: 0 }).catch(() => ({ songs: [] }));
+    lists.push((res.songs || []).filter((t) => {
+      if (!words.length) return true;
+      const hay = `${t.title} ${t.album} ${t.genre || ''}`.toLowerCase();
+      return words.some((w) => hay.includes(w));
+    }));
+  }
+  for (let i = 0; out.length < need && i < 12; i += 1) {
+    let took = false;
+    for (const list of lists) {
+      if (out.length >= need) break;
+      if (list[i]) { push(list[i]); took = true; }
+    }
+    if (!took) break;
+  }
+  // still short: broaden each theme without the strict word filter
+  for (const list of lists) {
+    if (out.length >= need) break;
+    for (const t of list) { if (out.length >= need) break; push(t); }
+  }
+  return out;
+}
+
 async function propose(db, plan) {
   if (plan.intent === 'build_playlist') {
     const q = String(plan.args.query || '').trim();
     const count = Math.max(1, Math.min(Number(plan.args.count) || 20, 100));
+    const artists = (plan.args.artists || []).map((a) => String(a).trim()).filter(Boolean).slice(0, 4);
+    const themes = (plan.args.themes || []).map((t) => String(t).trim()).filter(Boolean).slice(0, 4);
+    const brief = plan.args.brief === true || artists.length > 0;
     const picked = mood.select(db, q, count);
     const moodNames = { question: 'Question everything', feel: 'Emotional', euphoric: 'Euphoric' };
     const styleNames = { burningman: 'Burning Man', indiedance: 'Indie dance', downtempo: 'Downtempo', techno: 'Techno', house: 'House', dance: 'Dance floor' };
@@ -296,15 +381,48 @@ async function propose(db, plan) {
       const styleName = styleNames[picked.ctx.style.id];
       auto = textName.length > styleName.length ? textName : styleName;
     } else auto = textName;
-    const name = plan.args.name ? String(plan.args.name).slice(0, 60) : String(auto || 'Made by request').slice(0, 60);
+    let name = plan.args.name ? String(plan.args.name).slice(0, 60) : String(auto || 'Made by request').slice(0, 60);
+    if (brief) {
+      // a brief makes a better title than the sentence: "Unicorns, robots · Imagine Dragons"
+      const cores = [];
+      for (const t of themes) {
+        const core = String(t).split(/\s+(?:song|songs|music|for|by)\b/i)[0].trim();
+        if (core && !artists.some((a) => core.toLowerCase().includes(a.toLowerCase()))) cores.push(core);
+      }
+      const head = [...new Set(cores)].slice(0, 2).join(', ');
+      const label = [head, artists.slice(0, 2).join(', ')].filter(Boolean).join(' · ');
+      if (label) name = label.charAt(0).toUpperCase() + label.slice(1);
+    }
 
     const onlyLocal = /\b(only|just|from)\s+(my|the)\s+library\b|\bno new\b/i.test(q);
-    const wantsNew = /\b(new|discover|online|unreleased|not in my library|find more)\b/i.test(q);
+    const wantsNew = /\b(new|discover|online|unreleased|not in my library|find more|don'?t limit)\b/i.test(q);
     const discovery = onlyLocal ? 0 : wantsNew ? 1 : 0.25;
-    let local = picked.tracks;
-    const targetOnline = onlyLocal ? 0 : Math.max(Math.round(count * discovery), count - local.length);
-    if (targetOnline > 0 && local.length > count - targetOnline) local = local.slice(0, Math.max(0, count - targetOnline));
-    const online = await onlineFill(db, local, Math.min(targetOnline, Math.max(0, count - local.length)), picked.ctx.text.join(' '));
+    let local = [];
+    if (brief) {
+      // the brief names people and things: match those, not the sentence
+      const words = briefWords(themes);
+      const names = artists.map((a) => a.toLowerCase());
+      const rows = db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.bpm, t.key, t.key_scale, t.genre, t.genre_family,
+          (SELECT COUNT(*) FROM files f WHERE f.track_id=t.id AND f.tier='owned') owned,
+          (SELECT COUNT(*) FROM listens l WHERE l.track_id=t.id) plays
+        FROM tracks t`).all();
+      local = rows.filter((t) => {
+        const hay = `${t.title || ''} ${t.album || ''} ${t.genre || ''} ${t.genre_family || ''}`.toLowerCase();
+        const byArtist = names.some((a) => String(t.artist || '').toLowerCase().includes(a));
+        const byTheme = words.some((w) => hay.includes(w));
+        return byArtist || byTheme;
+      }).sort((a, b) => (b.owned || 0) - (a.owned || 0)).slice(0, count);
+    }
+    if (!local.length) local = picked.tracks;
+    const allowExternal = plan.args.allowExternal !== false && !onlyLocal;
+    let online = [];
+    if (brief) {
+      online = allowExternal ? await briefFill(db, { artists, themes, need: Math.max(0, count - local.length) }) : [];
+    } else {
+      const targetOnline = onlyLocal ? 0 : Math.max(Math.round(count * discovery), count - local.length);
+      if (targetOnline > 0 && local.length > count - targetOnline) local = local.slice(0, Math.max(0, count - targetOnline));
+      online = await onlineFill(db, local, Math.min(targetOnline, Math.max(0, count - local.length)), picked.ctx.text.join(' '));
+    }
     // if the network gave us less than we hoped, top up from the rest of the local picks
     if (local.length + online.length < count) {
       const rest = picked.tracks.filter((t) => !local.includes(t)).slice(0, count - local.length - online.length);
@@ -321,12 +439,23 @@ async function propose(db, plan) {
     ];
     const missing = tracks.filter((t) => !t.owned).length;
     const played = local.filter((t) => Number(t.plays) > 0).length;
-    const reasonBits = [picked.reason];
-    if (local.length) reasonBits.push(`${played} of ${local.length} you already play.`);
+    let reasonBits = [picked.reason];
+    if (brief) {
+      const cores = [];
+      for (const t of themes) {
+        const core = String(t).split(/\s+(?:song|songs|music|for|by)\b/i)[0].trim();
+        if (core && !artists.some((a) => core.toLowerCase().includes(a.toLowerCase()))) cores.push(core);
+      }
+      const what = [...new Set(cores)].slice(0, 3).join(', ');
+      reasonBits = [`For a brief: ${[what, artists.join(', ')].filter(Boolean).join(' · ')}.`];
+      reasonBits.push(`${local.length} in your library, ${online.length} new.`);
+    } else if (local.length) reasonBits.push(`${played} of ${local.length} you already play.`);
     // 'include some I don't have' is an instruction, not a search term
     const FILLER = /^(include|including|some|any|ones|tracks|songs|track|song|that|which|i|dont|don't|have|has|not|no|in|my|library|new|find|more|from|the|a|an|and|or|with|of|for|to|please|create|make|build|playlist|crate|set)$/i;
     const sourceName = picked.ctx.text.filter((w) => !FILLER.test(w)).join(' ');
-    reasonBits.push(online.length ? (local.length ? `${online.length} new from artists around your rotation.` : `${online.length} new from ${sourceName ? `“${sourceName}”` : 'the catalogue'}.`) : (targetOnline ? 'Nothing new turned up this time.' : 'All from your library.'));
+    if (!brief) {
+      reasonBits.push(online.length ? (local.length ? `${online.length} new from artists around your rotation.` : `${online.length} new from ${sourceName ? `“${sourceName}”` : 'the catalogue'}.`) : (targetOnline ? 'Nothing new turned up this time.' : 'All from your library.'));
+    }
     return {
       kind: 'playlist', name, trackIds: local.map((t) => t.id), online, tracks,
       download: !!plan.args.download,
