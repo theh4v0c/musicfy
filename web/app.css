@@ -326,11 +326,13 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .tt { font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ta { font-size: 12px; color: var(--fg-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
 /* ladder row play affordance */
-.lrow { position: relative; }
-.lrow .lrow-play { position: absolute; left: 40px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--acc); color: #fff; opacity: 0; transition: opacity .14s ease; display: flex; align-items: center; justify-content: center; }
-.lrow:hover .lrow-play, .lrow:focus-within .lrow-play { opacity: 1; }
-@media (hover: none) { .lrow .lrow-play { opacity: 1; } }
-.lrow .lrow-play svg { width: 13px; height: 13px; }
+/* ladder results are trow.lrow and keep their floating orange button; a playlist
+   row is plain .lrow and uses the same outlined button as a track row */
+.trow.lrow { position: relative; }
+.trow.lrow .lrow-play { position: absolute; left: 40px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--acc); color: #fff; opacity: 0; transition: opacity .14s ease; display: flex; align-items: center; justify-content: center; }
+.trow.lrow:hover .lrow-play, .trow.lrow:focus-within .lrow-play { opacity: 1; }
+@media (hover: none) { .trow.lrow .lrow-play { opacity: 1; } }
+.trow.lrow .lrow-play svg { width: 13px; height: 13px; }
 
 /* keyboard focus and search skeletons */
 .trow:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; background: var(--acc-soft); }
@@ -399,8 +401,12 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .lrow-t { min-width: 0; flex: 1; display: flex; flex-direction: column; }
 .lrow-t b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lrow-t i { font-style: normal; font-size: 11px; color: var(--fg-mute); }
-.lrow-play { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+.lrow-play { width: 30px; height: 30px; flex: none; border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+.lrow-play svg { width: 11px; height: 11px; }
 .lrow-play:hover { border-color: var(--acc); color: var(--acc); }
+.lrow-artwrap { position: relative; flex: none; }
+.lrow-idx { position: absolute; left: 4px; bottom: 4px; font-size: 9px; padding: 1px 5px; border-radius: 99px;
+  background: rgba(0,0,0,.62); color: rgba(255,255,255,.92); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 /* compact keeps the time on the right, so the row has an anchor instead of empty space */
 .trow.compact { grid-template-columns: 30px 34px minmax(0,1fr) 34px 52px 34px; }
 .trow.compact .tartist, .trow.compact .talbum, .trow.compact .tadded,
@@ -430,7 +436,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
 @keyframes mf-pulse { 0%, 100% { opacity: .2; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.15); } }
 .pill.ok { color: var(--ok); border-color: var(--ok); }
 .pill.warn { color: var(--fg-mute); border-color: var(--line); }
-.lrow { grid-template-columns: 34px 46px 1fr 110px 70px 56px 34px; }
+.trow.lrow { grid-template-columns: 34px 46px 1fr 110px 70px 56px 34px; }
 .ladder-chip { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; }
 .ladder-note { color: var(--fg-mute); font-size: 12px; margin: -8px 0 18px; max-width: 560px; }
 /* rung color coding: OWNED green, YT red, SC orange, WEB blue */

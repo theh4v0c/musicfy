@@ -1343,12 +1343,15 @@ function plistRow(p) {
   const el = document.createElement('div');
   el.className = 'lrow';
   const liked = p.liked || p.id === '__liked';
-  el.innerHTML = `${liked
-    ? `<div class="lrow-art ph" style="background:linear-gradient(135deg,#ff6b47,#8a1d12)">${IC.heartFull}</div>`
-    : `<img class="lrow-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=120&v=${state.artV || 0}" alt="" loading="lazy" decoding="async">`}
-    ${p.idx ? `<span class="lrow-idx">${idxLabel(p.idx)}</span>` : ''}
-    <div class="lrow-t"><b>${esc(p.name)}</b><i>${p.n_tracks || 0} track${Number(p.n_tracks) === 1 ? '' : 's'}</i></div>
-    <button class="lrow-play" aria-label="Play">${IC.play}</button>`;
+  // the same leading play circle a track row has; the number rides on the cover
+  el.innerHTML = `<button class="lrow-play" aria-label="Play">${IC.play}</button>
+    <div class="lrow-artwrap">
+      ${liked
+        ? `<div class="lrow-art ph" style="background:linear-gradient(135deg,#ff6b47,#8a1d12)">${IC.heartFull}</div>`
+        : `<img class="lrow-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=120&v=${state.artV || 0}" alt="" loading="lazy" decoding="async">`}
+      ${p.idx ? `<span class="lrow-idx">${idxLabel(p.idx)}</span>` : ''}
+    </div>
+    <div class="lrow-t"><b>${esc(p.name)}</b><i>${p.n_tracks || 0} track${Number(p.n_tracks) === 1 ? '' : 's'}</i></div>`;
   el.querySelector('.lrow-play').onclick = (e) => {
     e.stopPropagation();
     if (liked) playLiked(); else playPlaylist(p.id);
