@@ -3012,14 +3012,19 @@ async function renderSearch() {
   const drawAsk = async (text) => {
     res.innerHTML = '';
     setSearchStatus('Reading your library', 'thinking');
-    // verbs like create, find, download go to the agent; questions go to the query engine
-    const agentish = /\b(create|make|build|download|find|search|show|list|playlist|how many|how much|top rated|top \d)\b/i.test(text);
+    // verbs like create, find, download go to the agent; questions go to the query engine.
+    // a short instruction after a draft is a follow-up, whatever its first word is.
+    const followText = !!state.lastAgent && /^(more|fewer|less|another|add|remove|drop|make (?:it|them)|same|also|but|now|instead|plus|minus|swap|replace|darker|lighter|faster|slower|shorter|longer|no |without |only |just |and )/i.test(text.trim());
+    const agentish = followText || /\b(create|make|build|download|find|search|show|list|playlist|how many|how much|top rated|top \d)\b/i.test(text);
     if (agentish) {
       setSearchStatus('Working out what to do', 'thinking');
       let a;
+      // a short instruction ("make it darker", "30 tracks") points at the last draft
+      const previous = state.lastAgent && state.lastAgent.plan ? state.lastAgent : null;
       try {
-        a = await api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: text }), nocache: true });
+        a = await api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: text, previous }), nocache: true });
       } catch { a = null; }
+      if (a && a.plan) state.lastAgent = { question: a.question || text, plan: a.plan };
       if (a && a.spoken) {
         setSearchStatus('');
         res.innerHTML = '';

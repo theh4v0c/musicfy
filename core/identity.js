@@ -16,16 +16,30 @@ function load() {
 }
 function save() { try { fs.writeFileSync(CACHE, JSON.stringify(load()), { mode: 0o600 }); } catch {} }
 
+let lastErrorAt = 0;
+const recentError = () => Date.now() - lastErrorAt < 20000;
+
 function getJson(url) {
   return new Promise((resolve, reject) => {
     https.get(url, { headers: { 'user-agent': 'MUSICFY/1.0', accept: 'application/json' }, timeout: 12000 }, (r) => {
-      if (r.statusCode !== 200) { r.resume(); return reject(new Error('itunes ' + r.statusCode)); }
+      if (r.statusCode !== 200) { r.resume(); lastErrorAt = Date.now(); return reject(new Error('itunes ' + r.statusCode)); }
       let b = '';
       r.setEncoding('utf8');
       r.on('data', (c) => { b += c; });
       r.on('end', () => { try { resolve(JSON.parse(b)); } catch (e) { reject(e); } });
-    }).on('timeout', function () { this.destroy(new Error('itunes timeout')); }).on('error', reject);
+    }).on('timeout', function () { lastErrorAt = Date.now(); this.destroy(new Error('itunes timeout')); })
+      .on('error', (e) => { lastErrorAt = Date.now(); reject(e); });
   });
+}
+
+// the catalogue rate limits hard: one retry, and remember that it happened
+async function getJsonRetry(url, tries = 2) {
+  let err = null;
+  for (let i = 0; i < tries; i += 1) {
+    try { return await getJson(url); }
+    catch (e) { err = e; if (i < tries - 1) await new Promise((r) => setTimeout(r, 1500)); }
+  }
+  throw err;
 }
 
 const throttle = () => {
@@ -133,7 +147,7 @@ async function catalog(query, { songs = 40, albums = 12, artists = 6 } = {}) {
   const fetchEntity = async (entity, limit) => {
     await throttle();
     try {
-      const data = await getJson(`https://itunes.apple.com/search?term=${term}&entity=${entity}&limit=${limit}`);
+      const data = await getJsonRetry(`https://itunes.apple.com/search?term=${term}&entity=${entity}&limit=${limit}`);
       return (data && data.results) || [];
     } catch { return []; }
   };
@@ -179,14 +193,14 @@ async function artistSongs(name, limit = 20) {
   await throttle();
   let found = null;
   try {
-    const data = await getJson(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=musicArtist&limit=8`);
+    const data = await getJsonRetry(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=musicArtist&limit=8`);
     const want = norm(term);
     found = ((data && data.results) || []).find((r) => norm(r.artistName) === want) || null;
   } catch { return []; }
   if (!found) return [];
   await throttle();
   try {
-    const look = await getJson(`https://itunes.apple.com/lookup?id=${found.artistId}&entity=song&limit=${Math.min(50, limit)}`);
+    const look = await getJsonRetry(`https://itunes.apple.com/lookup?id=${found.artistId}&entity=song&limit=${Math.min(50, limit)}`);
     return ((look && look.results) || [])
       .filter((r) => r.wrapperType === 'track')
       .map((r) => ({
@@ -234,4 +248,4 @@ async function albumTracklist(name, artist) {
   return list;
 }
 
-module.exports = { canon, canonQuery, familyOf, catalog, artistSongs, albumTracklist };
+module.exports = { canon, canonQuery, familyOf, catalog, artistSongs, albumTracklist, recentError };

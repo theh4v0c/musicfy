@@ -8,6 +8,42 @@ const deezer = require('./deezer');
 
 const INTENTS = ['build_playlist', 'search_tracks', 'download_album', 'download_missing', 'report_library'];
 
+const FOLLOW_RE = /^(more|fewer|less|another|add|remove|drop|make (?:it|them)|same|also|but|now|instead|plus|minus|swap|replace|darker|lighter|faster|slower|shorter|longer|no |without |only |just |and )/i;
+function isFollowUp(text) {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (FOLLOW_RE.test(t)) return true;
+  // short and no subject of its own: "two more", "the same but slower"
+  return t.split(/\s+/).length <= 5 && !/\b(playlist|album|techno|house|ambient|jazz|dnb|dub)\b/i.test(t);
+}
+
+/* Apply an instruction to the plan it refers to. The deterministic pass covers count
+   and scope; anything about mood goes through the model, which is given the old plan. */
+function mergePlan(prev, text) {
+  const plan = JSON.parse(JSON.stringify(prev && prev.plan ? prev.plan : {}));
+  plan.args = plan.args || {};
+  const t = String(text || '').toLowerCase();
+  const num = t.match(/\b(\d{1,3})\b/);
+  const explicit = num && /\b(tracks?|songs?|items?|make it|give me|of them)\b/.test(t);
+  const delta = num ? Number(num[1]) : 5;
+  if (explicit) plan.args.count = Math.max(1, Math.min(100, Number(num[1])));
+  else {
+    if (/\b(more|another|add|plus|bigger|longer)\b/.test(t)) plan.args.count = Math.min(100, (Number(plan.args.count) || 20) + delta);
+    if (/\b(fewer|less|remove|drop|minus|shorter|smaller)\b/.test(t)) plan.args.count = Math.max(5, (Number(plan.args.count) || 20) - delta);
+  }
+  if (/\b(only|just)\b[^.]*\b(my|the)\s+library\b/.test(t) || /\bno new\b/.test(t)) plan.args.allowExternal = false;
+  if (/\b(don'?t limit|outside|from outside|new tracks?|discover)\b/.test(t)) plan.args.allowExternal = true;
+  // "no Imagine Dragons" / "drop the unicorns" removes that from the brief
+  const drop = t.match(/\b(?:no|without|drop|remove|minus)\s+([a-z0-9 '&.-]{2,40})/);
+  if (drop) {
+    const word = drop[1].trim().toLowerCase();
+    plan.args.artists = (plan.args.artists || []).filter((a) => !word.includes(String(a).toLowerCase()));
+    plan.args.themes = (plan.args.themes || []).filter((th) => !word.includes(String(th).toLowerCase()));
+  }
+  plan.args.query = `${prev && prev.question ? prev.question : ''} — ${text}`.trim();
+  return plan;
+}
+
 function planLocally(text) {
   const t = String(text || '').toLowerCase();
   const countMatch = t.match(/(\d{1,3})\s*(?:[a-z-]+\s+){0,4}(?:songs?|tracks?|items?)/i);
@@ -33,8 +69,11 @@ function planLocally(text) {
   return { intent: 'report_library', args: { query: text } };
 }
 
-async function planWithModel(llm, text) {
-  const prompt = `Turn a music request into JSON. Reply with JSON only, no prose.
+async function planWithModel(llm, text, previous) {
+  const context = previous && previous.plan
+    ? `\nThis is a follow-up. The previous request was: ${previous.question}\nIts plan was: ${JSON.stringify(previous.plan)}\nReturn the updated plan: keep what still applies, change only what the new instruction changes, and keep the same intent unless it says otherwise.\n`
+    : '';
+  const prompt = `Turn a music request into JSON. Reply with JSON only, no prose.${context}
 {"intent":"build_playlist|search_tracks|download_album|download_missing|report_library","args":{...}}
 args by intent:
 - build_playlist: {"query":"the request as written","count":20,"download":false,
@@ -447,6 +486,9 @@ async function propose(db, plan) {
     }
     if (!local.length) local = picked.tracks;
     const allowExternal = plan.args.allowExternal !== false && !onlyLocal;
+    // a brief that says "don't limit yourself" must leave room outside: 20 local tracks
+    // and nothing new is the same failure in a different coat
+    if (brief && allowExternal && local.length >= count) local = local.slice(0, Math.max(1, Math.round(count * 0.6)));
     let online = [];
     // hoisted: the reason below reads it after the branch has closed
     let targetOnline = 0;
@@ -483,6 +525,9 @@ async function propose(db, plan) {
       const what = [...new Set(cores)].slice(0, 3).join(', ');
       reasonBits = [`For a brief: ${[what, artists.join(', ')].filter(Boolean).join(' · ')}.`];
       reasonBits.push(`${local.length} in your library, ${online.length} new.`);
+      if (allowExternal && !online.length && identity.recentError()) {
+        reasonBits.push('The catalogue did not answer just now, so this is your library only.');
+      }
     } else if (local.length) reasonBits.push(`${played} of ${local.length} you already play.`);
     // 'include some I don't have' is an instruction, not a search term
     const FILLER = /^(include|including|some|any|ones|tracks|songs|track|song|that|which|i|dont|don't|have|has|not|no|in|my|library|new|find|more|from|the|a|an|and|or|with|of|for|to|please|create|make|build|playlist|crate|set)$/i;
@@ -636,5 +681,5 @@ function commit(db, proposal, deps) {
   return { spoken: 'Nothing to do.', data: {} };
 }
 
-module.exports = { planLocally, planWithModel, execute, propose, commit };
+module.exports = { planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan };
 

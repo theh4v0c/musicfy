@@ -379,6 +379,13 @@ the words from the sentence. If the model is unreachable the rules plan still ru
 is capped at 9 seconds and only fires for briefs or coverage questions, so a simple command
 never waits on it.
 
+**Follow-ups work on the draft.** A short instruction after a draft ("make it 30 tracks",
+"no Imagine Dragons", "only from my library", "darker") is applied to the previous plan
+instead of being parsed as a new request: the browser sends the last `{question, plan}`, and
+`mergePlan` handles count, scope and exclusions deterministically. Anything about mood goes
+to the model with the old plan in the prompt. A brief that says "don't limit yourself" keeps
+at most 60% of the slots for the library, so "20 local, 0 new" cannot happen again.
+
 `briefFill` then splits the outside slots between the named artists and the themes, taking
 them in turn so a two-subject brief gets both, and keeps only theme results that actually
 mention the theme. The draft is named after the brief ("Unicorn, robot · Imagine Dragons"),

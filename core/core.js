@@ -2722,23 +2722,28 @@ const server = http.createServer(async (req, res) => {
         try { b = JSON.parse(body || '{}'); } catch {}
         const q = String(b.q || '').trim();
         if (!q) return json(res, 400, { error: 'q required' });
+        // a short "make it darker" points at the previous draft, not at the library
+        const previous = (b.previous && b.previous.plan) ? b.previous : null;
+        const followUp = !!previous && agent.isFollowUp(q);
         // the local planner covers the clear verbs instantly; only an ambiguous request
         // pays the model round trip, so a 5 second provider cannot slow a simple command
-        let plan = agent.planLocally(q);
-        let source = 'rules';
+        let plan = followUp ? agent.mergePlan(previous, q) : agent.planLocally(q);
+        let source = followUp ? 'follow-up' : 'rules';
         // a brief naming people, ages or several likes needs the model to read it: the
         // rules planner only hears verbs. Everything keeps a local fallback.
         const richBrief = /\b(for my|for a|for the|she likes|he likes|they like|who likes|likes|don'?t limit|birthday|wedding|party for|kids?|children|story time|year old|\d+\s*yo|about (unicorns?|robots?|dinosaurs?|space|animals?))\b/i.test(q);
         // the model reads briefs. Counting questions are answered by the query engine,
         // and letting the model re-label them is how 'how many tracks in Dm' became a search
-        const askModel = llm.available() && plan.intent === 'build_playlist' && richBrief;
+        // mood changes ("darker", "less vocals") are worth the model; counts are not
+        const moodyFollow = followUp && /\b(darker|lighter|deeper|harder|softer|faster|slower|melodic|aggressive|calm|vocal|instrumental|energetic|mellow)\b/i.test(q);
+        const askModel = llm.available() && ((plan.intent === 'build_playlist' && richBrief) || moodyFollow);
         if (askModel) {
           try {
-            const modelPlan = await Promise.race([agent.planWithModel(llm, q), new Promise((r) => setTimeout(() => r(null), 9000))]);
+            const modelPlan = await Promise.race([agent.planWithModel(llm, q, previous), new Promise((r) => setTimeout(() => r(null), 9000))]);
             if (modelPlan && modelPlan.intent) {
-              modelPlan.args = { query: q, ...(plan.args || {}), ...(modelPlan.args || {}), query: q };
+              modelPlan.args = { ...(plan.args || {}), ...(modelPlan.args || {}), query: plan.args.query || q };
               plan = modelPlan;
-              source = 'llm';
+              source = followUp ? 'follow-up+llm' : 'llm';
             }
           } catch (e) { console.log('[agent] model plan failed:', String(e.message || e).slice(0, 120)); }
         }
