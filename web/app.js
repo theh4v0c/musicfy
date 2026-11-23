@@ -1349,9 +1349,8 @@ function plistRow(p) {
       ${liked
         ? `<div class="lrow-art ph" style="background:linear-gradient(135deg,#ff6b47,#8a1d12)">${IC.heartFull}</div>`
         : `<img class="lrow-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=120&v=${state.artV || 0}" alt="" loading="lazy" decoding="async">`}
-      ${p.idx ? `<span class="lrow-idx">${idxLabel(p.idx)}</span>` : ''}
     </div>
-    <div class="lrow-t"><b>${esc(p.name)}</b><i>${p.n_tracks || 0} track${Number(p.n_tracks) === 1 ? '' : 's'}</i></div>`;
+    <div class="lrow-t"><b>${p.idx ? `<span class="lrow-no">${idxLabel(p.idx)}</span>` : ''}${esc(p.name)}</b><i>${p.n_tracks || 0} track${Number(p.n_tracks) === 1 ? '' : 's'}</i></div>`;
   el.querySelector('.lrow-play').onclick = (e) => {
     e.stopPropagation();
     if (liked) playLiked(); else playPlaylist(p.id);
@@ -1373,11 +1372,10 @@ function pcard(p, idx) {
   el.innerHTML = `
     <div class="pcard-artwrap">
       <img class="pcard-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=340&v=${state.artV || 0}" alt="" loading="lazy" draggable="false">
-      ${idx ? `<span class="pcard-idx">${idxLabel(idx)}</span>` : ''}
       <button class="pcard-play" aria-label="Play ${esc(p.name)}">${IC.play}</button>
     </div>
     <div class="pcard-name">${esc(p.name)}</div>
-    <div class="pcard-sub">${p.n_tracks} tracks</div>`;
+    <div class="pcard-sub">${idx ? `<span class="pcard-no">${idxLabel(idx)}</span> · ` : ''}${p.n_tracks} tracks</div>`;
   el.querySelector('.pcard-play').onclick = (e) => { e.stopPropagation(); playPlaylist(p.id); };
   el.onclick = () => openPlaylist(p.id);
   el.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); openPlaylistMenu(p, e.clientX, e.clientY); };
@@ -1796,10 +1794,9 @@ async function renderDjExport() {
       card.innerHTML = `
       <div class="crate-artwrap">
         <img class="crate-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=340&v=${state.artV || 0}" alt="" loading="lazy">
-        <span class="crate-idx">${pad(p.idx)}</span>
         <span class="crate-badge">${p.owned || 0}/${p.n_tracks || 0} audio</span>
       </div>
-      <div class="crate-name">${esc(p.name)}</div>
+      <div class="crate-name"><span class="crate-no">${pad(p.idx)}</span>${esc(p.name)}</div>
       <div class="crate-ready"><i style="width:${cov}%"></i></div>
       <div class="crate-meta"><span>${p.n_tracks || 0} tracks · ${p.prepped || 0}/${p.owned || 0} prepped</span>${(p.owned && cov < 100) ? `<button class="crate-analyze">Prep ${prepLabel(p)}</button>` : '<span class="crate-ready-tag">ready</span>'}</div>
       <div class="crate-acts">
