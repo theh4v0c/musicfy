@@ -3846,20 +3846,24 @@ async function renderArtist(name, push = true) {
   if (!list.length) { elA.innerHTML = `<div class="empty">No owned tracks for this artist yet. Search the web and download some.</div>`; return; }
   if (albums.length) {
     const chips = document.createElement('div');
-    chips.className = 'songs-chips artist-albums';
-    albums.slice(0, 12).forEach((al) => {
+    chips.className = 'artist-albums';
+    const addChip = (al) => {
       const chip = document.createElement('button');
-      chip.className = 'chip-card sm';
+      chip.className = 'album-chip';
       const n = list.filter((t) => t.album === al).length;
-      chip.innerHTML = `<b>${esc(al)}</b><span>${n} TRACK${n === 1 ? '' : 'S'}</span>`;
+      chip.innerHTML = `<b>${esc(al)}</b><span>${n} track${n === 1 ? '' : 's'}</span>`;
       chip.onclick = () => renderAlbum(al);
       chips.appendChild(chip);
-    });
+    };
+    albums.slice(0, 12).forEach(addChip);
     if (albums.length > 12) {
       const more = document.createElement('button');
-      more.className = 'chip-card sm';
-      more.innerHTML = `<b>+${albums.length - 12}</b><span>MORE ALBUMS</span>`;
-      more.onclick = () => toast(`${albums.length} albums, showing the first 12`, 4000);
+      more.className = 'album-chip more';
+      more.innerHTML = `<b>Show all ${albums.length} albums</b><span>+${albums.length - 12}</span>`;
+      more.onclick = () => {
+        chips.innerHTML = '';
+        albums.forEach(addChip);
+      };
       chips.appendChild(more);
     }
     v.insertBefore(chips, elA);
