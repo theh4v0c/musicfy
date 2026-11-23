@@ -103,7 +103,8 @@ function score(t, ctx) {
 
 function reason(ctx, picked) {
   const bits = [];
-  if (ctx.text && ctx.text.length && picked.length) {
+  // a style already says what this is; the leftover words are noise ("Ware from your library")
+  if (ctx.text && ctx.text.length && picked.length && !ctx.style && !ctx.mood && !ctx.reference) {
     // instructions are not search terms: "set of 12, some I dont have" is not a title
     const FILLER = /^(include|including|some|any|ones|tracks|songs|track|song|that|which|i|dont|don't|have|has|not|no|in|my|library|new|find|more|from|the|a|an|and|or|with|of|for|to|please|create|make|build|playlist|crate|set|me|of)$/i;
     const words = ctx.text.filter((w) => !FILLER.test(String(w)));

@@ -22,11 +22,15 @@ function planLocally(text) {
     return { intent: 'download_album', args: { query: name || text, latest } };
   }
   if (wantsPlaylist) return { intent: 'build_playlist', args: { query: text, count, download: wantsDownload } };
+  // counting and coverage questions, even when they start with 'what'
+  if (/\b(how many|how much|what do i have|what'?s in|what is in|do i have any)\b/.test(t)) {
+    return { intent: 'report_library', args: { query: text } };
+  }
   if (/\b(find|search|show|which|list|what)\b/.test(t) && !/\bplaylist\b/.test(t)) {
     return { intent: 'search_tracks', args: { query: text, limit: count } };
   }
   if (wantsDownload) return { intent: 'download_missing', args: { query: text } };
-  return { intent: 'report_library', args: {} };
+  return { intent: 'report_library', args: { query: text } };
 }
 
 async function planWithModel(llm, text) {
@@ -64,6 +68,30 @@ async function execute(db, plan, deps) {
     const total = db.prepare('SELECT COUNT(*) c FROM tracks').get().c;
     const withAudio = db.prepare("SELECT COUNT(DISTINCT track_id) c FROM files WHERE tier='owned'").get().c;
     const families = db.prepare("SELECT genre_family g, COUNT(*) c FROM tracks WHERE genre_family IS NOT NULL GROUP BY g ORDER BY c DESC").all();
+    // "how many techno tracks" is a filtered question, not a library-wide one
+    const q = String((plan.args && plan.args.query) || '').trim();
+    if (q) {
+      try {
+        // the question words are not search terms
+        const cleaned = q
+          .replace(/\b(how many|how much|do i have|have i got|are there|is there|do i own|what do i have|what is in|what's in|how many of|in my library|do i|i have|my)\b/gi, ' ')
+          .replace(/\s+/g, ' ').trim();
+        const filters = queryEngine.parse(cleaned || q, db);
+        const scoped = filters.genre || filters.family || filters.key || filters.bpm || (filters.text && filters.text.length);
+        if (scoped) {
+          filters.limit = 5000;
+          let rows = queryEngine.run(db, filters);
+          // a stray word must not zero out a real genre match
+          if (!rows.length && filters.text && filters.text.length) rows = queryEngine.run(db, { ...filters, text: [] });
+          const owned = rows.filter((t) => t.owned).length;
+          const what = filters.notes && filters.notes.length ? filters.notes.join(', ') : q;
+          return {
+            spoken: `${rows.length} track${rows.length === 1 ? '' : 's'} match ${what}${owned ? `, ${owned} with audio` : ''}.`,
+            data: { total: rows.length, withAudio: owned, families, library: rows.slice(0, 50) },
+          };
+        }
+      } catch {}
+    }
     return { spoken: `${withAudio} of ${total} tracks have audio. Families: ${families.map((f) => `${f.g} ${f.c}`).join(', ') || 'none tagged'}.`, data: { total, withAudio, families } };
   }
 
@@ -76,6 +104,10 @@ async function execute(db, plan, deps) {
     const filters = queryEngine.parse(words || plan.args.query || '', db);
     filters.limit = Math.min(Number(plan.args.limit) || 40, 100);
     let library = queryEngine.run(db, filters);
+    // descriptor words ('deeply melodic') must not zero out a real genre or play filter
+    if (!library.length && filters.text && filters.text.length) {
+      library = queryEngine.run(db, { ...filters, text: [] });
+    }
     if (!library.length && words) {
       // no structured match: fall back to a plain text sweep of the whole catalogue
       const like = `%${words.toLowerCase()}%`;
@@ -416,10 +448,12 @@ async function propose(db, plan) {
     if (!local.length) local = picked.tracks;
     const allowExternal = plan.args.allowExternal !== false && !onlyLocal;
     let online = [];
+    // hoisted: the reason below reads it after the branch has closed
+    let targetOnline = 0;
     if (brief) {
       online = allowExternal ? await briefFill(db, { artists, themes, need: Math.max(0, count - local.length) }) : [];
     } else {
-      const targetOnline = onlyLocal ? 0 : Math.max(Math.round(count * discovery), count - local.length);
+      targetOnline = onlyLocal ? 0 : Math.max(Math.round(count * discovery), count - local.length);
       if (targetOnline > 0 && local.length > count - targetOnline) local = local.slice(0, Math.max(0, count - targetOnline));
       online = await onlineFill(db, local, Math.min(targetOnline, Math.max(0, count - local.length)), picked.ctx.text.join(' '));
     }

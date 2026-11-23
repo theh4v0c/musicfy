@@ -2728,9 +2728,10 @@ const server = http.createServer(async (req, res) => {
         let source = 'rules';
         // a brief naming people, ages or several likes needs the model to read it: the
         // rules planner only hears verbs. Everything keeps a local fallback.
-        const richBrief = /\b(for my|for a|for the|she likes|he likes|they like|likes|don'?t limit|birthday|wedding|party for|kids?|children|year old|\d+\s*yo)\b/i.test(q)
-          || q.split(/\s+/).length >= 9;
-        const askModel = llm.available() && (plan.intent === 'report_library' || (plan.intent === 'build_playlist' && richBrief));
+        const richBrief = /\b(for my|for a|for the|she likes|he likes|they like|who likes|likes|don'?t limit|birthday|wedding|party for|kids?|children|story time|year old|\d+\s*yo|about (unicorns?|robots?|dinosaurs?|space|animals?))\b/i.test(q);
+        // the model reads briefs. Counting questions are answered by the query engine,
+        // and letting the model re-label them is how 'how many tracks in Dm' became a search
+        const askModel = llm.available() && plan.intent === 'build_playlist' && richBrief;
         if (askModel) {
           try {
             const modelPlan = await Promise.race([agent.planWithModel(llm, q), new Promise((r) => setTimeout(() => r(null), 9000))]);
