@@ -3157,8 +3157,8 @@ async function renderSearch() {
           const row = sec.querySelector('#cat-artists');
           for (const a of cat.artists) {
             const card = document.createElement('button');
-            card.className = 'chip-card';
-            card.innerHTML = `<b>${esc(a.name)}</b><span>${esc(a.genre || 'artist')}</span>`;
+            card.className = 'cat-card';
+            card.innerHTML = `<span class="cat-art">${esc(String(a.name || '?').charAt(0).toUpperCase())}</span><b>${esc(a.name)}</b><span>${esc(a.genre || 'artist')}</span>`;
             card.onclick = () => { q.value = a.name; draw(); };
             bindContext(card, (x, y) => openCardMenu(a.name, [
               { label: 'Search this artist', run: async () => { q.value = a.name; draw(); } },
@@ -3179,8 +3179,8 @@ async function renderSearch() {
           const row = sec.querySelector('#cat-albums');
           for (const al of cat.albums) {
             const card = document.createElement('button');
-            card.className = 'chip-card';
-            card.innerHTML = `<b>${esc(al.name)}</b><span>${esc(al.artist || '')}${al.year ? ' · ' + al.year : ''}</span>`;
+            card.className = 'cat-card';
+            card.innerHTML = `<span class="cat-art">${al.artwork ? `<img src="${esc(al.artwork)}" alt="" loading="lazy">` : esc(String(al.name || '?').charAt(0).toUpperCase())}</span><b>${esc(al.name)}</b><span>${esc(al.artist || '')}${al.year ? ' · ' + al.year : ''}</span>`;
             const queueAlbum = () => {
               toast(`Checking "${al.name}"`, 3000);
               api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' },
@@ -3321,8 +3321,8 @@ async function renderSearch() {
         const strip = sec.querySelector('#album-row');
         for (const a of data.albums) {
           const card = document.createElement('button');
-          card.className = 'chip-card';
-          card.innerHTML = `<b>${esc(a.name)}</b><span>${esc(a.artist || (a.kind === 'library' ? 'YOUR LIBRARY' : 'ARCHIVE'))}</span>`;
+          card.className = 'cat-card';
+          card.innerHTML = `<span class="cat-art">${esc(String(a.name || '?').charAt(0).toUpperCase())}</span><b>${esc(a.name)}</b><span>${esc(a.artist || (a.kind === 'library' ? 'YOUR LIBRARY' : 'ARCHIVE'))}</span>`;
           card.onclick = () => {
             if (a.kind === 'library') { renderAlbum(a.name); return; }
             fetch(`/api/ladder/archive/${encodeURIComponent(a.id)}/files`).then(r => r.json()).then((d) => {
