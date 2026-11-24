@@ -557,6 +557,35 @@ function progressPill(text) {
   };
 }
 
+/* A repair runs a catalogue lookup per track, so it is watched rather than awaited:
+   the result is the point, and "started" is not a result. */
+async function watchRepair(url) {
+  const pill = progressPill('Checking metadata…');
+  try {
+    const r = await api(url, { method: 'POST' });
+    if (!r.started && r.note) { pill.done(); toast(r.note, 5000); return; }
+    let j = r.job || { running: true, total: r.count, done: 0 };
+    for (let i = 0; i < 300 && j.running; i += 1) {
+      pill.update(`Fixing metadata ${j.done || 0}/${j.total || r.count}`);
+      await new Promise((res) => setTimeout(res, 1200));
+      j = await api(url, { nocache: true }).catch(() => j);
+    }
+    pill.done();
+    const parts = [];
+    if (j.fixed) {
+      const bits = Object.entries(j.fields || {}).filter(([, n]) => n).map(([k, n]) => `${k} ${n}`);
+      parts.push(`${j.fixed} changed${bits.length ? ` (${bits.join(' · ')})` : ''}`);
+    }
+    if (j.same) parts.push(`${j.same} already correct`);
+    if (j.failed) parts.push(`${j.failed} could not be changed`);
+    toast(`Metadata: ${j.done || j.total} checked — ${parts.join(', ') || 'nothing to do'}`, 9000);
+    if (j.fixed) { bustCache(); state.allTracks = null; setTimeout(() => { try { refreshView(); } catch {} }, 600); }
+  } catch (e) {
+    pill.done();
+    toast(`Metadata repair failed (${e.message || 'request'})`, 6000);
+  }
+}
+
 /* ============ add to playlist ============ */
 function openAddPl(t) {
   markCtxOpen();
@@ -802,32 +831,7 @@ function openPlaylistMenu(p, x, y) {
     if (act === 'pl-cover') { uploadPlaylistCover(p.id); return; }
     if (act === 'pl-cover-track') { openCoverPicker(p.id); return; }
     if (act === 'pl-repair') {
-      // a catalogue lookup per track: show the work and then say what it did
-      const url = `/api/playlists/${encodeURIComponent(p.id)}/repair`;
-      const pill = progressPill('Checking metadata…');
-      try {
-        const r = await api(url, { method: 'POST' });
-        if (!r.started && r.note) { pill.done(); toast(r.note, 5000); return; }
-        let j = r.job || { running: true, total: r.count, done: 0 };
-        for (let i = 0; i < 300 && j.running; i += 1) {
-          pill.update(`Fixing metadata ${j.done || 0}/${j.total || r.count}`);
-          await new Promise((res) => setTimeout(res, 1200));
-          j = await api(url, { nocache: true }).catch(() => j);
-        }
-        pill.done();
-        const parts = [];
-        if (j.fixed) {
-          const bits = Object.entries(j.fields || {}).filter(([, n]) => n).map(([k, n]) => `${k} ${n}`);
-          parts.push(`${j.fixed} changed${bits.length ? ` (${bits.join(' · ')})` : ''}`);
-        }
-        if (j.same) parts.push(`${j.same} already correct`);
-        if (j.failed) parts.push(`${j.failed} could not be changed`);
-        toast(`Metadata: ${j.done || j.total} checked — ${parts.join(', ') || 'nothing to do'}`, 9000);
-        if (j.fixed) { bustCache(); state.allTracks = null; setTimeout(() => { try { refreshView(); } catch {} }, 600); }
-      } catch (e) {
-        pill.done();
-        toast(`Metadata repair failed (${e.message || 'request'})`, 6000);
-      }
+      await watchRepair(`/api/playlists/${encodeURIComponent(p.id)}/repair`);
       return;
     }
     if (act === 'pl-fixcovers') {
@@ -4289,9 +4293,7 @@ async function renderAlbum(name, push = true) {
     btn.textContent = label;
     btn.disabled = false;
   };
-  $('g-repair').onclick = async () => {
-    try { const r = await api(`/api/albums/${encodeURIComponent(name)}/repair`, { method: 'POST' }); toast(`Fixing metadata for ${r.count} tracks in the background`, 7000); setTimeout(() => { bustCache(); state.allTracks = null; refreshView(); }, 6000); } catch { toast('Could not start metadata repair', 4000); }
-  };
+  $('g-repair').onclick = () => watchRepair(`/api/albums/${encodeURIComponent(name)}/repair`);
   $('g-covers').onclick = async () => {
     try { const r = await api(`/api/albums/${encodeURIComponent(name)}/covers`, { method: 'POST' }); toast(`Updating covers for ${r.count} tracks in the background`, 7000); setTimeout(() => { state.artV = Date.now(); refreshView(); }, 6000); } catch { toast('Could not start cover repair', 4000); }
   };

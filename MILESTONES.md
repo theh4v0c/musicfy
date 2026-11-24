@@ -21,10 +21,12 @@ work; this file records what changed and why.
   its status instead of a generic message.
 - A second click while it is running says so ("this playlist is already being repaired")
   and polls the same job.
+- The album page's **Fix metadata** shares the runner (`album:<name>` key), so it reports
+  the same sentence instead of its own "started" toast.
 
 Verified in the browser against a real set: the pill moved and the final toast read
 "Metadata: 13 checked — 13 already correct" (the catalogue had nothing to add). Tests
-39 -> 40 with the job-shape assertion.
+40 -> 41 with the job-shape assertions.
 
 ### 2026-11-24 · "analysed" was not a yes/no, and not every playlist is a crate (`v463`)
 
