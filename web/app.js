@@ -2601,6 +2601,7 @@ async function renderSettings() {
           </select>
         </label>
         <div class="lib-actions"><button class="btn btn-ghost" id="set-clearbuf" type="button">Clear buffer</button><span class="set-note">Frees preloaded audio and cached pages</span></div>
+        <p class="set-note" id="set-playlog"></p>
       </section>
       <section class="set-card">
         <h2>Library</h2>
@@ -2608,6 +2609,15 @@ async function renderSettings() {
       </section>
     </div>
     <div class="set-actions"><button class="btn btn-primary" id="set-save">Save settings</button><span id="set-msg" class="set-note"></span></div>`;
+  // what the player did last, including while the screen was locked
+  try {
+    const logEl = document.getElementById('set-playlog');
+    const log = JSON.parse(localStorage.getItem('mf_play_log') || '[]').slice(-6).reverse();
+    if (logEl) logEl.textContent = log.length
+      ? `Playback log: ${log.map((e) => `${e.t} ${e.ev}${e.id ? ` #${e.id}` : ''}${e.src ? ` (${e.src})` : ''}`).join(' · ')}`
+      : 'Playback log: nothing recorded yet.';
+  } catch {}
+
   api('/api/stats', { nocache: true }).then((st) => {
     const f = document.getElementById('set-facts');
     if (f) f.innerHTML = `<div><b>${st.tracks}</b> tracks</div><div><b>${(st.owned_bytes / 1e9).toFixed(2)} GB</b> on disk</div><div><b>${st.listens}</b> plays recorded</div>`;
@@ -4634,6 +4644,16 @@ function maybePrefetch() {
 }
 
 /* ============ playback ============ */
+/* A car failure leaves no trace once the phone is unlocked. Keep the last events in
+   localStorage so Settings can show what actually happened on the lock screen. */
+function logPlay(ev, extra = {}) {
+  try {
+    const log = JSON.parse(localStorage.getItem('mf_play_log') || '[]');
+    log.push({ t: new Date().toISOString().slice(11, 19), ev, ...extra });
+    localStorage.setItem('mf_play_log', JSON.stringify(log.slice(-60)));
+  } catch {}
+}
+
 function playList(list, i = 0, shuffled = false, origin = '') {
   if (!list.length) return;
   state.origin = origin;
@@ -4668,7 +4688,11 @@ function streamUrl(t, bust) {
    does not mediate, so the audio element holds a blob it owns and the lock screen cannot
    take it away. */
 const savedBlobs = new Map();
-const SAVED_BLOB_KEEP = 3;
+const SAVED_BLOB_KEEP = 6;
+// the source of the next tracks, resolved while there is still audio playing. At the
+// end of a track iOS can suspend the page before a Cache Storage read resolves, so the
+// read must not happen on the "ended" path: it happens here instead.
+const warmSrc = new Map();
 async function savedAudioUrl(id) {
   if (savedBlobs.has(id)) return savedBlobs.get(id);
   try {
@@ -4677,14 +4701,37 @@ async function savedAudioUrl(id) {
     if (!hit) return null;
     const url = URL.createObjectURL(await hit.blob());
     savedBlobs.set(id, url);
-    // three tracks of audio is enough for a car queue; older blobs are released
+    // keep enough for a warmed queue; never release a URL that is waiting to be played
     while (savedBlobs.size > SAVED_BLOB_KEEP) {
-      const [oldest, oldUrl] = savedBlobs.entries().next().value;
-      try { URL.revokeObjectURL(oldUrl); } catch {}
-      savedBlobs.delete(oldest);
+      const victim = [...savedBlobs.keys()].find((k) => !warmSrc.has(k));
+      if (victim === undefined) break;
+      try { URL.revokeObjectURL(savedBlobs.get(victim)); } catch {}
+      savedBlobs.delete(victim);
     }
     return url;
   } catch { return null; }
+}
+
+async function warmTrack(t) {
+  if (!t || !t.id || warmSrc.has(t.id)) return null;
+  try {
+    const src = await offlineSrcIfNeeded(t, streamUrl(t));
+    if (src) warmSrc.set(t.id, src);
+    while (warmSrc.size > 4) {
+      const oldest = warmSrc.keys().next().value;
+      if (state.current && oldest === state.current.id) break;
+      warmSrc.delete(oldest);
+    }
+    return src;
+  } catch { return null; }
+}
+
+function warmUpcoming() {
+  const ahead = Math.max(1, Number((state.settings && state.settings.prefetch_ahead) ?? 1) || 1);
+  for (let k = 1; k <= ahead + 1; k += 1) {
+    const t = state.queue[state.qi + k];
+    if (t) warmTrack(t);
+  }
 }
 
 /* A saved track plays from the device, always. Not "only when the OS says offline":
@@ -4702,6 +4749,37 @@ function trackPlayable(t) {
   return hasAudio(t) || t.streamable || !!t.rung || !!t.owned;
 }
 
+/* The one place a track starts. No await: by the time we get here the source is a
+   string (a blob URL or a stream path), so the 'ended' handler can hand it to the
+   element in the same task iOS is willing to run. */
+let playToken = 0;
+function startAudio(i, src, opts = {}) {
+  if (i < 0 || i >= state.queue.length) return;
+  playToken += 1;
+  state.qi = i; state.current = state.queue[i];
+  if (!opts.resume) state._resumeAt = 0;
+  saveQueue();
+  const t = state.current;
+  pausePreviews();
+  applyLoudnessGain(t);
+  audio.src = src;
+  try { audio.volume = targetVolume(); } catch {}
+  prefetchedFor = null;
+  const p = audio.play();
+  // a locked iPhone can refuse the new source with NotAllowedError. Record it, and let
+  // the unlock handler retry: silently ignoring the rejection hid the whole failure.
+  if (p && p.catch) p.catch((e) => logPlay('play-blocked', { id: t.id, why: (e && e.name) || 'error' }));
+  // do not log a play the moment it starts: wait until it is genuinely being listened to
+  state._listenTrack = t;
+  state._listenLogged = false;
+  paintNowPlaying();
+  paintRows();
+  if (!$('queue-drawer').hidden) renderQueue();
+  warmUpcoming();
+  state._wantPlaying = true;
+  logPlay('start', { id: t.id, src: String(src).startsWith('blob:') ? 'blob' : 'stream' });
+}
+
 async function playAt(i, opts = {}) {
   if (i < 0 || i >= state.queue.length) return;
   // in the car you cannot see a message, so skip past silent tracks instead of stopping
@@ -4715,22 +4793,13 @@ async function playAt(i, opts = {}) {
     }
     if (hops) i = j;
   }
-  state.qi = i; state.current = state.queue[i];
-  state._resumeAt = 0;
-  saveQueue();
-  const t = state.current;
-  pausePreviews();
-  applyLoudnessGain(t);
-  audio.src = await offlineSrcIfNeeded(t, streamUrl(t));
-  try { audio.volume = targetVolume(); } catch {}
-  prefetchedFor = null;
-  try { await audio.play(); } catch {}
-  // do not log a play the moment it starts: wait until it is genuinely being listened to
-  state._listenTrack = t;
-  state._listenLogged = false;
-  paintNowPlaying();
-  paintRows();
-  if (!$('queue-drawer').hidden) renderQueue();
+  const t = state.queue[i];
+  const ready = warmSrc.get(t.id);
+  if (ready) return startAudio(i, ready, opts);
+  const token = playToken;
+  const src = await offlineSrcIfNeeded(t, streamUrl(t));
+  if (token !== playToken) return;            // a newer play superseded this one
+  startAudio(i, src, opts);
 }
 
 function mediaArtwork(t) {
@@ -4770,15 +4839,31 @@ function bindMediaSession() {
   set('stop', () => { audio.pause(); audio.currentTime = 0; });
 }
 bindMediaSession();
-document.addEventListener('visibilitychange', () => { if (!document.hidden) bindMediaSession(); });
+document.addEventListener('visibilitychange', () => {
+  logPlay(document.hidden ? 'lock' : 'unlock', {
+    id: state.current && state.current.id, paused: audio.paused, t: Math.round(audio.currentTime || 0),
+  });
+  if (document.hidden) return;
+  bindMediaSession();
+  // the lock screen can leave the element paused with a queue waiting: pick it up again
+  if (state._wantPlaying && audio.paused && state.current) {
+    const ready = warmSrc.get(state.current.id);
+    if (ready) startAudio(state.qi, ready, { resume: true });
+    else audio.play().catch(() => {});
+  }
+});
 audio.addEventListener('play', () => { if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
 audio.addEventListener('pause', () => { if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
 audio.addEventListener('timeupdate', () => {
+  // A stream can stop a fraction before its declared end and never emit 'ended'. This
+  // guard advances first, so it must use the warmed source: it used to call the async
+  // nextTrack(), which is exactly the await that does not finish on a locked phone.
   if (audio.duration && audio.duration > 1 && !state._advancing && audio.currentTime > audio.duration - 0.4) {
     state._advancing = true;
     setStatus('Next track');
+    logPlay('end-guard', { id: state.current && state.current.id });
     setTimeout(() => { state._advancing = false; }, 2500);
-    nextTrack();
+    advanceAtEnd();
     return;
   }
   const t = state._listenTrack;
@@ -4893,6 +4978,44 @@ async function continueQueue() {
   } catch { audio.pause(); }
   continuing = false;
 }
+/* Called from 'ended', which on a locked iPhone is the only task we are guaranteed.
+   If the next source was warmed, this hands it to the element without awaiting anything.
+   If it was not, the async path is still tried rather than giving up. */
+function advanceAtEnd() {
+  // 'ended' and 'error' can both arrive for the same track: advance once
+  const from = state.current && state.current.id;
+  if (state._endedFor === from && Date.now() - (state._endedAt || 0) < 5000) return;
+  state._endedFor = from; state._endedAt = Date.now();
+  if (state.repeat && state.qi >= state.queue.length - 1) { playAt(0); return; }
+  const i = state.qi + 1;
+  const t = state.queue[i];
+  if (t) {
+    const ready = warmSrc.get(t.id);
+    if (ready) { logPlay('advance', { to: t.id, src: String(ready).startsWith('blob:') ? 'blob' : 'stream' }); startAudio(i, ready); return; }
+  }
+  logPlay('advance-cold', { next: t ? t.id : null });
+  nextTrack();
+}
+
+/* the queue must already have a next track when the last one ends. Asking the radio
+   endpoint at that moment needs the network, and a locked phone does not get to make
+   that request. */
+let extending = false;
+async function maybeExtendQueue() {
+  if (extending || !state.queue.length) return;
+  if (state.qi < state.queue.length - 2) return;
+  const last = state.queue[state.queue.length - 1];
+  if (!last) return;
+  extending = true;
+  try {
+    const list = await api(`/api/radio/${last.id}`, { nocache: true });
+    const have = new Set(state.queue.map((t) => t.id));
+    const add = (list || []).filter((t) => t && !have.has(t.id)).slice(0, 15);
+    if (add.length) { state.queue.push(...add); warmUpcoming(); }
+  } catch {}
+  extending = false;
+}
+
 function prevTrack(force = false) {
   if (!force && audio.currentTime > 3) { audio.currentTime = 0; return; }
   playAt(Math.max(0, state.qi - 1));
@@ -4957,8 +5080,8 @@ audio.addEventListener('error', async () => {
   setTimeout(() => { nextTrack(); }, 400);
 });
 
-audio.addEventListener('play', () => { setPlayIcons(true); paintRows(); if (state._failed) state._failed.clear(); });
-audio.addEventListener('pause', () => { setPlayIcons(false); paintRows(); });
+audio.addEventListener('play', () => { state._wantPlaying = true; setPlayIcons(true); paintRows(); if (state._failed) state._failed.clear(); });
+audio.addEventListener('pause', () => { if (!audio.ended) state._wantPlaying = false; setPlayIcons(false); paintRows(); });
 audio.addEventListener('loadedmetadata', () => {
   $('t-dur').textContent = fmt(audio.duration); $('np-dur').textContent = fmt(audio.duration);
   const at = Number(state._resumeAt || 0);
@@ -4972,13 +5095,27 @@ audio.addEventListener('timeupdate', () => {
   const pct = `${(audio.currentTime / audio.duration) * 100}%`;
   $('bar-fill').style.width = pct; $('np-bar-fill').style.width = pct;
   $('t-cur').textContent = fmt(audio.currentTime); $('np-cur').textContent = fmt(audio.currentTime);
+  // keep two tracks of runway on the queue, while there is still audio playing to hide
+  // the request behind
+  if (state.qi >= state.queue.length - 2 && audio.duration - audio.currentTime > 20) maybeExtendQueue();
 });
-audio.addEventListener('ended', () => { setStatus('Next track'); nextTrack(); });
+audio.addEventListener('ended', () => {
+  logPlay('ended', { id: state.current && state.current.id });
+  setStatus('Next track');
+  advanceAtEnd();
+});
 audio.addEventListener('waiting', () => { setStatus('Buffering'); armStallRecovery(); });
 audio.addEventListener('playing', () => { setStatus(null); if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; } });
 audio.addEventListener('stalled', () => { setStatus('Reconnecting'); armStallRecovery(); });
 audio.addEventListener('pause', () => { if (!audio.ended) setStatus(null); });
-audio.addEventListener('error', () => { if (state.current) $('pb-title').textContent = `error: ${state.current.title}`; });
+audio.addEventListener('error', () => {
+  logPlay('error', { id: state.current && state.current.id, code: audio.error && audio.error.code });
+  if (state.current) $('pb-title').textContent = `error: ${state.current.title}`;
+  // a server that closes the socket at the end of a track surfaces as a media error.
+  // Treat it as the end rather than stranding the queue on that track.
+  const nearEnd = audio.duration && Number.isFinite(audio.duration) && audio.currentTime >= audio.duration - 1;
+  if (nearEnd) advanceAtEnd();
+});
 
 function setPlayIcons(playing) {
   $('toggle').innerHTML = playing ? IC.pause : IC.play;

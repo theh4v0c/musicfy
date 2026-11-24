@@ -165,6 +165,13 @@ builds and acts.
   have" returning metal).
 - **Play N / Queue N** on any answer. Both act at once — playback is cheap and reversible
   — and a queue can be taken back with Undo on the same card.
+- **Children's briefs are a different audience, not a genre.** A request that names an
+  age under 13, kids/children/toddler, or "my daughter/son" is built from the catalogue
+  only, and every catalogue track is checked against iTunes' explicit flag. Library files
+  carry no explicit flag, so none are used; the reason says so. If the request explicitly
+  says "from my library", the tracks are used with a warning instead of being silently
+  mixed in. Before this, a children's brief filled nine slots from the dark-techno
+  rotation because a brief that matched nothing fell back to "what you play now".
 - **Teaching**: a message that starts with no / don't play / never play / avoid is not a
   search. It writes one term into `taste_avoid`, shows the term as a chip and offers Undo.
   The same value is what Settings edits, and what picks, Flow, the rotation and the
@@ -340,7 +347,25 @@ and no OneLibrary `exportLibrary.db` for the newest players. Both are additive.
 
 `/api/stream/:id` serves owned files with ranges and a private one day cache, and 302 redirects stream rows to the resolved source, cached four hours (`resolveStreamUrl`). The client prefetches one track ahead, and only after the current one has played a while with buffer of its own: two prefetches over one slow uplink starve the track that is playing, which is what a car on mobile data actually hears.
 
-Saved tracks are requested as `/offline-audio/:id` and answered by the service worker from the audio cache, with a real 206 for the range the media element asks for. Normal streams never go through the worker: a proxied byte stream costs a copy of every byte and dies with the worker when the phone locks, which is the "plays only while unlocked" failure. The server answers `/offline-audio/:id` too, so a client without a worker still plays.
+Saved tracks are read from Cache Storage **by the page** and handed to the element as a
+blob URL. Nothing about audio passes through the service worker: a response the worker owns
+dies with it when iOS locks the screen. The page reads the copy early, while music is still
+playing, and keeps the blob URL warm for the next tracks (`warmSrc`); non-saved tracks are
+just their stream path.
+
+That warming is the difference between a queue and one track in a car. The end of a track
+is the one moment iOS may suspend the page, so the advance must not await anything there:
+the `timeupdate` end-guard and the `ended` handler both call `advanceAtEnd()`, which reads
+an already-resolved source and starts it in the same task. The queue is extended two tracks
+before its end while audio is still playing, because asking `/api/radio` at the boundary
+needs a network request the lock screen does not grant. If the element refuses the new
+source (`NotAllowedError`), the rejection is logged and the unlock handler retries it
+rather than failing silently.
+
+Settings → Playback shows the last six player events (`start`, `ended`, `end-guard`,
+`advance`, `error`, `lock`, `unlock`, `play-blocked`) with track ids and whether the source
+was a blob or a stream. That is the only way to diagnose a failure that happens with the
+screen off.
 
 Media Session metadata goes to car displays, and `previoustrack` restarts the current track first (past three seconds), then steps back on a second press.
 

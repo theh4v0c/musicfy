@@ -6,6 +6,39 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · a queue that survives the lock screen, and a children's brief that is safe (`v455`)
+
+**Playback: the advance no longer awaits anything**
+- The end-of-track path called `nextTrack()` → `playAt()`, which awaited a Cache Storage
+  read to build the offline blob. On a locked iPhone that read is suspended, so the queue
+  stopped exactly at the boundary. Sources are now resolved while the current track is
+  still playing (`warmSrc`), and `advanceAtEnd()` hands the next source to the element in
+  the same task, from both the `ended` event and the `timeupdate` end-guard.
+- The queue is extended two tracks before it ends, while audio is playing, instead of
+  asking `/api/radio` at the moment the lock screen forbids a request.
+- A `NotAllowedError` from `play()` is recorded and retried on unlock. It used to be
+  swallowed by an empty `.catch`.
+- Settings → Playback shows the last six player events with track ids and blob/stream, so
+  a failure with the screen off leaves evidence.
+- Verified in the browser: seeking to the last second advances to the next track through
+  `end-guard → advance → start`, with the next source already in `warmSrc`.
+
+**A&R: a seven-year-old is a different audience**
+- Child detection (age under 13, kids/children/toddler, my daughter/son; "play Baby by…"
+  is not a child brief) routes the request through a safety rule: catalogue only, and
+  only tracks whose iTunes explicit flag is clean. Library rows are excluded and the
+  reason says why, because a file carries no explicit flag.
+- A brief that matches nothing in the library no longer falls back to the current
+  rotation — the bug that put dark techno in a children's playlist.
+- Brief matching requires a phrase or two words, not one shared word; the catalogue
+  filter reads a Set's `.size` (it read `.length`, which was always undefined, so it never
+  filtered) and accepts the Children's Music genre without a title match.
+- Measured: "15 track upbeat playlist for a 7 year old girl who loves to dance" → 15
+  catalogue tracks, 0 explicit, 0 from the library. "unicorns and robots for a five year
+  old who likes Imagine Dragons" → Imagine Dragons plus kids' unicorn/robot songs.
+- The local planner recognises a child brief without the model ("five year old" as words)
+  and no longer classifies a song called *Baby* as a children's request.
+
 ### 2026-11-24 · audit pass 2: the fixes that were claimed, and the ones that were real (`v452`)
 
 An external audit was re-run against the bundle rather than the changelog. It found that

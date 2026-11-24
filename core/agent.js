@@ -61,7 +61,7 @@ function planLocally(text) {
     || /\b(create|build|make|curate|put together|throw together|assemble)\b/.test(t)
     || /\b(give me|i need|i want|can you get|can i get)\b/.test(t)
     || /\b(something|anything)\b/.test(t) || /\bmusic for\b/.test(t)
-    || countedRequest || styledTempo;
+    || countedRequest || styledTempo || (childAudience(t) && !reportish);
   const wantsDownload = /\bdownload\b/.test(t);
   if (/\balbum\b/.test(t) && wantsDownload) {
     const latest = /\b(latest|newest|new|recent)\b/.test(t);
@@ -378,13 +378,13 @@ async function onlineFill(db, localPicks, need, queryText) {
     seen.add(key);
     return true;
   };
-  const push = ({ title, artist, album, duration, cover, preview, genre, family }) => {
+  const push = ({ title, artist, album, duration, cover, preview, genre, family, explicit }) => {
     if (out.length >= need) return;
     // the catalogue answering a different question is not an answer
     if (!related({ title, artist, album, genre, family })) return;
     if (!keep({ title, artist, duration })) return;
     out.push({ title, artist, album: album || '', duration: duration || null, source: 'online', owned: false,
-      cover: cover || null, preview: preview || null, key: dupOf(artist, title) });
+      cover: cover || null, preview: preview || null, explicit: !!explicit, key: dupOf(artist, title) });
   };
 
   /* The query comes first, and it goes to the catalogue that needs no key. The old order
@@ -438,6 +438,20 @@ async function onlineFill(db, localPicks, need, queryText) {
 /* a brief names people and things, not a tempo. "unicorns and robots for a five year
    old who likes Imagine Dragons" is not a keyword search, so it gets its own path:
    match the named artists and themes locally, then go and find the rest outside. */
+/* A seven-year-old is a different audience, not a different genre. The only safety
+   signal we have is the catalogue's explicit flag, so a child brief is built from the
+   catalogue and never from library rows, which carry no such flag. */
+function childAudience(text) {
+  const t = String(text || '').toLowerCase();
+  const age = t.match(/\b(\d{1,2})\s*(?:year|yr)s?[ -]?old\b/) || t.match(/\b(\d{1,2})\s*yo\b/);
+  if (age && Number(age[1]) < 13) return true;
+  // people write the age as a word as often as a digit
+  if (/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:year|yr)s?[ -]?old\b/.test(t)) return true;
+  // "play Baby by Justin Bieber" is a song, not an audience: only a possessive counts
+  return /\b(kids?|children|child|toddler|preschool|nursery|my (daughter|son|niece|nephew|granddaughter|grandson))\b/.test(t)
+    || /\bfor (?:my|our|the) baby\b/.test(t);
+}
+
 const BRIEF_STOP = new Set(['the', 'and', 'for', 'with', 'her', 'his', 'she', 'he', 'likes', 'like', 'song', 'songs', 'kids', 'kid', 'children', 'child', 'music', 'band', 'from', 'that', 'this', 'about', 'into']);
 function briefWords(themes) {
   const out = new Set();
@@ -449,7 +463,7 @@ function briefWords(themes) {
   return [...out];
 }
 
-async function briefFill(db, { artists = [], themes = [], need = 0 }) {
+async function briefFill(db, { artists = [], themes = [], need = 0, childSafe = false }) {
   if (need <= 0) return [];
   const inLib = new Set(db.prepare('SELECT dup_key FROM tracks').all().map((r) => r.dup_key));
   const seen = new Set();
@@ -457,12 +471,14 @@ async function briefFill(db, { artists = [], themes = [], need = 0 }) {
   const out = [];
   const push = (t) => {
     if (!t || !t.title || !t.artist || out.length >= need) return;
+    // the catalogue says which recordings are explicit; a children's set uses only clean
+    if (childSafe && t.explicit) return;
     const key = dupOf(t.artist, t.title);
     if (inLib.has(key) || seen.has(key)) return;
     seen.add(key);
     out.push({
       key, title: t.title, artist: t.artist, album: t.album || '', duration: t.duration || null,
-      cover: t.cover || null, preview: t.preview || null, source: 'online', owned: false,
+      cover: t.cover || null, preview: t.preview || null, explicit: !!t.explicit, source: 'online', owned: false,
     });
   };
   // named artists and themes share the outside slots; otherwise the artist fills the
@@ -477,11 +493,15 @@ async function briefFill(db, { artists = [], themes = [], need = 0 }) {
   // the themes take turns, so a brief with two subjects gets both of them
   const lists = [];
   for (const th of themes) {
-    const res = await identity.catalog(th, { songs: 12, albums: 0, artists: 0 }).catch(() => ({ songs: [] }));
+    const res = await identity.catalog(th, { songs: childSafe ? 30 : 12, albums: 0, artists: 0 }).catch(() => ({ songs: [] }));
     lists.push((res.songs || []).filter((t) => {
-      if (!words.length) return true;
+      // briefWords returns a Set: `length` was undefined, so this filter never filtered,
+      // and any pop song from the search came through ("Fast Car" on a dance brief)
+      if (!words.size) return true;
       const hay = `${t.title} ${t.album} ${t.genre || ''}`.toLowerCase();
-      return words.some((w) => hay.includes(w));
+      if (words.some((w) => hay.includes(w))) return true;
+      // the catalogue's own classification is a match: Children's Music needs no title word
+      return /children/i.test(String(t.genre || ''));
     }));
   }
   for (let i = 0; out.length < need && i < 12; i += 1) {
@@ -503,7 +523,8 @@ async function propose(db, plan) {
     const count = Math.max(1, Math.min(Number(plan.args.count) || 20, 100));
     const artists = (plan.args.artists || []).map((a) => String(a).trim()).filter(Boolean).slice(0, 4);
     const themes = (plan.args.themes || []).map((t) => String(t).trim()).filter(Boolean).slice(0, 4);
-    const BRIEF_RE = /\b(for my|she likes|he likes|they like|who likes|shes into|hes into|don'?t limit|birthday|wedding|kids?|children|toddler|baby|story time|year old|\d+\s*yo|about (unicorns?|robots?|dinosaurs?|space|animals?))\b/i;
+    const onlyLocalEarly = /\b(only|just|from)\s+(my|the)\s+library\b|\bno new\b/i.test(q);
+    const BRIEF_RE = /\b(for my|she likes|he likes|they like|who likes|shes into|hes into|don'?t limit|birthday|wedding|kids?|children|toddler|for (?:my|our|the) baby|story time|year old|\d+\s*yo|about (unicorns?|robots?|dinosaurs?|space|animals?))\b/i;
     // the model is good at naming artists and themes, unreliable at deciding what a brief
     // is: 'a techno set for a warehouse' is not one. Decide locally.
     const brief = BRIEF_RE.test(q) || artists.length > 0;
@@ -563,13 +584,22 @@ async function propose(db, plan) {
           (SELECT COUNT(*) FROM files f WHERE f.track_id=t.id AND f.tier='owned') owned,
           (SELECT COUNT(*) FROM listens l WHERE l.track_id=t.id) plays
         FROM tracks t`).all();
+      const phrases = themes.map((th) => String(th).toLowerCase()).filter(Boolean);
+      const wordList = [...words];
+      const needWords = Math.min(2, Math.max(1, wordList.length));
       local = rows.filter((t) => {
         const hay = `${t.title || ''} ${t.album || ''} ${t.genre || ''} ${t.genre_family || ''}`.toLowerCase();
         const byArtist = names.some((a) => String(t.artist || '').toLowerCase().includes(a));
-        const byTheme = words.some((w) => hay.includes(w));
-        return byArtist || byTheme;
+        // one shared word is a coincidence ("party" in a techno title); a phrase or two
+        // words is a match
+        const phraseHit = phrases.some((ph) => ph.length > 4 && hay.includes(ph));
+        const hits = wordList.filter((w) => hay.includes(w)).length;
+        return byArtist || phraseHit || hits >= needWords;
       }).sort((a, b) => (b.owned || 0) - (a.owned || 0)).slice(0, count);
     }
+    // a brief that matched nothing in the library is not an invitation to play the
+    // current rotation: that is how a seven-year-old's playlist filled with dark techno
+    if (brief && !local.length) local = [];
     if (outsideOnly || wantedArtist) {
       if (wantedArtist) {
         const needle = wantedArtist.toLowerCase();
@@ -579,7 +609,10 @@ async function propose(db, plan) {
           FROM tracks t`).all();
         local = rows.filter((t) => String(t.artist || '').toLowerCase().includes(needle));
       } else local = [];
-    } else if (!local.length) local = picked.tracks;
+    } else if (!local.length && !brief) local = picked.tracks;
+    const childSafe = childAudience(q);
+    // no explicit flag exists for library files, so a child's set is catalogue-only
+    if (childSafe && brief && !onlyLocalEarly) local = [];
     // a brief goes outside unless the request says to stay in the library
     const allowExternal = !onlyLocal && (brief || plan.args.allowExternal !== false);
     // a brief that says "don't limit yourself" must leave room outside: 20 local tracks
@@ -589,7 +622,17 @@ async function propose(db, plan) {
     // hoisted: the reason below reads it after the branch has closed
     let targetOnline = 0;
     if (brief) {
-      online = allowExternal ? await briefFill(db, { artists, themes, need: Math.max(0, count - local.length) }) : [];
+      if (childSafe) {
+        const hasKidTheme = themes.some((th) => /child|kid|family|preschool|nursery/i.test(String(th)));
+        if (!hasKidTheme) themes.push("children's dance party");
+        // a second, plainer angle so a 15-track request is not left short by one narrow query
+        if (!themes.some((th) => /kids? (dance|party|songs)|children's music/i.test(String(th)))) {
+          themes.push('kids dance songs');
+        }
+      }
+      online = allowExternal ? await briefFill(db, {
+        artists, themes, need: Math.max(0, count - local.length), childSafe,
+      }) : [];
     } else {
       targetOnline = onlyLocal ? 0 : Math.max(Math.round(count * discovery), count - local.length);
       if (outsideOnly) targetOnline = count;
@@ -628,7 +671,13 @@ async function propose(db, plan) {
       }
       const what = [...new Set(cores)].slice(0, 3).join(', ');
       reasonBits = [`For a brief: ${[what, artists.join(', ')].filter(Boolean).join(' · ')}.`];
-      reasonBits.push(`${local.length} in your library, ${online.length} new.`);
+      if (childSafe && !onlyLocal) {
+        reasonBits.push(`${online.length} clean catalogue tracks; nothing from your library, which has no explicit flag.`);
+      } else if (childSafe) {
+        reasonBits.push(`${local.length} from your library — it has no explicit flag, so check these before playing them to a child.`);
+      } else {
+        reasonBits.push(`${local.length} in your library, ${online.length} new.`);
+      }
       if (allowExternal && !online.length && identity.recentError()) {
         reasonBits.push('The catalogue did not answer just now, so this is your library only.');
       }
@@ -798,5 +847,5 @@ function commit(db, proposal, deps) {
   return { spoken: 'Nothing to do.', data: {} };
 }
 
-module.exports = { planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan, relevanceGate };
+module.exports = { planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan, relevanceGate, childAudience };
 

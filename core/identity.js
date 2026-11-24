@@ -171,6 +171,7 @@ async function catalog(query, { songs = 40, albums = 12, artists = 6 } = {}) {
       genre: r.primaryGenreName || null,
       family: familyOf(r.primaryGenreName),
       year: r.releaseDate ? Number(String(r.releaseDate).slice(0, 4)) : null,
+      explicit: r.trackExplicitness === 'explicit',
       artwork: r.artworkUrl100 ? r.artworkUrl100.replace('100x100bb', '300x300bb') : null,
       cover: r.artworkUrl100 ? r.artworkUrl100.replace('100x100bb', '300x300bb') : null,
       preview: r.previewUrl || null,
@@ -214,6 +215,7 @@ async function artistSongs(name, limit = 20) {
         duration: r.trackTimeMillis ? r.trackTimeMillis / 1000 : null,
         genre: r.primaryGenreName || null, family: familyOf(r.primaryGenreName),
         year: r.releaseDate ? Number(String(r.releaseDate).slice(0, 4)) : null,
+        explicit: r.trackExplicitness === 'explicit',
         cover: r.artworkUrl100 ? r.artworkUrl100.replace('100x100bb', '300x300bb') : null,
         preview: r.previewUrl || null,
       }));
