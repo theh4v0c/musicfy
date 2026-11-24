@@ -6,6 +6,23 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · Metadata repair updates the row, not the page (`v480`)
+
+"Fix metadata" changed the data correctly, then called `refreshView()`: the whole view was
+rebuilt, the scroll jumped and the page flashed. The repair is a few fields on one track.
+
+- `patchTrackEverywhere(id, fields)` updates the in-memory track (`_rows`, `_currentList`,
+  queue, now playing), the visible row title/artist/album and any track card, removes only
+  the `/api/tracks` cache entry, and calls `paintNowPlaying()` if that track is playing.
+  The single-track repair uses it and no longer re-renders.
+- The crate/album job now returns `changes: [{id, ...fields}]`; the watcher applies each
+  through the same function. A fallback keeps the scroll position if an older server
+  returns counts without changes.
+- Cards got `data-id` so a card can be patched without a selector by index.
+
+Verified in the browser: patching a row changed its title/artist/album in place with
+`#view.scrollTop` unchanged. Repair job shape now includes `changes`.
+
 ### 2026-11-24 · A new playlist is for listening (`v479`)
 
 - `POST /api/playlists` defaults `kind` to `listen`; `dj` is only set when asked for.

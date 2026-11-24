@@ -70,6 +70,7 @@ ok('one character query rejected', short.status === 400, String(short.status));
 console.log('crate repair feedback');
 const rj = await j('/api/playlists/__none__/repair');
 ok('repair reports a job shape', rj.status === 200 && rj.body && rj.body.running === false && 'done' in rj.body && 'total' in rj.body, JSON.stringify(rj.body));
+ok('repair reports the fields it changed', rj.status === 200 && Array.isArray(rj.body?.changes), JSON.stringify(rj.body));
 const raj = await j('/api/albums/__none__/repair');
 ok('album repair reports the same shape', raj.status === 200 && raj.body && raj.body.running === false && 'fields' in raj.body, JSON.stringify(raj.body));
 

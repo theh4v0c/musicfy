@@ -388,9 +388,8 @@ $('ctx').addEventListener('click', async (e) => {
       if (!confirm(`Apply these corrections?\n\n${p.reasons.join('\n')}`)) return;
       const r = await api(`/api/repair/${t.id}/apply`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(p.after) });
       if (r.error) return toast(r.error, 6000);
-      afterWrite(); state.allTracks = null;
+      patchTrackEverywhere(t.id, p.after);
       toast(`Fixed ${r.changed} fields`, 5000);
-      refreshView();
     } catch { toast('Repair failed', 4000); }
     return;
   }
@@ -507,6 +506,34 @@ function registerRow(t) {
   state._rows.set(t.id, t);
 }
 
+/* Metadata repair changes a few fields, not the page. Re-render everything and the view
+   flashes and jumps for a title; patch the objects and the visible nodes instead. */
+function patchTrackEverywhere(id, fields) {
+  if (id == null || !fields) return;
+  const merge = (o) => { if (o && Number(o.id) === Number(id)) Object.assign(o, fields); };
+  if (state.allTracks) state.allTracks.forEach(merge);
+  if (state._currentList) state._currentList.forEach(merge);
+  if (state._rows && state._rows.get(Number(id))) Object.assign(state._rows.get(Number(id)), fields);
+  state.queue.forEach(merge);
+  merge(state.current);
+  const t = (state._rows && state._rows.get(Number(id))) || state.current || fields;
+  document.querySelectorAll(`.trow[data-tid="${id}"]`).forEach((row) => {
+    const tt = row.querySelector('.tt'); if (tt) tt.textContent = t.title || '';
+    const artist = row.querySelector('.tartist .alink'); if (artist) artist.textContent = t.artist || 'unknown artist';
+    const talbum = row.querySelector('.talbum .alink'); if (talbum) talbum.textContent = t.album || '';
+    const talArtist = row.querySelector('.tal-artist'); if (talArtist) talArtist.textContent = t.artist || '';
+    const albumLinks = row.querySelectorAll('.talbum-line .alink');
+    if (albumLinks.length) albumLinks[albumLinks.length - 1].textContent = t.album || '';
+  });
+  document.querySelectorAll(`.tcard[data-id="${id}"]`).forEach((card) => {
+    const name = card.querySelector('.tcard-name'); if (name) name.textContent = t.title || '';
+    const artist = card.querySelector('.tcard-artist'); if (artist) artist.textContent = t.artist || '';
+  });
+  if (state.current && Number(state.current.id) === Number(id)) paintNowPlaying();
+  // the next full read must see the server's copy, not a 90-second-old cached list
+  try { localStorage.removeItem(CACHE_PREFIX + '/api/tracks'); } catch {}
+}
+
 /* ============ toasts ============ */
 function toast(msg, ms = 2600) {
   const host = $('toasts');
@@ -580,7 +607,17 @@ async function watchRepair(url) {
     if (j.same) parts.push(`${j.same} already correct`);
     if (j.failed) parts.push(`${j.failed} could not be changed`);
     toast(`Metadata: ${j.done || j.total} checked — ${parts.join(', ') || 'nothing to do'}`, 9000);
-    if (j.fixed) { bustCache(); state.allTracks = null; setTimeout(() => { try { refreshView(); } catch {} }, 600); }
+    if (j.fixed) {
+      if (Array.isArray(j.changes) && j.changes.length) {
+        for (const c of j.changes) patchTrackEverywhere(c.id, c);
+      } else {
+        // older server: preserve the scroll position instead of jumping to the top
+        const view = document.getElementById('view');
+        const top = view ? view.scrollTop : 0;
+        bustCache(); state.allTracks = null;
+        setTimeout(() => { try { refreshView(); if (view) view.scrollTop = top; } catch {} }, 300);
+      }
+    }
   } catch (e) {
     pill.done();
     toast(`Metadata repair failed (${e.message || 'request'})`, 6000);
@@ -1423,6 +1460,7 @@ function trackCard(t, list, origin) {
   registerRow(t);
   const c = document.createElement('div');
   c.className = 'tcard';
+  c.dataset.id = t.id;
   c.innerHTML = `${artTag(t, 'tcard-art', 300)}
     <div class="tcard-name">${esc(t.title)}</div>
     <div class="tcard-sub">${t.artist ? `<button class="alink tcard-artist" type="button">${esc(t.artist)}</button>` : ''}</div>

@@ -175,7 +175,7 @@ const repairJobs = new Map();
 function startRepairJob(key, ids) {
   const current = repairJobs.get(key);
   if (current && current.running) return { started: false, job: current };
-  const job = { running: true, total: ids.length, done: 0, fixed: 0, same: 0, failed: 0, fields: {}, at: Date.now(), finishedAt: 0 };
+  const job = { running: true, total: ids.length, done: 0, fixed: 0, same: 0, failed: 0, fields: {}, changes: [], at: Date.now(), finishedAt: 0 };
   repairJobs.set(key, job);
   (async () => {
     for (const id of ids) {
@@ -187,6 +187,7 @@ function startRepairJob(key, ids) {
           else if (r && r.changed) {
             job.fixed += 1;
             for (const k of Object.keys(p.after)) job.fields[k] = (job.fields[k] || 0) + 1;
+            job.changes.push({ id, ...p.after });
           } else job.same += 1;
         } else job.same += 1;
       } catch { job.failed += 1; }
@@ -3542,7 +3543,7 @@ const server = http.createServer(async (req, res) => {
     const mPlRepair = u.pathname.match(/^\/api\/playlists\/([^/]+)\/repair$/);
     if (mPlRepair && req.method === 'GET') {
       const j = repairJobs.get(decodeURIComponent(mPlRepair[1]));
-      return json(res, 200, j || { running: false, total: 0, done: 0, fixed: 0, same: 0, failed: 0, fields: {} });
+      return json(res, 200, j || { running: false, total: 0, done: 0, fixed: 0, same: 0, failed: 0, fields: {}, changes: [] });
     }
     if (mPlRepair && req.method === 'POST') {
       const pid = decodeURIComponent(mPlRepair[1]);
@@ -3566,7 +3567,7 @@ const server = http.createServer(async (req, res) => {
     const mAlRepair = u.pathname.match(/^\/api\/albums\/([^/]+)\/repair$/);
     if (mAlRepair && req.method === 'GET') {
       const j = repairJobs.get('album:' + decodeURIComponent(mAlRepair[1]));
-      return json(res, 200, j || { running: false, total: 0, done: 0, fixed: 0, same: 0, failed: 0, fields: {} });
+      return json(res, 200, j || { running: false, total: 0, done: 0, fixed: 0, same: 0, failed: 0, fields: {}, changes: [] });
     }
     if (mAlRepair && req.method === 'POST') {
       const name = decodeURIComponent(mAlRepair[1]);
