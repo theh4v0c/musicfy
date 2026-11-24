@@ -88,6 +88,14 @@ reference Paradox-455M/MixedInKey)
 - MIK's own format documented in `DOCS.md`: Camelot in the DB, musical key in tags,
   comment "8A - Energy 7", 8-bar energy segments, cue at every section boundary.
 
+**A&R** (the assistant, decided with you: the name, its own destination, act-now with
+undo, teaching that is permanent, visible and deletable)
+- a sidebar and bottom-bar destination, `askai` renamed to A&R
+- every answer with tracks carries **Play N / Queue N**; the queue can be taken back with
+  Undo on the same card
+- "no Imagine Dragons" is read as an instruction: it writes one exclusion, shows what it
+  wrote as a chip, and offers Undo. Settings holds the same value.
+
 **Interface**
 - The app says its name where the sidebar cannot: a 11px letterspaced wordmark replaces
   "Home" on a phone and on a collapsed rail, and the collapsed rail carries an "MF"

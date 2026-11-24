@@ -2890,6 +2890,88 @@ function renderActionCard(a, out, stateEl) {
   try { card.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {}
 }
 
+/* Play and queue on any answer, at once, with the queue's undo on the same card. */
+function answerActions(tracks, out) {
+  if (!tracks || !tracks.length) return null;
+  const acts = document.createElement('div');
+  acts.className = 'answer-notes ask-actions';
+  const play = document.createElement('button');
+  play.className = 'btn btn-primary';
+  play.textContent = `Play ${tracks.length}`;
+  play.onclick = () => playList(tracks, 0, false, 'A&R');
+  const queue = document.createElement('button');
+  queue.className = 'btn btn-ghost';
+  queue.textContent = `Queue ${tracks.length}`;
+  queue.onclick = () => {
+    const added = tracks.filter((t) => hasAudio(t) || t.rung);
+    if (!added.length) { toast('None of these have audio yet', 4000); return; }
+    const start = state.queue.length;
+    state.queue.push(...added);
+    saveQueue();
+    queue.disabled = true;
+    queue.textContent = `Queued ${added.length}`;
+    const undo = document.createElement('button');
+    undo.className = 'btn btn-ghost';
+    undo.textContent = 'Undo';
+    undo.onclick = () => {
+      state.queue.splice(start, added.length);
+      if (state.qi >= state.queue.length) state.qi = state.queue.length - 1;
+      saveQueue();
+      undo.remove();
+      queue.disabled = false;
+      queue.textContent = `Queue ${tracks.length}`;
+      toast('Queue restored', 2500);
+    };
+    acts.appendChild(undo);
+    toast(`${added.length} queued`, 3000);
+  };
+  acts.append(play, queue);
+  out.appendChild(acts);
+  return acts;
+}
+
+/* "no Imagine Dragons" is an instruction, not a search. It writes one permanent
+   exclusion, shows what it wrote, and offers the undo. */
+const TEACH_RE = /^(?:no|not|don'?t play|do not play|never play|stop playing|avoid|skip|ban|exclude)\s+(.{2,60})$/i;
+
+async function teachExclusion(raw, out, stateEl, box) {
+  const term = raw.trim().replace(/[.!]+$/, '');
+  stateEl.classList.remove('thinking');
+  stateEl.textContent = '';
+  out.innerHTML = '';
+  let before = '';
+  try {
+    const d = await api('/api/settings', { nocache: true });
+    before = String((d.settings || {}).taste_avoid || '');
+    const next = [...before.split(',').map((x) => x.trim()).filter(Boolean), term].join(', ');
+    await api('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taste_avoid: next }) });
+    state.settings = { ...(state.settings || {}), taste_avoid: next };
+  } catch { toast('Could not save that exclusion', 4000); return; }
+
+  const card = document.createElement('div');
+  card.className = 'answer';
+  card.innerHTML = `<div class="answer-head"><span class="answer-kicker">TAUGHT</span><span class="answer-q">${esc(term)}</span></div>
+    <p class="answer-said">Excluded from picks, Flow, the rotation and the harmonic queue from now on.</p>
+    <div class="avoid-terms"><span class="avoid-label">never in picks</span><span class="avoid-term">${esc(term)}</span></div>`;
+  const acts = document.createElement('div');
+  acts.className = 'answer-notes';
+  const undo = document.createElement('button');
+  undo.className = 'btn btn-ghost';
+  undo.textContent = 'Undo';
+  undo.onclick = async () => {
+    try {
+      await api('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taste_avoid: before }) });
+      state.settings = { ...(state.settings || {}), taste_avoid: before };
+      card.remove();
+      toast('Exclusion removed', 3000);
+    } catch { toast('Could not undo', 3000); }
+  };
+  acts.appendChild(undo);
+  card.appendChild(acts);
+  out.appendChild(card);
+  if (box) box.value = '';
+}
+
 async function runAssistant(text, out, stateEl, box) {
     if (!text.trim()) return;
       closeInlinePreview();
@@ -2925,8 +3007,9 @@ async function runAssistant(text, out, stateEl, box) {
         }
         const lib = (a.data && a.data.library) || [];
         if (lib.length) {
-          const wrap = document.createElement('div');
           const tracks = lib.map((r) => ({ ...r, rung: r.owned ? 'local' : null }));
+          answerActions(tracks, out);
+          const wrap = document.createElement('div');
           tracks.forEach((t, i) => { registerRow(t); wrap.appendChild(trow(t, i, tracks)); });
           out.appendChild(wrap);
         }
@@ -3000,8 +3083,9 @@ async function runAssistant(text, out, stateEl, box) {
         return;
       }
       stateEl.textContent = `${d.count} track${d.count === 1 ? '' : 's'}${bits.length ? ' · ' + bits.join(' · ') : ''}`;
-      const wrap = document.createElement('div');
       const tracks = d.results.map((r) => ({ ...r, rung: r.owned ? 'local' : null }));
+      answerActions(tracks, out);
+      const wrap = document.createElement('div');
       tracks.forEach((t, i) => { registerRow(t); wrap.appendChild(trow(t, i, tracks)); });
       out.appendChild(wrap);
     } catch (e) {
@@ -3012,12 +3096,12 @@ async function runAssistant(text, out, stateEl, box) {
 
 async function renderAskAi() {
   closeInlinePreview();
-  setNav('search');
+  setNav('askai');
   state.view = 'askai'; state.playlistId = null; state.genreFilter = null; renderSidebar();
-  $('view-title').textContent = 'Ask';
+  $('view-title').textContent = 'A&R';
   const v = $('view');
-  v.innerHTML = `${heroBanner('ASSISTANT', 'Ask', 'Search your library in plain language.')}<div class="search-wrap">
-      <input class="search" id="ai-q" placeholder="Ask anything, for example: create a playlist of 10 ambient tracks" autocomplete="off">
+  v.innerHTML = `${heroBanner('ASSISTANT', 'A&R', 'Finds, builds and plays from your library — and says why.')}<div class="search-wrap">
+      <input class="search" id="ai-q" placeholder="Ask, build or teach: 20 dark techno at 130 · no Imagine Dragons" autocomplete="off">
       <div class="ask-hint">
         <button class="ask-ex">how much of my library has audio</button>
         <button class="ask-ex">find techno tracks I never played</button>
@@ -3030,7 +3114,11 @@ async function renderAskAi() {
   const out = $('ai-res');
   const stateEl = $('ai-state');
 
-  const run = (text) => runAssistant(text, out, stateEl, box);
+  const run = (text) => {
+    const teach = String(text || '').trim().match(TEACH_RE);
+    if (teach) return teachExclusion(teach[1], out, stateEl, box);
+    return runAssistant(text, out, stateEl, box);
+  };
 
   box.onkeydown = (e) => { if (e.key === 'Enter') run(box.value); };
   v.querySelectorAll('.ask-ex').forEach((b) => b.onclick = () => { box.value = b.textContent; run(box.value); });

@@ -124,6 +124,22 @@ the list of forbidden patterns. `bin/design-check.mjs` enforces it (tokens ↔ C
 the built pages at 1440 and 390) and exits non-zero on drift. Run it before and after
 any visual change.
 
+## The A&R
+
+One destination (`askai`, labelled A&R in the sidebar and the phone bar). It answers,
+builds and acts.
+
+- **Answers** come from `/api/agent` for instructions and `/api/ask` for plain library
+  questions; the reply names the intent and whether it was planned locally or by the model.
+- **Play N / Queue N** on any answer. Both act at once — playback is cheap and reversible
+  — and a queue can be taken back with Undo on the same card.
+- **Teaching**: a message that starts with no / don't play / never play / avoid is not a
+  search. It writes one term into `taste_avoid`, shows the term as a chip and offers Undo.
+  The same value is what Settings edits, and what picks, Flow, the rotation and the
+  harmonic queue already obey.
+- Proposals (a crate, a download) still require an explicit confirm; nothing destructive
+  happens from a sentence.
+
 ## Exclusions ("keep out of picks")
 
 Settings stores one free-text field, `taste_avoid`. `core/exclude.js` turns it into
