@@ -213,8 +213,15 @@ function upsertTrack({ title, artist, album, year, duration, format, spotify_id,
 }
 
 function upsertFile({ track_id, path: p, tier, bitrate, size, mtime }) {
-  let row = db.prepare('SELECT id FROM files WHERE path=?').get(p);
-  if (row) return row.id;
+  const row = db.prepare('SELECT id, track_id FROM files WHERE path=?').get(p);
+  if (row) {
+    // the same path can only describe one file; if a different track is registered for
+    // it now, point the row at that track instead of leaving the old one attached
+    if (row.track_id !== track_id) db.prepare('UPDATE files SET track_id=? WHERE id=?').run(track_id, row.id);
+    db.prepare('UPDATE files SET tier=?, bitrate=COALESCE(?,bitrate), size=COALESCE(?,size), mtime=COALESCE(?,mtime) WHERE id=?')
+      .run(tier, bitrate || null, size || null, mtime || null, row.id);
+    return row.id;
+  }
   const r = db.prepare(`INSERT INTO files (track_id,path,tier,bitrate,size,mtime,added_at) VALUES (?,?,?,?,?,?,?)`)
     .run(track_id, p, tier, bitrate || null, size || null, mtime || null, now());
   return Number(r.lastInsertRowid);
@@ -1824,8 +1831,11 @@ const server = http.createServer(async (req, res) => {
         const range = req.headers.range;
         if (range) {
           const r = range.match(/bytes=(\d*)-(\d*)/);
-          const s = r && r[1] ? Number(r[1]) : 0;
+          let s = r && r[1] ? Number(r[1]) : 0;
           let e = r && r[2] ? Number(r[2]) : st.size - 1;
+          // "bytes=-100" is the last hundred bytes, not the first hundred: players probe
+          // the tail of a file for ID3v1/Xing headers
+          if (r && !r[1] && r[2]) { s = Math.max(0, st.size - Number(r[2])); e = st.size - 1; }
           e = Math.min(e, st.size - 1);
           res.writeHead(206, { ...head, 'content-range': `bytes ${s}-${e}/${st.size}`, 'content-length': e - s + 1 });
           return fs.createReadStream(file, { start: s, end: e }).pipe(res);
@@ -2035,7 +2045,13 @@ const server = http.createServer(async (req, res) => {
       if (!/\.(mp3|flac|m4a|ogg|opus|wav|aiff?)$/i.test(name)) return json(res, 400, { error: 'unsupported file type' });
       const dir = path.join(OWNED, 'upload');
       fs.mkdirSync(dir, { recursive: true });
-      const dest = path.join(dir, name);
+      // reserve a free name: two files called "track.mp3" are two tracks, not one
+      const ext = path.extname(name) || '.mp3';
+      const stem = name.slice(0, name.length - ext.length);
+      let dest = path.join(dir, name);
+      for (let i = 2; fs.existsSync(dest) || fs.existsSync(`${dest}.part`); i += 1) {
+        dest = path.join(dir, `${stem} (${i})${ext}`);
+      }
       const part = `${dest}.part`;
       // streamed, not buffered: a 60MB wav used to be 60MB of RAM on a Raspberry Pi
       const written = await new Promise((resolve, reject) => {
@@ -4482,6 +4498,7 @@ const server = http.createServer(async (req, res) => {
         const r = range.match(/bytes=(\d*)-(\d*)/);
         let start = r && r[1] ? Number(r[1]) : 0;
         let end = r && r[2] ? Number(r[2]) : st.size - 1;
+        if (r && !r[1] && r[2]) { start = Math.max(0, st.size - Number(r[2])); end = st.size - 1; }
         // a bad range must not produce a negative content-length and wedge the socket
         if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start > end || start >= st.size) {
           res.writeHead(416, { ...head, 'content-range': `bytes */${st.size}` });
