@@ -3673,7 +3673,8 @@ function trow(t, i, list) {
   });
   const keyBtn = el.querySelector('.keychip');
   if (keyBtn) keyBtn.onclick = (e) => { e.stopPropagation(); state._keySort = (state._keySort || 0) + 1; sortSongsByKey(); };
-  const albLinks = el.querySelectorAll('.talbum .alink, .talbum-line .alink');
+  // the artist sits inside the album line on a phone; it must not open the album
+  const albLinks = el.querySelectorAll('.talbum .alink, .talbum-line .alink:not(.tal-artist)');
   if (t.album) albLinks.forEach((a) => { a.onclick = (e) => { e.stopPropagation(); renderAlbum(t.album); }; });
   el.tabIndex = 0;
   el.setAttribute('role', 'row');
