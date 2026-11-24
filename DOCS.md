@@ -140,6 +140,20 @@ Every surface that picks music filters through it: home picks (ON DECK), `/api/r
 `/api/flow`, `/api/radio` (the home rotation), `/api/mix/next`, and `mood.select` for
 briefs. Saving settings invalidates the picks cache, so the change is immediate.
 
+## Loudness
+
+Two different things, and only one of them works on a phone.
+
+**Runtime gain** (`normalize_loudness`, `target_loudness`): the player sets `audio.volume`
+per track, using the LUFS measured during analysis. It never boosts, only attenuates.
+iOS ignores `audio.volume` completely, so this is a desktop and Android feature.
+
+**File normalisation** (`POST /api/normalize`): measures each file with ffmpeg's EBU R128
+meter and rewrites it with a two-pass `loudnorm` to the target (default -12 LUFS, TP
+-1.5). Files already within 1 dB are skipped; lossy files are re-encoded once in the same
+codec at high bitrate. Works everywhere, including an iPhone and a CDJ. Progress is in
+`GET /api/normalize`; Settings shows it, and a single track can be done from its row menu.
+
 ## DJ export
 
 Three artefacts come out of a crate. The formats were checked against real parsers, not

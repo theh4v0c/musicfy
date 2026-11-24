@@ -28,6 +28,7 @@ const spotify = require('./spotify');
 const exporter = require('./export');
 const pioneer = require('./pioneer');
 const exclude = require('./exclude');
+const normalizer = require('./normalize');
 const tagwrite = require('./tagwrite');
 const transcode = require('./transcode');
 const { DatabaseSync } = require('node:sqlite');
@@ -3775,6 +3776,24 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       return json(res, 200, { auto_download_plays: setting('auto_download_plays', '2') });
+    }
+
+    // loudness normalisation that survives iOS: rewrite the file, not the volume
+    if (u.pathname === '/api/normalize') {
+      if (req.method === 'POST') {
+        let body = '';
+        req.on('data', (c) => { body += c; });
+        req.on('end', async () => {
+          let b = {};
+          try { b = JSON.parse(body || '{}'); } catch {}
+          const target = Number(b.target) || -12;
+          const hit = await normalizer.run(db, { ids: b.ids, playlistId: b.playlistId, target, limit: Math.min(Number(b.limit) || 500, 2000) });
+          if (hit.error) return json(res, 409, hit);
+          return json(res, 200, { ok: true, ...hit, state: normalizer.state });
+        });
+        return;
+      }
+      return json(res, 200, normalizer.state);
     }
 
     if (u.pathname === '/api/stats') {
