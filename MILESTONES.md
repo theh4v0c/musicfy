@@ -6,6 +6,30 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · variety in recommendations, discovery in the A&R chips (`v467`)
+
+**Recommendations were a discography**
+- `recommend.js` now takes one track per artist for the first ten, at most two after that,
+  and counts the first credited name ("Minilogue" and "Minilogue, Dominik Eulberg" are
+  the same act). Home picks reject a second track by an artist already in the three.
+- Measured: a 15-track recommendation is 15 artists (one repeat at position 13, allowed
+  after ten); home picks are three different artists instead of the artist of the week
+  twice.
+
+**The A&R suggestion chips only looked inward**
+- `/api/ask/suggest` returned library filters only ("tracks in Gm I have not played",
+  "tracks around 121 bpm"), so pressing a chip taught the user that A&R is a library
+  filter. It now alternates discovery and library: "10 tracks by <your top artist> I
+  don't have", "10 <family> tracks I don't have", plus one library prompt each.
+- A "by X" request no longer returns X's own shelf rows when the sentence also says "I
+  don't have" — the branches used to let the artist match override the outside request,
+  producing 83 local tracks with the reason "none of these are in your library". The
+  catalogue result is also filtered to artists matching X, so a song titled "Meshuggah"
+  by another band is not accepted as Meshuggah.
+
+Verified: suggestion row alternates outside/inside; "10 tracks by Meshuggah I do not
+have" -> 0 local, 7 catalogue, reason names Meshuggah. Tests 43/43.
+
 ### 2026-11-24 · a crate action that reports what it did (`v465`)
 
 **Fix metadata (crate) was a fire-and-forget job**

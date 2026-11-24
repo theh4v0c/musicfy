@@ -2779,9 +2779,14 @@ const server = http.createServer(async (req, res) => {
       const banned = tasteAvoid();
       const picks = [];
       const seen = new Set();
+      const artistKey = (a) => String(a || '').split(/\s*(?:,|;|&|\bfeat\.?\b|\bft\.?\b|\bvs\.?\b|\bx\b)\s*/i)[0]
+        .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
       const add = (row, reason) => {
         if (!row || seen.has(row.id) || picks.length >= 3) return;
         if (exclude.matches(banned, row)) return;   // what "keep out of picks" means
+        // three picks by one artist is not a recommendation, it is a discography
+        const a = artistKey(row.artist);
+        if (a && picks.some((p) => artistKey(p.artist) === a)) return;
         seen.add(row.id);
         picks.push({
           id: row.id, title: row.title, artist: row.artist, has_art: !!row.has_art,
@@ -2968,17 +2973,26 @@ const server = http.createServer(async (req, res) => {
         WHERE l.played_at>=? AND t.artist IS NOT NULL AND t.artist!='' GROUP BY l.track_id ORDER BY MAX(l.played_at) DESC LIMIT 4`).all(week).map((r) => r.artist);
       // a tag can be bars or dashes rather than a name: "more from ||||||||" is not a prompt
       const named = (a) => /[a-z]/i.test(String(a || ''));
-      const pool = [];
-      for (const a of topArtists.filter(named).slice(0, 2)) pool.push(`more from ${a}`);
-      for (const k of keys.slice(0, 2)) pool.push(`tracks in ${k.k}${k.s === 'minor' ? 'm' : ''} I have not played`);
-      for (const f of fams.slice(0, 2)) pool.push(`${f} I never played`);
-      if (bpmRow && bpmRow.a) { const b = Math.round(bpmRow.a); pool.push(`tracks around ${b} bpm`, `tracks between ${b - 3} and ${b + 3} bpm`); }
-      for (const a of recent.filter(named).slice(0, 2)) pool.push(`more from ${a}`);
-      pool.push('tracks I have not played in months', 'tracks added this week', 'long tracks for a set', 'tracks under 3 minutes');
-      // dedupe, shuffle, take four — so the suggestions are not frozen
-      const uniq = [...new Set(pool)];
-      for (let i = uniq.length - 1; i > 0; i -= 1) { const j = Math.floor(Math.random() * (i + 1)); [uniq[i], uniq[j]] = [uniq[j], uniq[i]]; }
-      return json(res, 200, { prompts: uniq.slice(0, 4) });
+      /* Half the suggestions go outside the library. They used to be library queries
+         only ("tracks in Gm I have not played"), so pressing one taught the user that
+         A&R is a filter for their own shelf — the opposite of what it does. */
+      const discovery = [];
+      const lead = topArtists.filter(named)[0] || recent.filter(named)[0];
+      if (lead) discovery.push(`10 tracks by ${lead} I don't have`);
+      if (fams[0]) discovery.push(`10 ${fams[0]} tracks I don't have`);
+      else if (keys[0]) discovery.push(`10 tracks in ${keys[0].k}${keys[0].s === 'minor' ? 'm' : ''} I don't have`);
+      if (discovery.length < 2 && topArtists.filter(named)[1]) discovery.push(`10 tracks by ${topArtists.filter(named)[1]} I don't have`);
+
+      const local = [];
+      for (const k of keys.slice(0, 2)) local.push(`tracks in ${k.k}${k.s === 'minor' ? 'm' : ''} I have not played`);
+      for (const f of fams.slice(0, 2)) local.push(`${f} I never played`);
+      if (bpmRow && bpmRow.a) { const b = Math.round(bpmRow.a); local.push(`tracks around ${b} bpm`); }
+      local.push('tracks I have not played in months', 'tracks added this week', 'tracks under 3 minutes');
+      // shuffle each half, then alternate: discovery first, but never four of one kind
+      const mix = (arr) => { const a = [...new Set(arr)]; for (let i = a.length - 1; i > 0; i -= 1) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+      const d = mix(discovery).slice(0, 2);
+      const l = mix(local).slice(0, 2);
+      return json(res, 200, { prompts: [d[0], l[0], d[1], l[1]].filter(Boolean) });
     }
 
     // the tracks the library count is missing, so the drawer can show them
@@ -3065,6 +3079,14 @@ const server = http.createServer(async (req, res) => {
               source = followUp ? 'follow-up+llm' : 'llm';
             }
           } catch (e) { console.log('[agent] model plan failed:', String(e.message || e).slice(0, 120)); }
+        }
+        /* "I don't have" is a request for music that is not here. The model sometimes
+           files it as a library search; that answer is the opposite of the question. */
+        const outsideAsk = /\b(?:not in (?:my|the) library|outside (?:my|the) library|don'?t have|do not have|i don'?t own|unheard|new to me|discover)\b/i.test(q);
+        if (outsideAsk && (plan.intent === 'search_tracks' || plan.intent === 'report_library')) {
+          const a = plan.args || {};
+          plan = { intent: 'build_playlist', args: { ...a, query: q, count: Number(a.count) || Number(a.limit) || 20, download: false } };
+          source = `${source}+outside`;
         }
         // read-only intents answer now; mutations become a proposal until confirmed
         if (plan.intent === 'report_library' || plan.intent === 'search_tracks') {

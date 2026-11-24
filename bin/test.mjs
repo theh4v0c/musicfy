@@ -71,6 +71,12 @@ ok('repair reports a job shape', rj.status === 200 && rj.body && rj.body.running
 const raj = await j('/api/albums/__none__/repair');
 ok('album repair reports the same shape', raj.status === 200 && raj.body && raj.body.running === false && 'fields' in raj.body, JSON.stringify(raj.body));
 
+console.log('discovery prompts');
+const sug = await j('/api/ask/suggest');
+const prompts = sug.body?.prompts || [];
+ok('A&R suggestions include an outside-library prompt', prompts.length >= 3 && prompts.some((p) => /i (?:do not|don't) have/i.test(p)), JSON.stringify(prompts));
+ok('A&R suggestions also keep a library prompt', prompts.some((p) => /not played|never played|bpm|added this week/i.test(p)), JSON.stringify(prompts));
+
 console.log('analysis version');
 const an = await j('/api/analyze/status');
 ok('analysis reports its version', Number(an.body?.version) >= 2, JSON.stringify(an.body));

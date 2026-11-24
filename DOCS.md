@@ -149,6 +149,14 @@ a dead hotspot or a locked screen while the flag still says online. The stream i
 fallback when no copy exists. Three blobs are kept in memory; older object URLs are
 released.
 
+## Recommendations are one per artist, mostly
+
+`core/recommend.js` sorts by score, then walks the list keeping **one track per artist
+for the first ten**, and at most two after that; the first credited name is what counts, so
+"Minilogue" and "Minilogue, Dominik Eulberg" are one act. The home picks apply the same
+rule: three picks, three artists. Without it a fifteen-track recommendation was four
+artists, which reads as a discography rather than a recommendation.
+
 ## The A&R
 
 One destination (`askai`, labelled A&R in the sidebar and the phone bar). It answers,
@@ -172,6 +180,12 @@ builds and acts.
   says "from my library", the tracks are used with a warning instead of being silently
   mixed in. Before this, a children's brief filled nine slots from the dark-techno
   rotation because a brief that matched nothing fell back to "what you play now".
+- **The suggestion chips go both ways.** Half are library questions ("tracks in Fm I
+  have not played", "tracks around 121 bpm"); half are discovery ("10 tracks by your top
+  artist I don't have", "10 electronic tracks I don't have"). They used to be library
+  queries only, which taught that A&R is a filter for your own shelf. A "by X" request
+  also filters the catalogue result to artists whose name matches X, so a song *called*
+  "Meshuggah" by someone else is not returned as a track by Meshuggah.
 - **Teaching**: a message that starts with no / don't play / never play / avoid is not a
   search. It writes one term into `taste_avoid`, shows the term as a chip and offers Undo.
   The same value is what Settings edits, and what picks, Flow, the rotation and the

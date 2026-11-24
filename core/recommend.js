@@ -91,10 +91,34 @@ function build(db, { days = 30, limit = 40, excludePlaylisted = false, avoid = [
   }
 
   scored.sort((a, b) => b.score - a.score);
+  /* A list of fifteen tracks by four artists is a playlist of those artists, not a
+     recommendation. Keep the first ten to one track per artist, then allow a second
+     only when the pool would otherwise run dry. */
+  const picked = [];
+  const perArtist = new Map();
+  // "Minilogue, Dominik Eulberg" and "Minilogue" are the same act for the purpose of
+  // variety: the first credited name is the one that repeats in a crate
+  const nameOf = (p) => String(p.artist || '').split(/\s*(?:,|;|&|\bfeat\.?\b|\bft\.?\b|\bvs\.?\b|\bx\b)\s*/i)[0]
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  for (const p of scored) {
+    if (picked.length >= limit) break;
+    const a = nameOf(p);
+    if (!a) { picked.push(p); continue; }
+    const n = perArtist.get(a) || 0;
+    const cap = picked.length < 10 ? 1 : 2;
+    if (n >= cap) continue;
+    perArtist.set(a, n + 1);
+    picked.push(p);
+  }
+  // if the cap left the list short, fill with the best remaining tracks regardless
+  if (picked.length < limit) {
+    const have = new Set(picked.map((p) => p.id));
+    for (const p of scored) { if (picked.length >= limit) break; if (!have.has(p.id)) picked.push(p); }
+  }
   return {
     window: days,
     profile: { plays: recent.reduce((n, r) => n + r.plays, 0), topFamily: topFamily ? topFamily[0] : null, avgBpm: avgBpm ? Math.round(avgBpm) : null },
-    picks: scored.slice(0, limit),
+    picks: picked,
   };
 }
 

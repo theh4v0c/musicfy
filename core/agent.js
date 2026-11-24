@@ -330,7 +330,7 @@ function listName(query) {
   const n = String(query || '')
     .replace(/[^\w\s'-]/g, ' ')
     .replace(/\b\d+\b/g, ' ')
-    .replace(/\b(create|make|build|please|a|an|the|playlist|of|with|for|me|tracks?|songs?|items?|top|rated|best|rating|at|around|about|bpm)\b/gi, ' ')
+    .replace(/\b(create|make|build|please|a|an|the|playlist|of|with|for|me|tracks?|songs?|items?|top|rated|best|rating|at|around|about|bpm|by|like|i|my|library|outside|unheard|discover|don'?t|do|not|have|own)\b/gi, ' ')
     .replace(/\s+/g, ' ').trim();
   if (!n) return 'Made by request';
   return (n.charAt(0).toUpperCase() + n.slice(1)).slice(0, 60);
@@ -600,15 +600,16 @@ async function propose(db, plan) {
     // a brief that matched nothing in the library is not an invitation to play the
     // current rotation: that is how a seven-year-old's playlist filled with dark techno
     if (brief && !local.length) local = [];
-    if (outsideOnly || wantedArtist) {
-      if (wantedArtist) {
-        const needle = wantedArtist.toLowerCase();
-        const rows = db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.bpm, t.key, t.key_scale, t.genre, t.genre_family,
-            (SELECT COUNT(*) FROM files f WHERE f.track_id=t.id AND f.tier='owned') owned,
-            (SELECT COUNT(*) FROM listens l WHERE l.track_id=t.id) plays
-          FROM tracks t`).all();
-        local = rows.filter((t) => String(t.artist || '').toLowerCase().includes(needle));
-      } else local = [];
+    if (outsideOnly) {
+      // "I don't have" wins over a named artist: the answer is not their shelf copy
+      local = [];
+    } else if (wantedArtist) {
+      const needle = wantedArtist.toLowerCase();
+      const rows = db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.bpm, t.key, t.key_scale, t.genre, t.genre_family,
+          (SELECT COUNT(*) FROM files f WHERE f.track_id=t.id AND f.tier='owned') owned,
+          (SELECT COUNT(*) FROM listens l WHERE l.track_id=t.id) plays
+        FROM tracks t`).all();
+      local = rows.filter((t) => String(t.artist || '').toLowerCase().includes(needle));
     } else if (!local.length && !brief) local = picked.tracks;
     const childSafe = childAudience(q);
     // no explicit flag exists for library files, so a child's set is catalogue-only
@@ -644,6 +645,11 @@ async function propose(db, plan) {
       online = await onlineFill(db, outsideOnly || wantedArtist ? [] : local,
         Math.min(targetOnline, Math.max(0, count - local.length)),
         onlineQuery);
+    }
+    // "by X" means X is the artist. A song called "Meshuggah" by someone else is not one.
+    if (wantedArtist && online.length) {
+      const needle = wantedArtist.toLowerCase();
+      online = online.filter((t) => String(t.artist || '').toLowerCase().includes(needle));
     }
     // if the network gave us less than we hoped, top up from the rest of the local picks —
     // unless the request was explicitly for music that is not here
@@ -683,7 +689,7 @@ async function propose(db, plan) {
       }
     } else if (local.length) reasonBits.push(`${played} of ${local.length} you already play.`);
     // 'include some I don't have' is an instruction, not a search term
-    const FILLER = /^(include|including|some|any|ones|tracks|songs|track|song|that|which|i|dont|don't|have|has|not|no|in|my|library|new|find|more|from|the|a|an|and|or|with|of|for|to|please|create|make|build|playlist|crate|set)$/i;
+    const FILLER = /^(include|including|some|any|ones|tracks|songs|track|song|that|which|i|dont|don't|have|has|not|no|in|my|library|new|find|more|from|the|a|an|and|or|with|of|for|to|please|create|make|build|playlist|crate|set|by|like)$/i;
     const sourceName = (searchQ || picked.ctx.text.join(' '))
       .replace(/\b\d+\b/g, ' ')
       .replace(/\s+/g, ' ')

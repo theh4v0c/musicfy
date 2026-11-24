@@ -3173,7 +3173,11 @@ async function runAssistant(text, out, stateEl, box) {
     stateEl.textContent = 'Searching';
     stateEl.classList.add('thinking');
     out.innerHTML = '';
-    const agentish = /\b(create|make|build|download|find|search|show|list|playlist|how many|how much|top rated|top \d)\b/i.test(text);
+    // the sentence decides the destination, not a verb list: "10 electronic tracks I
+    // don't have" and "outside my library" were going to the library filter
+    const agentish = /\b(create|make|build|download|find|search|show|list|playlist|crate|how many|how much|top rated|top \d)\b/i.test(text)
+      || /\b(i (?:do not|don't) have|not in (?:my|the) library|outside (?:my|the) library|i do not own|new to me|discover)\b/i.test(text)
+      || /^\s*\d{1,3}\s+\S+/i.test(text);
     try {
       if (agentish) {
         const a = await api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: text }), nocache: true });
