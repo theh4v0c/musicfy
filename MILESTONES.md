@@ -6,6 +6,23 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · The cover is square on every phone; the heart does not open it (`v478`)
+
+- The now-playing cover is a `div` with a background image, sized by max-width/max-height.
+  On a short phone the width stayed at `min(80vw,300px)` while the height was capped by
+  the available space, so the square artwork was rendered 300×296 and `cover` cropped its
+  edges. It is now `height: min(100%, var(--np-art-max))` with `width: auto` and
+  `aspect-ratio: 1`; the phone override sets the variable instead of the width.
+  Measured square at 390×844, 390×667, 360×640, 375×812, 428×926.
+- Clicking the player-bar heart opened the now-playing page on desktop. `toggleLike()`
+  repaints the heart with `innerHTML` during the click, which detaches the event target;
+  by the time the click bubbled to `.pb-left`, `closest('button')` was false and the
+  container opened the cover. The heart now stops propagation, and `.pb-left` checks the
+  `composedPath()` captured at dispatch. The mini and full-player hearts stop it too.
+
+Verification: like leaves `#np` hidden on desktop, cover square across five phone sizes,
+design-check 37/37, unit 10/10, test 51/51, smoke green.
+
 ### 2026-11-24 · Home stops showing empty rows (`v477`)
 
 Two empty areas came from the data and the lazy loader, not the layout:

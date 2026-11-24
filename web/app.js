@@ -5420,9 +5420,9 @@ $('shuffle').onclick = (e) => { state.shuffle = !state.shuffle; e.currentTarget.
 $('repeat').onclick = (e) => { state.repeat = !state.repeat; e.currentTarget.setAttribute('aria-pressed', state.repeat); };
 $('np-shuffle').onclick = () => $('shuffle').click();
 $('np-repeat').onclick = () => $('repeat').click();
-$('pb-like').onclick = () => state.current && toggleLike(state.current);
-$('np-like').onclick = () => state.current && toggleLike(state.current);
-$('mini-like') && ($('mini-like').onclick = () => state.current && toggleLike(state.current));
+$('pb-like').onclick = (e) => { e.stopPropagation(); state.current && toggleLike(state.current); };
+$('np-like').onclick = (e) => { e.stopPropagation(); state.current && toggleLike(state.current); };
+$('mini-like') && ($('mini-like').onclick = (e) => { e.stopPropagation(); state.current && toggleLike(state.current); });
 
 document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => { state.history = []; $('back').hidden = true; nav(b.dataset.nav); });
 // collapsible sidebar: the toggle lives inside it, collapsed is an icon rail
@@ -5462,7 +5462,11 @@ function openNowPlaying() { if (!state.current) return; $('np').hidden = false; 
 $('pb-art').addEventListener('click', () => setTimeout(fitNowPlaying, 30), true);
 document.querySelector('.pb-left').oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); currentCtx(e.clientX, e.clientY); };
 document.querySelector('.pb-left').onclick = (e) => {
-  if (e.target.closest('button') || e.target.closest('#pb-art') || e.target.closest('#pb-artist')) return;
+  // the heart repaints its icon during the click, which detaches the target; the path
+  // captured at dispatch still contains the button, so use that instead of closest()
+  const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+  const hitControl = path.some((x) => x && (x.tagName === 'BUTTON' || x.id === 'pb-art' || x.id === 'pb-artist'));
+  if (hitControl || e.target.closest('button') || e.target.closest('#pb-art') || e.target.closest('#pb-artist')) return;
   openNowPlaying();
 };
 longPress(document.querySelector('.pb-left'), () => {
