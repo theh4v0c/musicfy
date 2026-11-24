@@ -907,11 +907,12 @@ async function renderHome() {
   v.innerHTML = `
     <section class="mast">
       <div class="mast-glow" id="mast-glow"></div>
-      <div class="mast-meta"><span id="mast-clock"></span><span class="mast-flex"></span></div>
+      <div class="mast-meta"><span id="mast-clock"></span><span id="mast-name"></span><span class="mast-flex"></span></div>
       <div class="mast-main">
         <div class="mast-copy">
-          <h1 class="mast-greet" id="mast-greet">Good ${greetPart()}.</h1>
-          <p class="mast-note" id="mast-note"><span class="mast-fact">${state.playlists.length} playlist${state.playlists.length === 1 ? '' : 's'}, ready when you are.</span></p>
+          <h1 class="mast-greet" id="mast-greet">${state.playlists.length} crates</h1>
+          <p class="mast-note" id="mast-note"><span class="mast-fact">Reading the library…</span></p>
+          <button class="mast-mix" id="mast-mix" hidden></button>
         </div>
         <div class="mast-side">
           <div class="session" id="mast-session" hidden>
@@ -953,22 +954,47 @@ async function renderHome() {
   }, 30000);
   api('/api/greeting', { nocache: true }).then((g) => {
     const greet = document.getElementById('mast-greet');
-    const note = document.getElementById('mast-note');
+    const noteEl = document.getElementById('mast-note');
+    const nameEl = document.getElementById('mast-name');
+    if (nameEl && g.name) nameEl.textContent = g.name.toUpperCase();
+    const mixBtn = document.getElementById('mast-mix');
     if (greet) {
-      // small hours get their own line: "Good evening" at 2am is a lie
-      const late = Number(g.hour) >= 23 || Number(g.hour) < 5;
-      const longSession = g.session && g.session.minutes >= 120;
-      const salutation = late
-        ? (g.name ? `Still up,` : 'Still up.')
-        : longSession ? (g.name ? 'Still going,' : 'Still going.')
-        : `Good ${g.part}${g.name ? ',' : '.'}`;
-      greet.innerHTML = g.name
-        ? `${esc(salutation)}<br><span class="mast-name">${esc(g.name)}</span>`
-        : esc(salutation);
+      // the headline is a mixing fact, not a greeting: what can follow what you played
+      const mix = g.compatible;
+      if (mix && mix.count >= 3 && mix.seed) {
+        greet.innerHTML = `${mix.count} tracks would follow <span class="mast-name">${esc(mix.seed.title || '')}</span>`;
+      } else if (g.session) {
+        const mins = g.session.minutes;
+        greet.textContent = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m in` : `${mins}m in`;
+      } else {
+        greet.textContent = `${(g.stats && g.stats.tracks) || 0} tracks in the library`;
+      }
+      if (mixBtn) {
+        if (mix && mix.count >= 3) {
+          mixBtn.hidden = false;
+          mixBtn.textContent = `Play those ${mix.count}`;
+          mixBtn.onclick = async () => {
+            mixBtn.disabled = true;
+            try {
+              const r = await api('/api/mix/next', { nocache: true });
+              if (r.tracks && r.tracks.length) playList(r.tracks, 0, false, `After ${r.seed && r.seed.title ? r.seed.title : 'the last one'}`);
+              else toast('Nothing compatible right now');
+            } catch { toast('Could not build that'); }
+            mixBtn.disabled = false;
+          };
+        } else {
+          mixBtn.hidden = true;
+        }
+      }
     }
-    if (note) {
+    if (noteEl) {
       const fact = String(g.fact || g.sub || '').replace(/\s*·\s*$/, '');
-      note.innerHTML = fact ? `<span class="mast-fact">${esc(fact)}</span>` : '';
+      const mix = g.compatible;
+      const lead = (mix && mix.count >= 3 && mix.bpm)
+        ? `${mix.bpm} BPM${mix.key ? ` · ${mix.key}${mix.key_scale === 'minor' ? 'm' : ''}` : ''}`
+        : '';
+      const line = [lead, fact].filter(Boolean).join('. ');
+      noteEl.innerHTML = line ? `<span class="mast-fact">${esc(line)}</span>` : '';
     }
     // what this session actually is, drawn from the listens themselves
     const sBox = document.getElementById('mast-session');

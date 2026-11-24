@@ -585,6 +585,41 @@ function sendStatic(req, res, body, type) {
   return res.end(body);
 }
 
+// ---------- harmonic / tempo matching ----------
+// Camelot numbers, so "what follows this" is a musical answer, not a similarity score
+const CAMELOT = { C: 8, G: 9, D: 10, A: 11, E: 12, B: 1, 'F#': 2, 'C#': 3, 'G#': 4, 'D#': 5, 'A#': 6, F: 7 };
+function camelotOf(key, scale) {
+  const n = CAMELOT[String(key || '').toUpperCase().replace('♯', '#')];
+  if (!n) return null;
+  return { n, minor: String(scale || '').toLowerCase() === 'minor' };
+}
+function mixSeed() {
+  try {
+    return db.prepare(`SELECT t.id, t.title, t.artist, t.bpm, t.key, t.key_scale
+      FROM listens l JOIN tracks t ON t.id=l.track_id
+      WHERE t.bpm IS NOT NULL AND t.bpm > 0 ORDER BY l.played_at DESC LIMIT 1`).get();
+  } catch { return null; }
+}
+function mixCandidates(seed, limit = 40, excludeIds = []) {
+  if (!seed || !Number(seed.bpm)) return [];
+  const lo = Number(seed.bpm) * 0.96, hi = Number(seed.bpm) * 1.04;
+  const rows = db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.bpm, t.key, t.key_scale, t.duration, t.has_art,
+      (SELECT COUNT(*) FROM files f WHERE f.track_id=t.id AND f.tier='owned') owned
+    FROM tracks t WHERE t.bpm BETWEEN ? AND ? AND t.id <> ?`).all(lo, hi, seed.id);
+  const seedC = camelotOf(seed.key, seed.key_scale);
+  const skip = new Set(excludeIds.map(Number));
+  return rows
+    .filter((r) => r.owned && !skip.has(r.id))
+    .filter((r) => {
+      const c = camelotOf(r.key, r.key_scale);
+      if (!seedC || !c) return true;             // tempo only when a key is unknown
+      const dn = Math.min((c.n - seedC.n + 12) % 12, (seedC.n - c.n + 12) % 12);
+      return c.n === seedC.n || (dn === 1 && c.minor === seedC.minor);
+    })
+    .sort((a, b) => Math.abs(a.bpm - seed.bpm) - Math.abs(b.bpm - seed.bpm))
+    .slice(0, limit);
+}
+
 // ---------- transcoding queue ----------
 // one at a time: ffmpeg on a Pi competes with streaming and analysis, and a wrong file
 // is worse than a slow one
@@ -2668,6 +2703,16 @@ const server = http.createServer(async (req, res) => {
         }
       } catch {}
 
+      let compatible = null;
+      try {
+        const seed = mixSeed();
+        if (seed && seed.bpm) {
+          const recent = db.prepare(`SELECT track_id FROM listens WHERE played_at >= ?`).all(nowTs - 60 * 60).map((r) => r.track_id);
+          const list = mixCandidates(seed, 40, recent);
+          compatible = { count: list.length, bpm: Math.round(seed.bpm), key: seed.key || null, key_scale: seed.key_scale || null, seed: { id: seed.id, title: seed.title, artist: seed.artist } };
+        }
+      } catch {}
+
       const lastOut = last ? {
         id: last.id, title: last.title, artist: last.artist, album: last.album,
         bpm: last.bpm ? Math.round(last.bpm) : null, key: last.key || null,
@@ -2677,7 +2722,7 @@ const server = http.createServer(async (req, res) => {
         name, part, hour, weather, city, sub, line, fact, last: lastOut,
         // what this listener usually reaches for at this hour: useful, not decorative
         hourFamily: hourFamily ? { family: hourFamily.f, count: hourFamily.n } : null,
-        session,
+        session, compatible,
         stats: { plays, tracks, artists, addedWeek },
       });
     }
@@ -2716,6 +2761,16 @@ const server = http.createServer(async (req, res) => {
           AND COALESCE(t.format,'') != 'catalogue'
         ORDER BY t.artist, t.title LIMIT 200`).all();
       return json(res, 200, { count: rows.length, tracks: rows });
+    }
+
+    // the queue that follows what you last played
+    if (u.pathname === '/api/mix/next') {
+      const seed = mixSeed();
+      if (!seed) return json(res, 200, { seed: null, tracks: [] });
+      const recent = db.prepare(`SELECT track_id FROM listens WHERE played_at >= ?`).all(now() - 3600).map((r) => r.track_id);
+      const tracks = mixCandidates(seed, Math.min(Number(u.searchParams.get('limit')) || 25, 100), recent)
+        .map((t) => ({ ...t, owned: 1, rung: 'local' }));
+      return json(res, 200, { seed: { id: seed.id, title: seed.title, bpm: Math.round(seed.bpm), key: seed.key, key_scale: seed.key_scale }, tracks });
     }
 
     // what arrived most recently, newest first
