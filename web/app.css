@@ -255,6 +255,9 @@ main.main { grid-area: main; display: flex; flex-direction: column; overflow: hi
 .trow:hover { background: var(--bg-elev); }
 .trow.selected { background: var(--bg-elev2); outline: 1px solid rgba(255,255,255,.12); }
 .trow.playing { background: var(--acc-soft); }
+/* a question typed into Search: one line that hands it to A&R */
+.ar-bridge { width: 100%; justify-content: flex-start; text-align: left; margin: 0 0 14px; }
+
 /* a cover picker row: the artwork is the label */
 .ctx-cover { display: flex !important; align-items: center; gap: 9px; }
 .ctx-cover-art { width: 26px; height: 26px; border-radius: var(--r-xs); background-size: cover; background-position: center; background-color: var(--bg-elev2); flex: none; }

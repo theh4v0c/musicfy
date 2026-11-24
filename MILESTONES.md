@@ -95,6 +95,8 @@ undo, teaching that is permanent, visible and deletable)
   Undo on the same card
 - "no Imagine Dragons" is read as an instruction: it writes one exclusion, shows what it
   wrote as a chip, and offers Undo. Settings holds the same value.
+- the Search|Ask switch is gone. Search finds; a sentence that is a question shows one
+  `Ask A&R: "…"` line that opens A&R with it answered.
 
 **Interface**
 - The app says its name where the sidebar cannot: a 11px letterspaced wordmark replaces

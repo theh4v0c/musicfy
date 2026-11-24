@@ -3094,6 +3094,12 @@ async function runAssistant(text, out, stateEl, box) {
     }
   }
 
+/* Search stays literal; a question typed there is handed to A&R with the text it came with */
+function navAandR(question) {
+  state.arPending = String(question || '').trim() || null;
+  nav('askai');
+}
+
 async function renderAskAi() {
   closeInlinePreview();
   setNav('askai');
@@ -3119,6 +3125,12 @@ async function renderAskAi() {
     if (teach) return teachExclusion(teach[1], out, stateEl, box);
     return runAssistant(text, out, stateEl, box);
   };
+  if (state.arPending) {
+    const q0 = state.arPending;
+    state.arPending = null;
+    box.value = q0;
+    run(q0);
+  }
 
   box.onkeydown = (e) => { if (e.key === 'Enter') run(box.value); };
   v.querySelectorAll('.ask-ex').forEach((b) => b.onclick = () => { box.value = b.textContent; run(box.value); });
@@ -3144,21 +3156,16 @@ async function renderSearch() {
   setNav('search'); state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'Search';
   const v = $('view');
-  v.innerHTML = `${heroBanner('SEARCH', 'Search', 'Find a track, or ask the library a question.')}
-    <div class="search-modes" role="tablist">
-      <span class="s-thumb" aria-hidden="true"></span>
-      <button class="s-mode on" data-mode="search" role="tab">Search</button>
-      <button class="s-mode" data-mode="ask" role="tab">Ask</button>
-    </div><div class="search-wrap">
+  v.innerHTML = `${heroBanner('SEARCH', 'Search', 'Find a track, an artist, an album. A&R answers questions.')}
+    <div class="search-wrap">
       <div class="search-field">
-        <input class="search" id="q" placeholder="Search tracks or ask: create a playlist of 10 ambient tracks" autocomplete="off">
+        <input class="search" id="q" placeholder="Search tracks, artists and albums" autocomplete="off">
         <span class="search-status status" id="search-status" hidden></span>
       </div>
-      <p class="ask-note" id="ask-note" hidden>Ask answers from your library: counts, keys, tempo, what to play next.</p>
       <div class="ask-hint" id="search-hints">
-        <button class="ask-ex">tracks in Dm between 120 and 130 bpm</button>
-        <button class="ask-ex">create a playlist of 10 ambient tracks</button>
-        <button class="ask-ex">how much of my library has audio</button>
+        <button class="ask-ex" data-ar>tracks in Dm between 120 and 130 bpm</button>
+        <button class="ask-ex" data-ar>create a playlist of 10 ambient tracks</button>
+        <button class="ask-ex" data-ar>how much of my library has audio</button>
       </div>
       <div class="mode-tabs" id="mode-tabs">
         <span class="filters-label">Include</span>
@@ -3167,7 +3174,7 @@ async function renderSearch() {
         <button class="mode-tab" id="long-sets" data-on="false" aria-pressed="false" title="Include DJ mixes, sets and long recordings">Long sets</button>
       </div>
       <div class="ladder-state" id="ladder-state"></div>
-    </div><div id="qres"></div><div id="search-discover"></div>`;
+    </div><div id="ar-bridge-slot"></div><div id="qres"></div><div id="search-discover"></div>`;
   renderExternalInto($('search-discover'));
   const q = $('q'); q.focus();
   if (!state.allTracks) state.allTracks = await api('/api/tracks');
@@ -3195,64 +3202,37 @@ async function renderSearch() {
   const assistantish = /\b(create|make|build|download|playlist|how many|how much|top rated|top \d|what can|help|which|who|when)\b|\b(tracks?|songs?)\b[^.]*\b(in|between|around|with|from)\b|\bbpm\b/i;
   const disc = $('search-discover');
   const statusEl = $('search-status');
-  if (state.askMode == null) state.askMode = false;
   const setSearchStatus = (text) => {
     if (!statusEl) return;
     statusEl.innerHTML = text ? `${esc(text)}<span class="dots"><i></i><i></i><i></i></span>` : '';
     statusEl.hidden = !text;
   };
-  const modeBtns = [...document.querySelectorAll('.s-mode')];
-  const thumb = document.querySelector('.s-thumb');
-  const askNote = $('ask-note');
-  const tabsRow = $('mode-tabs');
+  // no Search|Ask switch any more: asking has its own destination, so this page has one job
   const hints = $('search-hints');
-  const paintAsk = () => {
-    const ask = !!state.askMode;
-    modeBtns.forEach((b) => {
-      const on = (b.dataset.mode === 'ask') === ask;
-      b.classList.toggle('on', on);
-      b.setAttribute('aria-selected', String(on));
-    });
-    q.placeholder = ask
-      ? 'Ask about your library: what is in Dm at 124, how many tracks are analysed'
-      : 'Search tracks, artists and albums';
-    // the thumb sits under the active word, so the state is positional, not colour alone
-    if (thumb) {
-      const active = modeBtns.find((b) => b.classList.contains('on')) || modeBtns[0];
-      thumb.style.width = `${active.offsetWidth}px`;
-      thumb.style.transform = `translateX(${active.offsetLeft - modeBtns[0].offsetLeft}px)`;
-    }
-    if (askNote) askNote.hidden = !ask;
-    // the library/web filters only mean something for a search
-    if (tabsRow) tabsRow.style.display = ask ? 'none' : '';
-    if (hints) hints.style.display = ask ? 'none' : '';
-  };
-  modeBtns.forEach((b) => b.onclick = () => {
-    // switching mode changes how the next Enter is read; it must not re-run the last query
-    state.askMode = b.dataset.mode === 'ask';
-    paintAsk();
-    q.focus();
-  });
-  paintAsk();
   const submit = () => {
     const text = q.value.trim();
     if (!text) { if (disc) disc.hidden = false; draw(); return; }
     // a plain search ends the draft conversation; a short instruction continues it
     const followish = !!state.lastAgent && /^(more|fewer|less|another|add|remove|drop|make (?:it|them)|same|also|but|now|instead|plus|minus|swap|replace|darker|lighter|faster|slower|shorter|longer|no |without |only |just |and )/i.test(text);
-    if (!state.askMode && !followish) state.lastAgent = null;
-    if (disc) disc.hidden = true;   // suggestions are for browsing, not for answering
-    if (assistantish.test(text) && !state.askMode) { state.askMode = true; paintAsk(); }
-    if (state.askMode) { drawAsk(text); q.focus(); return; }
+    if (!followish) state.lastAgent = null;
+    if (disc) disc.hidden = true;   // suggestions are for browsing
     $('view').classList.remove('asking');
+    // a question typed into Search is still handed to the place that answers it
+    const slot = $('ar-bridge-slot');
+    if (slot) slot.innerHTML = '';
+    if (assistantish.test(text) && slot) {
+      const bridge = document.createElement('button');
+      bridge.className = 'btn btn-ghost ar-bridge';
+      bridge.textContent = `Ask A&R: “${text.length > 62 ? text.slice(0, 62) + '…' : text}”`;
+      bridge.onclick = () => navAandR(text);
+      slot.appendChild(bridge);
+    }
     draw();
   };
+  // every example is a question, so it opens the place that answers them
   document.querySelectorAll('#search-hints .ask-ex').forEach((b) => b.onclick = () => {
     q.value = b.textContent;
-    // every example is phrased as a question, so it is answered as one
-    state.askMode = true;
-    paintAsk();
-    submit();
-    q.focus();
+    navAandR(b.textContent);
   });
   const paintLS = () => {
     const ls = $('long-sets');
@@ -3343,153 +3323,6 @@ async function renderSearch() {
     }
     if (mode === 'all' && (!inLibrary || scored[0].score < 100)) await drawLadder(s, inLibrary);
     setSearchStatus('');
-  };
-
-  const drawAsk = async (text) => {
-    res.innerHTML = '';
-    setSearchStatus('Reading your library', 'thinking');
-    // verbs like create, find, download go to the agent; questions go to the query engine.
-    // a short instruction after a draft is a follow-up, whatever its first word is.
-    const followText = !!state.lastAgent && /^(more|fewer|less|another|add|remove|drop|make (?:it|them)|same|also|but|now|instead|plus|minus|swap|replace|darker|lighter|faster|slower|shorter|longer|no |without |only |just |and )/i.test(text.trim());
-    const followShaped = /^(more|fewer|less|another|add|remove|drop|make (?:it|them)|same|also|but|now|instead|plus|minus|swap|replace|darker|lighter|faster|slower|shorter|longer|no |without |only |just |and )/i.test(text.trim());
-    if (followShaped && !state.lastAgent) {
-      // nothing to adjust: say so instead of matching the words against titles
-      setSearchStatus('');
-      res.innerHTML = `<section class="answer"><div class="answer-head"><span class="answer-kicker">Answer</span><span class="answer-src">LOCAL</span></div>
-        <p class="answer-said">That reads like a follow-up, but there is no draft to adjust. Ask for a playlist first — then “darker”, “30 tracks” or “no Daft Punk” will apply to it.</p></section>`;
-      return;
-    }
-    const agentish = followText || /\b(create|make|build|download|find|search|show|list|playlist|how many|how much|top rated|top \d)\b/i.test(text);
-    if (agentish) {
-      setSearchStatus('Working out what to do', 'thinking');
-      let a;
-      // a short instruction ("make it darker", "30 tracks") points at the last draft
-      const previous = state.lastAgent && state.lastAgent.plan ? state.lastAgent : null;
-      try {
-        a = await api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: text, previous }), nocache: true });
-      } catch { a = null; }
-      if (a && a.plan) state.lastAgent = { question: a.question || text, plan: a.plan };
-      if (a && a.spoken) {
-        setSearchStatus('');
-        res.innerHTML = '';
-        const card = document.createElement('section');
-        card.className = 'answer';
-        card.innerHTML = `<div class="answer-head">
-            <span class="answer-kicker">Answer</span>
-            <span class="answer-q">${esc(text)}</span>
-            <span class="answer-src">${a.source === 'llm' ? 'model' : 'local'}</span>
-          </div>
-          <p class="answer-said">${esc(a.spoken)}</p>`;
-        res.appendChild(card);
-        if (a.plan && a.plan.intent) {
-          const meta = document.createElement('div');
-          meta.className = 'answer-notes';
-          meta.innerHTML = `<span class="mast-chip">${esc(String(a.plan.intent).replace(/_/g, ' '))}</span>`;
-          card.appendChild(meta);
-        }
-        // a draft worth approving goes straight under the sentence, with its buttons
-        if (a.action) { renderActionCard(a, res, null); return; }
-        if (a.data && a.data.playlist) {
-          const open = document.createElement('button');
-          open.className = 'btn answer-open';
-          open.textContent = `Open "${a.data.playlist.name}"`;
-          open.onclick = async () => { afterWrite(); await loadPlaylists(); openPlaylist(a.data.playlist.id, false); };
-          card.appendChild(open);
-        }
-        const lib = (a.data && a.data.library) || [];
-        if (lib.length) {
-          const wrap = document.createElement('div');
-          wrap.className = 'answer-body';
-          const tracks = lib.map((r) => ({ ...r, rung: r.owned ? 'local' : null }));
-          tracks.forEach((t, i) => { registerRow(t); wrap.appendChild(trow(t, i, tracks)); });
-          card.appendChild(wrap);
-        }
-        const cat = (a.data && a.data.catalogue) || [];
-        if (cat.length) {
-          const sec = document.createElement('div');
-          sec.innerHTML = `<div class="sec-title">Also in the catalogue <small>${cat.length}</small></div>`;
-          for (const s of cat.slice(0, 10)) {
-            const row = document.createElement('div');
-            row.className = 'trow';
-            row.innerHTML = `<div class="tno"></div><div class="tart ph">${esc((s.artist || '?').charAt(0))}</div>
-              <div class="tmeta"><div class="tt">${esc(s.title || '')}</div><div class="tbpm">${s.duration ? fmt(s.duration) : ''}</div></div>
-              <div class="tartist"><span class="alink">${esc(s.artist || '')}</span></div>
-              <div class="talbum">${esc(s.album || '')}</div><div class="tadded"></div><div class="tdur"></div>
-              <button class="tmore" title="Preview before downloading">${IC.play}</button>`;
-            if (s.cover) {
-              const art = row.querySelector('.tart');
-              art.style.backgroundImage = `url("${s.cover}")`;
-              art.style.backgroundSize = 'cover';
-              art.style.backgroundPosition = 'center';
-              art.textContent = '';
-            }
-            row.style.cursor = 'pointer';
-            const preview = (e) => { if (e) e.stopPropagation(); toggleSuggestionPreview(s, row); };
-            row.onclick = preview;
-            row.querySelector('.tmore').onclick = preview;
-            sec.appendChild(row);
-          }
-          card.appendChild(sec);
-        }
-        return;
-      }
-    }
-    let d;
-    try {
-      d = await api('/api/ask', { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ q: text, previous: state.askPrevious || null }), nocache: true });
-    } catch (e) {
-      setSearchStatus('');
-      res.innerHTML = `<div class="empty">Could not answer that.</div>`;
-      return;
-    }
-    setSearchStatus('');
-    res.innerHTML = '';
-    state.askPrevious = d.filters || null;
-    const notes = (d.filters && d.filters.notes) || [];
-    const card = document.createElement('section');
-    card.className = 'answer';
-    const said = d.count
-      ? `${d.count} track${d.count === 1 ? '' : 's'} in your library match${d.count === 1 ? 'es' : ''} that.`
-      : 'Nothing in your library matches that.';
-    card.innerHTML = `<div class="answer-head">
-        <span class="answer-kicker">Answer</span>
-        <span class="answer-q">${esc(text)}</span>
-        <span class="answer-src">${d.source === 'llm' ? 'model' : 'local'}</span>
-      </div>
-      <p class="answer-said">${esc(said)}</p>
-      ${(notes.length || d.relaxed) ? `<div class="answer-notes">${notes.map((n) => `<span class="mast-chip">${esc(n)}</span>`).join('')}${d.relaxed ? `<span class="mast-chip warn">${esc(String(d.relaxed))}</span>` : ''}</div>` : ''}`;
-    res.appendChild(card);
-
-    if (d.count) {
-      const bar = document.createElement('div');
-      bar.className = 'ask-actions';
-      bar.innerHTML = `<button class="btn" id="ask-create">Create playlist from these ${d.count}</button>`;
-      card.appendChild(bar);
-      bar.querySelector('#ask-create').onclick = async () => {
-        const name = prompt('Playlist name:', text.slice(0, 60));
-        if (!name) return;
-        try {
-          const r = await api('/api/ask', { method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ q: text, create: true, name }), nocache: true });
-          if (r.playlist) { afterWrite(); await loadPlaylists(); toast(`Created "${r.playlist.name}" with ${r.playlist.tracks} tracks`, 5000); openPlaylist(r.playlist.id, false); }
-          else toast('Nothing to add', 4000);
-        } catch { toast('Could not create the playlist', 4000); }
-      };
-    }
-
-    if (!d.count) return;
-    const list = document.createElement('div');
-    list.className = 'answer-body';
-    const tracks = d.results.map((r) => ({ ...r, rung: r.owned ? 'local' : null, owned: r.owned }));
-    tracks.forEach((t, i) => { registerRow(t); list.appendChild(trow(t, i, tracks)); });
-    card.appendChild(list);
-    if (d.count > tracks.length) {
-      const more = document.createElement('div');
-      more.className = 'ladder-state';
-      more.textContent = `Showing ${tracks.length} of ${d.count}. Narrow the question to see the rest.`;
-      card.appendChild(more);
-    }
   };
 
   const renderCatalogue = (box, data) => {
@@ -3860,8 +3693,7 @@ async function renderSearch() {
     const value = q.value.trim();
     if (!value && disc) disc.hidden = false;
     if (!value) { setSearchStatus(''); return; }
-    if (state.askMode) { setSearchStatus('Press Enter to ask', 'idle'); return; }
-    if (assistantish.test(value)) { setSearchStatus('Press Enter to ask', 'idle'); return; }
+    if (assistantish.test(value)) { setSearchStatus('Press Enter to search · A&R answers questions', 'idle'); return; }
     $('view').classList.remove('asking');
     setSearchStatus('Searching', 'thinking');
     deb = setTimeout(draw, 350);

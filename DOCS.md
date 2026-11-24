@@ -139,6 +139,10 @@ builds and acts.
   harmonic queue already obey.
 - Proposals (a crate, a download) still require an explicit confirm; nothing destructive
   happens from a sentence.
+- **Search no longer asks.** The Search|Ask switch is gone: that page finds tracks, artists
+  and albums. A sentence that reads as a question still gets a single bridge line above
+  the results — `Ask A&R: "…"` — which opens A&R with the text already answered. One
+  destination for asking, and no second place with the same job.
 
 ## Exclusions ("keep out of picks")
 
