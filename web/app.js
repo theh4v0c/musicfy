@@ -1825,13 +1825,13 @@ async function renderDjExport() {
       <div class="crate-acts">
         <button class="crate-btn" data-rb title="Download a ZIP with the audio + rekordbox XML">Rekordbox</button>
         <button class="crate-btn" data-tr title="Download a ZIP with the audio + Traktor NML">Traktor</button>
-        <button class="crate-btn" data-usb title="ZIP of the audio under Contents/ for a CDJ USB">USB</button>
+        <button class="crate-btn" data-usb title="Pioneer device export: export.pdb, analysis files and audio — extract to the root of a FAT32 USB">USB</button>
       </div>`;
     }
     const missingPrep = Math.max(0, (p.owned || 0) - (p.prepped || 0));
     const exportCrate = (fmt) => {
-      if (missingPrep && !confirm(`${missingPrep} track${missingPrep === 1 ? '' : 's'} in "${p.name}" have no beat grid. Cues will be missing. Export anyway?`)) return;
-      toast(fmt === 'usb' ? 'Zipping for the CDJ…' : 'Zipping the crate…', 6000);
+      if (missingPrep && fmt !== 'usb' && !confirm(`${missingPrep} track${missingPrep === 1 ? '' : 's'} in "${p.name}" have no beat grid. Cues will be missing. Export anyway?`)) return;
+      toast(fmt === 'usb' ? 'Building the CDJ library…' : 'Zipping the crate…', 6000);
       if (fmt === 'usb') window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/pioneer.zip`;
       else window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.zip?format=${fmt}`;
     };

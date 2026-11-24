@@ -26,6 +26,7 @@ const deezer = require('./deezer');
 const archive = require('./archive');
 const spotify = require('./spotify');
 const exporter = require('./export');
+const pioneer = require('./pioneer');
 const tagwrite = require('./tagwrite');
 const transcode = require('./transcode');
 const { DatabaseSync } = require('node:sqlite');
@@ -4190,53 +4191,46 @@ const server = http.createServer(async (req, res) => {
       return res.end(body);
     }
 
-    // CDJ USB (folder mode): audio under Contents/<playlist>/ so a Pioneer player can browse and play
+    // CDJ USB: a real Pioneer device tree — PIONEER/rekordbox/export.pdb (the database the
+    // player reads), PIONEER/USBANLZ analysis files, and the audio under Contents/<set>/
     const mUsb = u.pathname.match(/^\/api\/playlists\/([^/]+)\/export\/pioneer\.zip$/);
     if (mUsb) {
       const pid = decodeURIComponent(mUsb[1]);
       const pl = db.prepare('SELECT name FROM playlists WHERE id=?').get(pid) || { name: 'playlist' };
       const safe = (String(pl.name).replace(/[/\\:*?"<>|]+/g, '_').slice(0, 60) || 'playlist').trim();
       const tmpDir = fs.mkdtempSync(path.join('/tmp', 'mfusb-'));
-      const folder = path.join(tmpDir, 'Contents', safe);
-      fs.mkdirSync(folder, { recursive: true });
-      const rows = db.prepare(`SELECT t.id, t.title, t.artist, f.path FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
-        LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
-        WHERE pt.playlist_id=? ORDER BY pt.position`).all(pid);
-      const used = new Set();
-      let n = 0;
-      for (const r of rows) {
-        if (!r.path || !fs.existsSync(r.path)) continue;
-        const ext = path.extname(r.path) || '.mp3';
-        const base = (`${r.artist ? r.artist + ' - ' : ''}${r.title}`.replace(/[/\\:*?"<>|]+/g, '_').slice(0, 120) || ('track-' + r.id)).trim();
-        let name = base + ext;
-        let i = 2;
-        while (used.has(name.toLowerCase())) name = `${base} (${i++})${ext}`;
-        used.add(name.toLowerCase());
-        fs.copyFileSync(r.path, path.join(folder, name));
-        n += 1;
+      try {
+        const built = pioneer.buildUsbTree(db, pid, tmpDir);
+        if (!built.tracks) {
+          fs.rmSync(tmpDir, { recursive: true, force: true });
+          return json(res, 404, { error: 'nothing downloaded in this playlist yet' });
+        }
+        fs.writeFileSync(path.join(tmpDir, 'MUSICFY-USB.txt'),
+          'MUSICFY — CDJ / XDJ USB export\n\n' +
+          'Extract the CONTENTS OF THIS ZIP to the ROOT of a FAT32 or exFAT USB drive.\n' +
+          'You should end up with PIONEER/ and Contents/ at the top level of the drive.\n\n' +
+          `Playlist: ${safe}\nTracks: ${built.tracks}\nAnalysis files: ${built.anlz}\n\n` +
+          'On a CDJ/XDJ: insert the drive, press USB, browse to rekordbox > PLAYLISTS > ' + safe + '.\n' +
+          'If the player shows the drive but no library, the drive is not FAT32/exFAT or the\n' +
+          'extraction put PIONEER/ inside another folder.\n');
+        const zipPath = path.join(tmpDir, 'usb.zip');
+        await new Promise((resolve, reject) => {
+          execFile('zip', ['-r', '-q', zipPath, 'PIONEER', 'Contents', 'MUSICFY-USB.txt'], { cwd: tmpDir, timeout: 600000 }, (err) => err ? reject(err) : resolve());
+        });
+        res.writeHead(200, {
+          'content-type': 'application/zip',
+          'content-disposition': `attachment; filename="${safe} (CDJ USB).zip"`,
+          'content-length': fs.statSync(zipPath).size,
+          'cache-control': 'no-store',
+        });
+        const stream = fs.createReadStream(zipPath);
+        stream.pipe(res);
+        stream.on('close', () => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} });
+        return;
+      } catch (e) {
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+        return json(res, 500, { error: `usb export failed: ${e.message}` });
       }
-      if (!n) { fs.rmSync(tmpDir, { recursive: true, force: true }); return json(res, 404, { error: 'nothing downloaded in this playlist yet' }); }
-      fs.writeFileSync(path.join(tmpDir, 'MUSICFY-USB.txt'),
-        'MUSICFY — CDJ USB export\n\n' +
-        'Extract the CONTENTS OF THIS ZIP to the ROOT of a FAT32/exFAT USB drive.\n' +
-        `Result: /Contents/${safe}/ with ${n} tracks.\n\n` +
-        `On the CDJ: insert the drive, choose USB / Browse (not the rekordbox library), open Contents/${safe}, play.\n` +
-        'This is folder playback: no rekordbox playlists, cues or waveforms. For those, import the Rekordbox\n' +
-        'export into rekordbox desktop, or wait for the direct PDB/ANLZ export.\n');
-      const zipPath = path.join(tmpDir, 'usb.zip');
-      await new Promise((resolve, reject) => {
-        execFile('zip', ['-r', '-q', zipPath, 'Contents', 'MUSICFY-USB.txt'], { cwd: tmpDir, timeout: 180000 }, (err) => err ? reject(err) : resolve());
-      });
-      res.writeHead(200, {
-        'content-type': 'application/zip',
-        'content-disposition': `attachment; filename="${safe} (CDJ USB).zip"`,
-        'content-length': fs.statSync(zipPath).size,
-        'cache-control': 'no-store',
-      });
-      const stream = fs.createReadStream(zipPath);
-      stream.pipe(res);
-      stream.on('close', () => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} });
-      return;
     }
 
     // portable set: ZIP with the actual audio + the XML/NML so the right tracks travel with the set

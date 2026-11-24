@@ -124,6 +124,50 @@ the list of forbidden patterns. `bin/design-check.mjs` enforces it (tokens ↔ C
 the built pages at 1440 and 390) and exits non-zero on drift. Run it before and after
 any visual change.
 
+## DJ export
+
+Three artefacts come out of a crate. The formats were checked against real parsers, not
+against a hunch.
+
+**Rekordbox XML** (`/api/playlists/:id/export/rekordbox.xml`) — `DJ_PLAYLISTS` with the
+full attribute set rekordbox writes, `Tonality` for harmonic mixing, `<TEMPO>` and memory
+cues from the beat grid, and the playlist under `PLAYLISTS > NODE > NODE`. Escaping is
+deliberately conservative: no `&apos;`, control bytes stripped — rekordbox's parser is
+hand-rolled and answers "unknown error" otherwise. Round-trip checked with `pyrekordbox`
+(RekordboxXml): 13 tracks, one playlist, 13 keys.
+
+**Traktor NML** (`/api/playlists/:id/export/traktor.nml`) — `LOCATION DIR` is
+colon-prefixed per segment (`/:Users/:me/:Music/:set/`), and the playlist is wrapped in
+`NODE > SUBNODES > NODE > PLAYLIST` with a UUID. Without that nesting Traktor imports the
+collection and silently drops the playlist, which is what "it asks to import a collection"
+was.
+
+**Pioneer USB** (`/api/playlists/:id/export/pioneer.zip`) — a real device tree:
+
+```
+PIONEER/rekordbox/export.pdb                  the database the player reads
+PIONEER/USBANLZ/P###/########/ANLZ0000.DAT    beat grid per track
+Contents/<set>/<Artist - Title>.<ext>         the audio
+```
+
+`core/pioneer.js` writes both binary formats from scratch:
+
+- export.pdb is the paginated DeviceSQL relational file: 4096-byte pages, a header page
+  with one table pointer per table, per-table index + data pages, a heap that grows
+  forward and a row index that grows backward, and DeviceSQL strings (short ASCII or
+  long ASCII/UTF-16). Tables written: tracks, artists, albums, genres, keys,
+  playlist_tree, playlist_entries.
+- ANLZ is big-endian: `PMAI` header then tagged sections; `PQTZ` carries the beat grid
+  (beat in bar, BPM×100, time in ms). Written only when the track has a real beat grid.
+
+Verified with `rekordcrate` (the Rust parser Mixxx uses, `cargo install rekordcrate`):
+`dump-pdb` reads every table, every title, every `file_path`, the playlist tree and its
+entries without error. ANLZ verified with `pyrekordbox.anlz`: 193 beats at 129.2 BPM with
+the right times.
+
+Known gap: no `.EXT`/`.2EX` waveform files yet (grid and BPM work, waveform art does not),
+and no OneLibrary `exportLibrary.db` for the newest players. Both are additive.
+
 ## Playback
 
 `/api/stream/:id` serves owned files with ranges and a private one day cache, and 302 redirects stream rows to the resolved source, cached four hours (`resolveStreamUrl`). The client prefetches one track ahead, and only after the current one has played a while with buffer of its own: two prefetches over one slow uplink starve the track that is playing, which is what a car on mobile data actually hears.
