@@ -896,6 +896,11 @@ function bindViewSwitch(scope, onChange) {
   });
 }
 
+function thousands(n) {
+  const v = Number(n);
+  return Number.isFinite(v) ? v.toLocaleString('en-US') : String(n ?? '');
+}
+
 function heroBanner(kicker, title, sub) {
   return `<div class="prep-hero"><div class="prep-kicker">${esc(kicker)}</div><div class="prep-title">${esc(title)}</div><p class="prep-sub">${esc(sub)}</p></div>`;
 }
@@ -991,10 +996,11 @@ async function renderHome() {
   // on a phone delay the first play more than the audio itself does
   const lazy = document.getElementById('home-lazy');
   if (!lazy) return;
-  const fillRest = () => {
-    if (lazy.dataset.filled) return;
-    lazy.dataset.filled = '1';
-    renderDiscoverInto($('discover-home'));
+  // recents and the playlist grid cost no requests: they are already in memory, so they
+  // paint immediately. A phone that shows two empty headings for four seconds looks broken.
+  const paintKnown = () => {
+    if (lazy.dataset.known) return;
+    lazy.dataset.known = '1';
     drawRecents(rec);
     const grid = $('home-grid');
     if (grid) {
@@ -1007,6 +1013,12 @@ async function renderHome() {
         grid.after(more);
       }
     }
+  };
+  paintKnown();
+  const fillRest = () => {
+    if (lazy.dataset.filled) return;
+    lazy.dataset.filled = '1';
+    renderDiscoverInto($('discover-home'));
   };
   // playback wins the network: the rails wait for a scroll, or for six quiet seconds.
   // On a phone in a car the press of play happens first, and it must not queue behind
@@ -1884,6 +1896,12 @@ async function renderSongs(push = true) {
 
   const chips = $('songs-chips');
   if (!chips) return; // view changed while the library was loading
+  // on a phone the row scrolls sideways; fade the edge that has more behind it
+  const syncChips = () => {
+    chips.classList.toggle('fade-r', chips.scrollLeft + chips.clientWidth < chips.scrollWidth - 2);
+    chips.classList.toggle('fade-l', chips.scrollLeft > 2);
+  };
+  chips.addEventListener('scroll', syncChips, { passive: true });
   const paintChips = () => {
     const artists = new Set(all.map((t) => t.artist).filter(Boolean));
     const albums = new Set(all.map((t) => t.album).filter(Boolean));
@@ -1898,6 +1916,7 @@ async function renderSongs(push = true) {
       <button class="action-chip" data-browse="uploadfolder"><b>Upload a folder</b><span>ADDS EVERY TRACK INSIDE</span></button>
       <button class="action-chip" data-browse="bpm"><b>Sort by BPM</b><span>${all.filter((t) => t.bpm).length} ANALYSED</span></button>
       <button class="action-chip" data-browse="genres"><b>Genres</b><span>BROWSE BY FAMILY</span></button>`;
+    if (innerWidth <= 760) requestAnimationFrame(syncChips);
     chips.querySelectorAll('[data-browse]').forEach((b) => b.onclick = async () => {
       if (b.dataset.browse === 'import') { importSpotifyTrack(); return; }
       if (b.dataset.browse === 'picks') {
@@ -2125,7 +2144,7 @@ async function renderSongs(push = true) {
   const statsEl = $('songs-stats');
   if (statsEl) {
     api('/api/stats').then((s) => {
-      statsEl.textContent = `${s.tracks} tracks · ${(s.owned_bytes / 1073741824).toFixed(1)} GB on disk`;
+      statsEl.textContent = `${thousands(s.tracks)} tracks · ${(s.owned_bytes / 1073741824).toFixed(1)} GB on disk`;
     }).catch(() => { statsEl.textContent = `${all.length} tracks`; });
   }
 
@@ -3978,7 +3997,7 @@ function paintPill() {
   const el = $('pill');
   if (!el) return;
   api('/api/stats', { nocache: true }).then((s) => {
-    el.textContent = `${s.tracks} TRACKS · ${(s.owned_bytes / 1073741824).toFixed(1)}G`;
+    el.textContent = `${thousands(s.tracks)} TRACKS · ${(s.owned_bytes / 1073741824).toFixed(1)}G`;
   }).catch(() => { el.textContent = ''; });
 }
 

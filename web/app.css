@@ -996,12 +996,18 @@ main.main { transition: margin-right .18s ease; }
   }
 }
 
-/* phones: the library tools become one swipeable row instead of seven rows of tiles */
+/* phones: the library tools become one swipeable row. Ten chips stacked is 370px of
+   chrome before the first track, which is most of a phone screen */
 @media (max-width: 760px) {
   #songs-chips { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
     -webkit-overflow-scrolling: touch; margin: 0 -16px 12px; padding: 0 16px 6px; }
   #songs-chips::-webkit-scrollbar { display: none; }
-  #songs-chips .action-chip { flex: 0 0 auto; min-width: 0; padding: 9px 14px; }
+  /* a chip cut in half at the edge reads as a broken layout, not as "there is more".
+     The mask only shows on the side that actually has content behind it */
+  #songs-chips.fade-r { mask-image: linear-gradient(90deg, #000 calc(100% - 34px), transparent); -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 34px), transparent); }
+  #songs-chips.fade-l { mask-image: linear-gradient(90deg, transparent, #000 34px); -webkit-mask-image: linear-gradient(90deg, transparent, #000 34px); }
+  #songs-chips.fade-l.fade-r { mask-image: linear-gradient(90deg, transparent, #000 34px, #000 calc(100% - 34px), transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 34px, #000 calc(100% - 34px), transparent); }
+  #songs-chips .action-chip { flex: 0 0 auto; min-width: 0; padding: 11px 15px; }
   #songs-chips .action-chip span { display: none; }
 }
 
@@ -1117,10 +1123,6 @@ main.main { transition: margin-right .18s ease; }
   .ip-actions .btn { flex: 1; }
 }
 
-/* last word on the phone chip row: it wraps, it does not scroll sideways */
-@media (max-width: 920px) {
-  #songs-chips { flex-wrap: wrap; overflow: visible; }
-}
 
 /* prep rows on a phone: two lines, controls under the title, nothing off-screen */
 @media (max-width: 920px) {
@@ -1132,4 +1134,45 @@ main.main { transition: margin-right .18s ease; }
   .crate-row .crate-analyze, .crate-row .crate-ready-tag { grid-area: act; }
   .crate-row-acts { grid-area: acts; justify-content: flex-end; flex-wrap: wrap; }
   .crate-row-acts .crate-btn { font-size: 10.5px; padding: 7px 10px; }
+}
+
+/* phones: the page header drops to one quiet line. The top bar already names the view,
+   so a 30px title, a kicker and a decorative wave is duplication that costs 150px */
+@media (max-width: 600px) {
+  .prep-hero { padding: 13px 15px; margin-bottom: 14px; border-radius: 14px; }
+  .prep-kicker { display: none; }
+  .prep-title { font-size: 20px; margin: 0 0 1px; }
+  .prep-sub { font-size: 12.5px; max-width: none; }
+  .prep-hero::after { display: none; }
+  .row-scroller { gap: 12px; }
+  .sec-title { margin: 18px 0 10px; }
+}
+
+/* phones: every row of controls is one swipeable line. Six sort chips on two rows
+   pushed the first playlist to 430px down a 844px screen */
+@media (max-width: 600px) {
+  .mode-tabs, .lib-actions, .prep-actions, .plhead-actions {
+    flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+    -webkit-overflow-scrolling: touch; margin-left: -16px; margin-right: -16px; padding: 0 16px 4px;
+  }
+  .mode-tabs::-webkit-scrollbar, .lib-actions::-webkit-scrollbar,
+  .prep-actions::-webkit-scrollbar, .plhead-actions::-webkit-scrollbar { display: none; }
+  .mode-tab, .lib-actions .btn, .prep-actions .btn, .plhead-actions .btn { flex: 0 0 auto; }
+  #pill { display: none; }
+}
+
+/* touch: a finger needs 44px. A mouse does not, so this only applies where it costs
+   nothing on a pointer device */
+@media (pointer: coarse) {
+  .tcard .tcard-play, .pcard-play, .qtile-play, .topresult-play { width: 44px; height: 44px; }
+  .tcard .tcard-play { right: 8px; bottom: 34px; }
+  .icon-btn { min-width: 44px; min-height: 44px; }
+  .like, .tmore { min-width: 44px; min-height: 44px; }
+  .bn-btn { min-height: 54px; }
+  .action-chip { padding: 11px 16px; }
+  .mode-tab { padding: 9px 14px; }
+  /* a 26px play disc and a 9px genre tag are mouse targets. The row keeps its density;
+     the tappable area grows past the paint */
+  .tno-play, .genrechip, .keychip, .vw { position: relative; }
+  .tno-play::after, .genrechip::after, .keychip::after, .vw::after { content: ""; position: absolute; inset: -7px; }
 }
