@@ -1505,7 +1505,7 @@ function plistRow(p) {
         ? `<div class="lrow-art ph" style="background:linear-gradient(135deg,#ff6b47,#8a1d12)">${IC.heartFull}</div>`
         : `<img class="lrow-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=120&v=${state.artV || 0}" alt="" loading="lazy" decoding="async">`}
     </div>
-    <div class="lrow-t"><b>${p.idx ? `<span class="lrow-no">${idxLabel(p.idx)}</span>` : ''}${esc(p.name)}</b><i>${p.n_tracks || 0} track${Number(p.n_tracks) === 1 ? '' : 's'}</i></div>`;
+    <div class="lrow-t"><b>${p.idx ? `<span class="lrow-no">${idxLabel(p.idx)}</span>` : ''}${esc(p.name)}</b><i>${p.n_tracks || 0} track${Number(p.n_tracks) === 1 ? '' : 's'}${p.kind === 'listen' ? ' · listening' : ''}</i></div>`;
   el.querySelector('.lrow-play').onclick = (e) => {
     e.stopPropagation();
     if (liked) playLiked(); else playPlaylist(p.id);
@@ -1530,7 +1530,7 @@ function pcard(p, idx) {
       <button class="pcard-play" aria-label="Play ${esc(p.name)}">${IC.play}</button>
     </div>
     <div class="pcard-name">${esc(p.name)}</div>
-    <div class="pcard-sub">${idx ? `<span class="pcard-no">${idxLabel(idx)}</span> · ` : ''}${p.n_tracks} tracks</div>`;
+    <div class="pcard-sub">${idx ? `<span class="pcard-no">${idxLabel(idx)}</span> · ` : ''}${p.n_tracks} tracks${p.kind === 'listen' ? ' · listening' : ''}</div>`;
   el.querySelector('.pcard-play').onclick = (e) => { e.stopPropagation(); playPlaylist(p.id); };
   el.onclick = () => openPlaylist(p.id);
   el.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); openPlaylistMenu(p, e.clientX, e.clientY); };
@@ -1559,11 +1559,18 @@ async function openPlaylist(pid, push = true) {
       <div>
         <div class="plhead-kicker">PLAYLIST${plNo ? ` <span class="pl-idx">${idxLabel(plNo)}</span>` : ''}</div>
         <h1 class="plhead-name">${esc(p.name)}</h1>
-        <div class="plhead-meta"><b id="pln">...</b> tracks &middot; <span id="pldur"></span></div>
+        <div class="plhead-meta"><b id="pln">...</b> tracks &middot; <span id="pldur"></span><span id="plan">${p.kind === 'listen'
+          ? ' &middot; listening only'
+          : (!p.owned ? ' &middot; no audio'
+            : (p.prepped === p.owned ? ' &middot; analysed, current' : ` &middot; ${Math.max(0, (p.owned || 0) - (p.prepped || 0))} need analysis`))}</span></div>
         <div class="plhead-actions">
           <button class="btn btn-primary" id="pl-play">${IC.play}&nbsp; Play</button>
           <button class="btn btn-ghost" id="pl-shuf">${IC.shuffle}&nbsp; Shuffle</button>
           <button class="btn btn-ghost" id="pl-harm" title="Order by harmonic key progression (Camelot)">Harmonic</button>
+          <div class="kind-switch" id="pl-kind" role="group" aria-label="How this playlist is used">
+            <button class="mode-tab${p.kind === 'listen' ? '' : ' on'}" data-kind="dj" title="Prepped for DJ export">DJ set</button>
+            <button class="mode-tab${p.kind === 'listen' ? ' on' : ''}" data-kind="listen" title="Playback only — Prep leaves it alone">Listening</button>
+          </div>
           <button class="btn btn-ghost" id="pl-upload">Upload tracks</button>
           ${viewSwitch('playlist', plView())}
           <button class="icon-btn" id="pl-menu" title="Playlist options">${IC.dots}</button>
@@ -1586,6 +1593,26 @@ async function openPlaylist(pid, push = true) {
   const plnEl = $('pln'); const pldurEl = $('pldur');
   if (!plnEl || !pldurEl) return; // navigated away
   state._currentList = list;
+  // how the playlist is used decides whether Prep touches it at all
+  document.querySelectorAll('#pl-kind .mode-tab').forEach((b) => {
+    b.onclick = async (e) => {
+      e.stopPropagation();
+      const kind = b.dataset.kind;
+      if ((p.kind || 'dj') === kind) return;
+      try {
+        await api(`/api/playlists/${encodeURIComponent(pid)}`, {
+          method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind }),
+        });
+        p.kind = kind;
+        const row = state.playlists.find((x) => x.id === pid);
+        if (row) row.kind = kind;
+        document.querySelectorAll('#pl-kind .mode-tab').forEach((x) => x.classList.toggle('on', x.dataset.kind === kind));
+        toast(kind === 'listen'
+          ? 'Listening only — Prep will not analyse this playlist'
+          : 'DJ set — Prep will analyse it for export', 5000);
+      } catch { toast('Could not change how this playlist is used', 4000); }
+    };
+  });
   plnEl.textContent = list.length;
   paintPlMode();
   const totalS = list.reduce((a, t) => a + (t.duration || 0), 0);
@@ -1868,9 +1895,12 @@ const PREP_ORDERS = [
 ];
 const prepOrder = () => { try { return localStorage.getItem('mf-prep-order') || 'alpha'; } catch { return 'alpha'; } };
 const prepView = () => { try { return localStorage.getItem('mf-view-prep') || 'grid'; } catch { return 'grid'; } };
+// listening playlists are not prepped; they can be shown, but they carry no prep controls
+const prepShowListen = () => { try { return localStorage.getItem('mf-prep-listen') === '1'; } catch { return false; } };
 const crateCoverage = (p) => (p.owned ? (p.prepped || 0) / p.owned : 0);
 function sortedCrates() {
-  const out = [...state.playlists];
+  const show = prepShowListen();
+  const out = [...state.playlists].filter((p) => show || p.kind !== 'listen');
   const mode = prepOrder();
   const byName = (a, b) => String(a.name).localeCompare(String(b.name));
   if (mode === 'alphaDesc') out.sort((a, b) => byName(b, a));
@@ -1889,7 +1919,7 @@ async function renderDjExport() {
     <div class="prep-hero">
       <div class="prep-kicker">SET PREPARATION</div>
       <div class="prep-title">Prep</div>
-      <p class="prep-sub">Prep a playlist for BPM, key and beat grid. Export copies the audio and writes cues from what is already prepped; it does not analyze on the way out.</p>
+      <p class="prep-sub">For the playlists you play out: BPM, key, beat grid and sections for cue points. <b>Up to date</b> means analysed by the current analyser (v2, which adds sections). A playlist marked Listening is never analysed and stays off this page.</p>
       <div class="prep-meter"><div class="prep-meter-bar"><i id="prep-fill" style="width:0%"></i></div><span id="prep-cov">…</span></div>
       <div class="prep-actions">
         <button class="btn btn-primary" id="dj-analyze">Analyze unanalyzed</button>
@@ -1899,7 +1929,11 @@ async function renderDjExport() {
     <div class="sec-title">Playlists <small>EXPORT READY</small></div>
     <div class="list-bar"><div class="mode-tabs" id="crate-order">
       ${PREP_ORDERS.map(([v, label]) => `<button class="mode-tab${prepOrder() === v ? ' on' : ''}" data-order="${v}">${label}</button>`).join('')}
-    </div>${viewSwitch('prep', prepView())}</div>
+    </div><div class="list-bar-tools">${(() => {
+      const listen = state.playlists.filter((p) => p.kind === 'listen').length;
+      const show = prepShowListen();
+      return listen ? `<button class="mode-tab${show ? ' on' : ''}" id="prep-listen">${show ? 'Hide' : 'Show'} listening (${listen})</button>` : '';
+    })()}${viewSwitch('prep', prepView())}</div></div>
     <div class="crate-grid" id="dj-list"></div>`;
   let remaining = 0;
   try {
@@ -1907,15 +1941,27 @@ async function renderDjExport() {
     remaining = st.remaining || 0;
     const cov = document.getElementById('prep-cov');
     const fill = document.getElementById('prep-fill');
-    const pct = st.total ? Math.round((st.analysed / st.total) * 100) : 0;
-    if (cov) cov.textContent = `${st.prepped || 0}/${st.total} prepped · ${Math.max(0, st.total - (st.prepped || 0))} left`;
+    const pct = st.total ? Math.round((st.current / st.total) * 100) : 0;
+    if (cov) {
+      cov.textContent = [
+        `${st.current}/${st.total} up to date`,
+        st.outdated ? `${st.outdated} without sections` : '',
+        st.never ? `${st.never} never analysed` : '',
+        `analyser v${st.version}`,
+      ].filter(Boolean).join(' · ');
+    }
     if (fill) fill.style.width = pct + '%';
     const ab = document.getElementById('dj-analyze');
-    if (ab) ab.textContent = remaining ? `Analyze ${remaining} unanalyzed` : 'All analyzed';
+    if (ab) {
+      // never-analysed is a library-wide job; outdated is per playlist, and a button
+      // that only says "update a playlist below" is a button that does not act
+      ab.hidden = !remaining;
+      ab.textContent = `Analyse ${remaining} never analysed`;
+    }
   } catch {}
   const btn = document.getElementById('dj-analyze');
   if (btn) btn.onclick = async () => {
-    if (!remaining) { toast('Everything with audio is already analyzed'); return; }
+    if (!remaining) { toast('Every track with audio has been analysed at least once'); return; }
     if (!confirm(`Analyze ${remaining} track${remaining === 1 ? '' : 's'}? This runs on the Pi and takes a while.`)) return;
     btn.disabled = true;
     try {
@@ -1945,94 +1991,123 @@ async function renderDjExport() {
   const list = document.getElementById('dj-list');
   if (!list) return;
   const pad = (n) => String(n).padStart(2, '0');
-  const prepLabel = (p) => Math.max(0, (p.owned || 0) - (p.prepped || 0));
+  const prepWork = (p) => Math.max(0, (p.owned || 0) - (p.prepped || 0));
+  const prepMeta = (p) => {
+    const bits = [`${p.n_tracks || 0} tracks`, `${p.prepped || 0}/${p.owned || 0} up to date`];
+    if (p.outdated) bits.push(`${p.outdated} without sections`);
+    if (p.never) bits.push(`${p.never} never`);
+    return bits.join(' · ');
+  };
+  const prepState = (p) => {
+    if (p.kind === 'listen') return '';
+    if (!p.owned) return '';
+    const work = prepWork(p);
+    if (work > 0) {
+      const label = (p.never || 0) > 0 ? `Prep ${work}` : `Update ${work}`;
+      const why = [p.never ? `${p.never} never analysed` : '', p.outdated ? `${p.outdated} from the older analyser (no sections)` : '']
+        .filter(Boolean).join(' · ') || 'this playlist is up to date';
+      return `<button class="crate-analyze" title="${esc(why)}">${label}</button>`;
+    }
+    return `<span class="crate-row-state"><span class="crate-ready-tag">ready</span><button class="crate-again" title="Redo every track with the current analyser (sections and cue points included)">Re-analyse</button></span>`;
+  };
   const drawCrates = (view) => {
     list.className = view === 'list' ? 'crate-list' : view === 'compact' ? 'crate-grid compact' : 'crate-grid';
     list.innerHTML = '';
     for (const p of sortedCrates()) {
-    const cov = p.owned ? Math.round(((p.prepped || 0) / p.owned) * 100) : 0;
-    const card = document.createElement(view === 'list' ? 'div' : 'div');
-    card.className = view === 'list' ? 'crate-row' : 'crate';
-    if (view === 'list') {
-      card.innerHTML = `
-        <span class="lrow-idx">${pad(p.idx)}</span>
-        <img class="crate-row-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=120&v=${state.artV || 0}" alt="" loading="lazy">
-        <div class="crate-row-t"><b>${esc(p.name)}</b><i>${p.n_tracks || 0} tracks · ${p.prepped || 0}/${p.owned || 0} prepped</i></div>
-        ${(p.owned && cov < 100) ? `<button class="crate-analyze">Prep ${prepLabel(p)}</button>` : `<span class="crate-row-state"><span class="crate-ready-tag">ready</span>${p.owned ? '<button class="crate-again" title="Analyse again to pick up sections, energy and cue points">Re-analyse</button>' : ''}</span>`}
-        <div class="crate-row-acts">
-          <button class="crate-btn" data-rb title="rekordbox XML + audio">Rekordbox</button>
-          <button class="crate-btn" data-tr title="Traktor NML + audio">Traktor</button>
-          <button class="crate-btn" data-usb title="CDJ USB">USB</button>
-        </div>`;
-    } else {
-      card.innerHTML = `
-      <div class="crate-artwrap">
-        <img class="crate-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=340&v=${state.artV || 0}" alt="" loading="lazy">
-        <span class="crate-badge">${p.owned || 0}/${p.n_tracks || 0} audio</span>
-      </div>
-      <div class="crate-name"><span class="crate-no">${pad(p.idx)}</span>${esc(p.name)}</div>
-      <div class="crate-ready"><i style="width:${cov}%"></i></div>
-      <div class="crate-meta"><span>${p.n_tracks || 0} tracks · ${p.prepped || 0}/${p.owned || 0} prepped</span>${(p.owned && cov < 100) ? `<button class="crate-analyze">Prep ${prepLabel(p)}</button>` : `<span class="crate-row-state"><span class="crate-ready-tag">ready</span>${p.owned ? '<button class="crate-again" title="Analyse again to pick up sections, energy and cue points">Re-analyse</button>' : ''}</span>`}</div>
-      <div class="crate-acts">
-        <button class="crate-btn" data-rb title="Download a ZIP with the audio + rekordbox XML">Rekordbox</button>
-        <button class="crate-btn" data-tr title="Download a ZIP with the audio + Traktor NML">Traktor</button>
-        <button class="crate-btn" data-usb title="Pioneer device export: export.pdb, analysis files and audio — extract to the root of a FAT32 USB">USB</button>
-      </div>`;
+      const cov = p.owned ? Math.round(((p.prepped || 0) / p.owned) * 100) : 0;
+      const listening = p.kind === 'listen';
+      const card = document.createElement('div');
+      card.className = view === 'list' ? 'crate-row' : 'crate';
+      if (view === 'list') {
+        card.innerHTML = `
+          <span class="lrow-idx">${pad(p.idx)}</span>
+          <img class="crate-row-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=120&v=${state.artV || 0}" alt="" loading="lazy">
+          <div class="crate-row-t"><b>${esc(p.name)}</b><i>${listening ? `${p.n_tracks || 0} tracks · listening only` : prepMeta(p)}</i></div>
+          ${prepState(p)}
+          ${listening ? '' : `<div class="crate-row-acts">
+            <button class="crate-btn" data-rb title="rekordbox XML + audio">Rekordbox</button>
+            <button class="crate-btn" data-tr title="Traktor NML + audio">Traktor</button>
+            <button class="crate-btn" data-usb title="CDJ USB">USB</button>
+          </div>`}`;
+      } else {
+        card.innerHTML = `
+        <div class="crate-artwrap">
+          <img class="crate-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=340&v=${state.artV || 0}" alt="" loading="lazy">
+          <span class="crate-badge">${p.owned || 0}/${p.n_tracks || 0} audio</span>
+        </div>
+        <div class="crate-name"><span class="crate-no">${pad(p.idx)}</span>${esc(p.name)}</div>
+        ${listening
+          ? `<div class="crate-meta"><span>${p.n_tracks || 0} tracks · listening only</span></div>`
+          : `<div class="crate-ready"><i style="width:${cov}%"></i></div>
+             <div class="crate-meta"><span>${prepMeta(p)}</span>${prepState(p)}</div>
+             <div class="crate-acts">
+               <button class="crate-btn" data-rb title="Download a ZIP with the audio + rekordbox XML">Rekordbox</button>
+               <button class="crate-btn" data-tr title="Download a ZIP with the audio + Traktor NML">Traktor</button>
+               <button class="crate-btn" data-usb title="Pioneer device export: export.pdb, analysis files and audio — extract to the root of a FAT32 USB">USB</button>
+             </div>`}`;
+      }
+      const missingPrep = prepWork(p);
+      const exportCrate = (fmt) => {
+        if (missingPrep && fmt !== 'usb' && !confirm(`${missingPrep} track${missingPrep === 1 ? '' : 's'} in "${p.name}" have no cue data at the current analyser. Cues will be missing. Export anyway?`)) return;
+        toast(fmt === 'usb' ? 'Building the CDJ library…' : 'Zipping the playlist…', 6000);
+        if (fmt === 'usb') window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/pioneer.zip`;
+        else window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.zip?format=${fmt}`;
+      };
+      const rb = card.querySelector('[data-rb]');
+      if (rb) rb.onclick = (e) => { e.stopPropagation(); exportCrate('rekordbox'); };
+      const tr = card.querySelector('[data-tr]');
+      if (tr) tr.onclick = (e) => { e.stopPropagation(); exportCrate('traktor'); };
+      const usb = card.querySelector('[data-usb]');
+      if (usb) usb.onclick = (e) => { e.stopPropagation(); exportCrate('usb'); };
+      const runPrep = (btn, force) => async (e) => {
+        if (e) e.stopPropagation();
+        const meta = card.querySelector('.crate-meta span');
+        const label0 = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = force ? 'Re-analysing' : 'Starting';
+        try {
+          const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/analyze${force ? '?force=1' : ''}`, { method: 'POST' });
+          if (!r.count) {
+            toast(r.note || 'Nothing to prep in this playlist', 5000);
+            btn.disabled = false;
+            btn.textContent = label0;
+            return;
+          }
+          // the analyser takes seconds per track: count them off instead of going quiet
+          const tick = async () => {
+            let j = null;
+            try { j = await api(`/api/playlists/${encodeURIComponent(p.id)}/analyze`, { nocache: true }); } catch {}
+            if (!j) { setTimeout(tick, 2500); return; }
+            const done = Number(j.done) || 0;
+            const total = Number(j.total) || r.count;
+            const shown = Math.min(total, done + (Number(j.active) || (j.running ? 1 : 0)));
+            btn.textContent = `${force ? 'Re-analysing' : 'Prepping'} ${shown}/${total}`;
+            if (meta) meta.textContent = `${p.n_tracks || 0} tracks · ${force ? 're-analysing' : 'prepping'} ${shown}/${total}`;
+            if (j.running) { setTimeout(tick, 1500); return; }
+            btn.disabled = false;
+            btn.textContent = done ? `Done ${done}` : label0;
+            toast(`${done} of ${total} ${force ? 're-analysed' : 'prepped'}${j.failed ? ` · ${j.failed} failed` : ''}`, 5000);
+            setTimeout(() => refreshView(), 900);
+          };
+          setTimeout(tick, 800);
+        } catch { toast('Could not start'); btn.disabled = false; btn.textContent = label0; }
+      };
+      const abt = card.querySelector('.crate-analyze');
+      if (abt) abt.onclick = runPrep(abt, false);
+      const again = card.querySelector('.crate-again');
+      if (again) again.onclick = runPrep(again, true);
+      card.onclick = () => openPlaylist(p.id);
+      list.appendChild(card);
     }
-    const missingPrep = Math.max(0, (p.owned || 0) - (p.prepped || 0));
-    const exportCrate = (fmt) => {
-      if (missingPrep && fmt !== 'usb' && !confirm(`${missingPrep} track${missingPrep === 1 ? '' : 's'} in "${p.name}" have no beat grid. Cues will be missing. Export anyway?`)) return;
-      toast(fmt === 'usb' ? 'Building the CDJ library…' : 'Zipping the playlist…', 6000);
-      if (fmt === 'usb') window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/pioneer.zip`;
-      else window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.zip?format=${fmt}`;
-    };
-    card.querySelector('[data-rb]').onclick = (e) => { e.stopPropagation(); exportCrate('rekordbox'); };
-    card.querySelector('[data-tr]').onclick = (e) => { e.stopPropagation(); exportCrate('traktor'); };
-    card.querySelector('[data-usb]').onclick = (e) => { e.stopPropagation(); exportCrate('usb'); };
-    const runPrep = (btn, force) => async (e) => {
-      if (e) e.stopPropagation();
-      const meta = card.querySelector('.crate-meta span');
-      const label0 = btn.textContent;
-      btn.disabled = true;
-      btn.textContent = force ? 'Re-analysing' : 'Starting';
-      try {
-        const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/analyze${force ? '?force=1' : ''}`, { method: 'POST' });
-        if (!r.count) {
-          toast(r.note || 'Nothing to prep in this playlist', 5000);
-          btn.disabled = false;
-          btn.textContent = label0;
-          return;
-        }
-        // the analyser takes seconds per track: count them off instead of going quiet
-        const tick = async () => {
-          let j = null;
-          try { j = await api(`/api/playlists/${encodeURIComponent(p.id)}/analyze`, { nocache: true }); } catch {}
-          if (!j) { setTimeout(tick, 2500); return; }
-          const done = Number(j.done) || 0;
-          const total = Number(j.total) || r.count;
-          const shown = Math.min(total, done + (Number(j.active) || (j.running ? 1 : 0)));
-          btn.textContent = `${force ? 'Re-analysing' : 'Prepping'} ${shown}/${total}`;
-          if (meta) meta.textContent = `${p.n_tracks || 0} tracks · ${force ? 're-analysing' : 'prepping'} ${shown}/${total}`;
-          if (j.running) { setTimeout(tick, 1500); return; }
-          btn.disabled = false;
-          btn.textContent = done ? `Done ${done}` : label0;
-          toast(`${done} of ${total} ${force ? 're-analysed' : 'prepped'}${j.failed ? ` · ${j.failed} failed` : ''}`, 5000);
-          setTimeout(() => refreshView(), 900);
-        };
-        setTimeout(tick, 800);
-      } catch { toast('Could not start'); btn.disabled = false; btn.textContent = label0; }
-    };
-    const abt = card.querySelector('.crate-analyze');
-    if (abt) abt.onclick = runPrep(abt, false);
-    const again = card.querySelector('.crate-again');
-    if (again) again.onclick = runPrep(again, true);
-    card.onclick = () => openPlaylist(p.id);
-    list.appendChild(card);
-    }
-    if (!state.playlists.length) list.innerHTML = '<div class="empty">No playlists yet.</div>';
+    if (!list.children.length) list.innerHTML = '<div class="empty">No DJ playlists yet. Mark a playlist as a DJ set to prep it.</div>';
   };
   drawCrates(prepView());
   bindViewSwitch('prep', (v) => drawCrates(v));
+  const listenToggle = document.getElementById('prep-listen');
+  if (listenToggle) listenToggle.onclick = () => {
+    try { localStorage.setItem('mf-prep-listen', prepShowListen() ? '0' : '1'); } catch {}
+    renderDjExport();
+  };
   document.querySelectorAll('#crate-order .mode-tab').forEach((b) => {
     b.onclick = () => {
       localStorage.setItem('mf-prep-order', b.dataset.order);
@@ -2626,9 +2701,11 @@ async function renderSettings() {
       : 'Playback log: nothing recorded yet.';
   } catch {}
 
-  api('/api/stats', { nocache: true }).then((st) => {
+  Promise.all([api('/api/stats', { nocache: true }), api('/api/analyze/status', { nocache: true })]).then(([st, an]) => {
     const f = document.getElementById('set-facts');
-    if (f) f.innerHTML = `<div><b>${st.tracks}</b> tracks</div><div><b>${(st.owned_bytes / 1e9).toFixed(2)} GB</b> on disk</div><div><b>${st.listens}</b> plays recorded</div>`;
+    if (!f) return;
+    f.innerHTML = `<div><b>${st.tracks}</b> tracks</div><div><b>${(st.owned_bytes / 1e9).toFixed(2)} GB</b> on disk</div><div><b>${st.listens}</b> plays recorded</div>`
+      + `<div><b>${an.current}</b> current · <b>${an.outdated}</b> without sections · analyser v${an.version}</div>`;
   }).catch(() => {});
   // the exclusion field, shown back as the terms the app will actually use
   const avoidInput = document.getElementById('set-taste-avoid');

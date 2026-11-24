@@ -9,8 +9,14 @@ const fs = require('node:fs');
 const PY = paths.ESSENTIA_PY;
 const SCRIPT = nodePath.join(__dirname, 'analyze.py');
 
+/* What a "current" analysis contains. Bump this whenever the analyser starts writing
+   something new that exports depend on: 1 = bpm/key/beat grid, 2 = sections + energy10.
+   Rows analysed by an older version keep their numbers but are marked outdated, so the
+   interface can say which tracks have the cue data and which do not. */
+const ANALYSIS_VERSION = 2;
+
 function ensureColumns(db) {
-  for (const col of ['bpm REAL', 'key TEXT', 'key_scale TEXT', 'key_confidence REAL', 'loudness REAL', 'energy REAL', 'analyzed_at INTEGER', 'beat_grid TEXT', 'sections TEXT', 'energy10 REAL']) {
+  for (const col of ['bpm REAL', 'key TEXT', 'key_scale TEXT', 'key_confidence REAL', 'loudness REAL', 'energy REAL', 'analyzed_at INTEGER', 'analysis_version INTEGER DEFAULT 0', 'beat_grid TEXT', 'sections TEXT', 'energy10 REAL']) {
     try { db.exec(`ALTER TABLE tracks ADD COLUMN ${col}`); } catch {}
   }
 }
@@ -41,15 +47,19 @@ function analyseBatch(items) {
   });
 }
 
-async function run(db, { limit = 50, workers = 2, batch = 4 } = {}) {
+async function run(db, { limit = 50, workers = 2, batch = 4, scope = 'never' } = {}) {
   ensureColumns(db);
   // a missing interpreter is a configuration error, not a slow analysis: say so once
   // instead of returning zeroes that make the retry loop run forever
   if (!fs.existsSync(PY)) {
     return { analysed: 0, failed: 0, remaining: null, error: `analyser interpreter not found: ${PY} — create the venv or set MUSICFY_PYTHON` };
   }
+  // "never" fills what has no analysis; "outdated" redoes rows from an older analyser
+  const where = scope === 'outdated'
+    ? `t.analyzed_at IS NOT NULL AND COALESCE(t.analysis_version,0) < ${ANALYSIS_VERSION}`
+    : 't.analyzed_at IS NULL';
   const files = db.prepare(`SELECT t.id, f.path FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned'
-    WHERE t.analyzed_at IS NULL ORDER BY t.id LIMIT ?`).all(limit);
+    WHERE ${where} ORDER BY t.id LIMIT ?`).all(limit);
   if (!files.length) return { analysed: 0, remaining: 0 };
 
   running.startedAt = running.startedAt || Date.now();
@@ -58,7 +68,7 @@ async function run(db, { limit = 50, workers = 2, batch = 4 } = {}) {
   const startFailed = running.failed;
   const queue = files.filter((f) => fs.existsSync(f.path));
   const queuedCount = queue.length;
-  const upd = db.prepare(`UPDATE tracks SET bpm=?, key=?, key_scale=?, key_confidence=?, loudness=?, energy=?, beat_grid=?, sections=?, energy10=?, analyzed_at=?
+  const upd = db.prepare(`UPDATE tracks SET bpm=?, key=?, key_scale=?, key_confidence=?, loudness=?, energy=?, beat_grid=?, sections=?, energy10=?, analyzed_at=?, analysis_version=?
     WHERE id=?`);
 
   const worker = async () => {
@@ -74,7 +84,7 @@ async function run(db, { limit = 50, workers = 2, batch = 4 } = {}) {
           r.loudness || null, r.energy || null, JSON.stringify(r.beat_grid || []),
           r.sections && r.sections.length ? JSON.stringify(r.sections) : null,
           r.energy10 != null ? r.energy10 : null,
-          Math.floor(Date.now() / 1000), r.id);
+          Math.floor(Date.now() / 1000), ANALYSIS_VERSION, r.id);
         running.done += 1;
       }
       running.active -= 1;
@@ -94,10 +104,23 @@ async function run(db, { limit = 50, workers = 2, batch = 4 } = {}) {
 
 function status(db) {
   ensureColumns(db);
-  const total = db.prepare("SELECT COUNT(*) c FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned'").get().c;
-  const done = db.prepare("SELECT COUNT(*) c FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned' WHERE t.analyzed_at IS NOT NULL").get().c;
-  const prepped = db.prepare("SELECT COUNT(*) c FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned' WHERE t.analyzed_at IS NOT NULL AND t.beat_grid IS NOT NULL AND t.beat_grid != ''").get().c;
-  return { total, analysed: done, prepped, remaining: total - done, active: running.active };
+  const V = ANALYSIS_VERSION;
+  const base = "FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned'";
+  const one = (cond) => db.prepare(`SELECT COUNT(*) c ${base} ${cond ? `WHERE ${cond}` : ''}`).get().c;
+  const total = one('');
+  const current = one(`t.analyzed_at IS NOT NULL AND COALESCE(t.analysis_version,0) >= ${V}`);
+  const outdated = one(`t.analyzed_at IS NOT NULL AND COALESCE(t.analysis_version,0) < ${V}`);
+  const never = one('t.analyzed_at IS NULL');
+  const prepped = one(`t.analyzed_at IS NOT NULL AND COALESCE(t.analysis_version,0) >= ${V} AND t.beat_grid IS NOT NULL AND t.beat_grid != ''`);
+  const sections = one("t.sections IS NOT NULL AND t.sections != ''");
+  return {
+    version: V, total,
+    analysed: current + outdated,   // any analysis at all
+    current, outdated, never,
+    prepped, sections,
+    remaining: never,               // what the never-analysed pass still has to do
+    active: running.active,
+  };
 }
 
 // analyse one track on demand: only set tracks need BPM/key, not the whole library
@@ -111,13 +134,13 @@ async function runOne(db, trackId) {
   const r = rows.find((x) => x && x.id === f.id) || rows[0];
   if (!r) return { error: running.lastError || 'analysis failed' };
   if (r.error) return { error: String(r.error).slice(0, 160) };
-  db.prepare(`UPDATE tracks SET bpm=?, key=?, key_scale=?, key_confidence=?, loudness=?, energy=?, beat_grid=?, sections=?, energy10=?, analyzed_at=?
+  db.prepare(`UPDATE tracks SET bpm=?, key=?, key_scale=?, key_confidence=?, loudness=?, energy=?, beat_grid=?, sections=?, energy10=?, analyzed_at=?, analysis_version=?
     WHERE id=?`).run(r.bpm || null, r.key || null, r.key_scale || null, r.key_confidence || null,
     r.loudness || null, r.energy || null, JSON.stringify(r.beat_grid || []),
     r.sections && r.sections.length ? JSON.stringify(r.sections) : null,
     r.energy10 != null ? r.energy10 : null,
-    Math.floor(Date.now() / 1000), f.id);
+    Math.floor(Date.now() / 1000), ANALYSIS_VERSION, f.id);
   return { id: f.id, bpm: r.bpm, key: r.key, key_scale: r.key_scale, cues: (r.beat_grid || []).length };
 }
 
-module.exports = { run, status, ensureColumns, runOne };
+module.exports = { run, status, ensureColumns, runOne, ANALYSIS_VERSION };

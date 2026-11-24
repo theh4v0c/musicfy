@@ -65,6 +65,27 @@ const short = await j('/api/search/ladder?q=a');
 ok('one character query rejected', short.status === 400, String(short.status));
 // oversized upload is checked by hand: sending 70MB from a test run is not worth the time
 
+console.log('analysis version');
+const an = await j('/api/analyze/status');
+ok('analysis reports its version', Number(an.body?.version) >= 2, JSON.stringify(an.body));
+ok('analysis accounting adds up', !!an.body && an.body.current + an.body.outdated + an.body.never === an.body.total,
+  `${an.body?.current}+${an.body?.outdated}+${an.body?.never} != ${an.body?.total}`);
+ok('prepped is a subset of current', !!an.body && an.body.prepped <= an.body.current);
+
+console.log('playlist role');
+const rolePl = await post('/api/playlists', { name: 'role ' + Date.now() });
+const rolePid = rolePl.body?.id;
+if (rolePid) {
+  const setListen = await patch(`/api/playlists/${rolePid}`, { kind: 'listen' });
+  const roleList = await j('/api/playlists');
+  const roleRow = (roleList.body || []).find((x) => x.id === rolePid);
+  ok('a playlist can be marked listening', setListen.status === 200 && roleRow?.kind === 'listen', JSON.stringify(roleRow));
+  const setDj = await patch(`/api/playlists/${rolePid}`, { kind: 'dj' });
+  const list2 = await j('/api/playlists');
+  ok('and back to a DJ set', setDj.status === 200 && (list2.body || []).find((x) => x.id === rolePid)?.kind === 'dj');
+  await del(`/api/playlists/${rolePid}`);
+}
+
 console.log('agent intents');
 const rep = await post('/api/agent', { q: 'how much of my library has audio' });
 ok('report_library', rep.body && rep.body.plan.intent === 'report_library', JSON.stringify(rep.body?.plan));

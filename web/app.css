@@ -474,6 +474,8 @@ button.alink { padding: 0; border: 0; background: none; font-family: inherit; co
 .trow.compact .tmeta .tt { flex: 0 1 auto; }
 .trow.compact .tmeta .tbpm { flex: none; margin: 0; }
 .list-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 12px 0 16px; }
+.list-bar-tools { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.kind-switch { display: inline-flex; align-items: center; gap: 6px; }
 .list-bar .mode-tabs { margin: 0; }
 .mode-tabs { display: flex; flex-wrap: wrap; gap: 8px; row-gap: 8px; margin: 12px 0 14px; max-width: 100%; }
 .mode-tab { display: inline-flex; align-items: center; white-space: nowrap; flex: 0 0 auto;

@@ -449,8 +449,8 @@ setTimeout(() => { resumeQueuedDownloads().catch(() => {}); }, 7000);
 setInterval(() => {
   try {
     const st = analyze.status(db);
-    if (!st.active && st.remaining > 0) {
-      analyze.run(db, { limit: Math.min(25, st.remaining), workers: 2 })
+    if (!st.active && st.never > 0) {
+      analyze.run(db, { scope: 'never', limit: Math.min(25, st.never), workers: 2 })
         .then((r) => {
           if (r && r.error) { console.error('[analyze] cannot progress:', r.error); return; }
           console.log('[analyze] auto', JSON.stringify(r).slice(0, 120));
@@ -808,7 +808,7 @@ const LADDER_TTL = Number(process.env.MUSICFY_LADDER_TTL || 5 * 60 * 1000);
 const ladderCache = new Map();
 
 // 4. schema version, so column changes stop being invisible
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 function currentVersion() {
   try {
     const row = db.prepare('SELECT value FROM meta WHERE key=?').get('schema_version');
@@ -867,6 +867,15 @@ function migrate() {
       ]) { try { db.exec(sql); } catch {} }
       try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS tracks_dup_key ON tracks(dup_key)'); } catch {}
       try { db.exec('ALTER TABLE tracks DROP COLUMN key_sig'); } catch {}
+    }],
+    [4, () => {
+      // analysis has a version now, because "analysed" stopped meaning "has cue data".
+      // Playlists have a role too: a listening set does not need to be prepped.
+      try { db.exec('ALTER TABLE tracks ADD COLUMN analysis_version INTEGER DEFAULT 0'); } catch {}
+      try { db.exec("ALTER TABLE playlists ADD COLUMN kind TEXT NOT NULL DEFAULT 'dj'"); } catch {}
+      // label what the old analyser produced so "outdated" is a fact, not a guess
+      db.exec("UPDATE tracks SET analysis_version=2 WHERE analysis_version=0 AND sections IS NOT NULL AND sections != ''");
+      db.exec("UPDATE tracks SET analysis_version=1 WHERE analysis_version=0 AND analyzed_at IS NOT NULL");
     }],
   ];
   for (const [version, run] of steps) {
@@ -3340,8 +3349,9 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/api/analyze/run' && req.method === 'POST') {
       const limit = Math.min(Number(u.searchParams.get('limit') || 200), 2000);
       const workers = Math.min(Number(u.searchParams.get('workers') || 2), 3);
-      analyser.run(db, { limit, workers }).then((r) => console.log('[analyze]', JSON.stringify(r))).catch((e) => console.error('[analyze]', e.message));
-      return json(res, 202, { started: true, limit, workers, status: analyser.status(db) });
+      const scope = u.searchParams.get('mode') === 'outdated' ? 'outdated' : 'never';
+      analyser.run(db, { limit, workers, scope }).then((r) => console.log('[analyze]', JSON.stringify(r))).catch((e) => console.error('[analyze]', e.message));
+      return json(res, 202, { started: true, limit, workers, scope, status: analyser.status(db) });
     }
     if (u.pathname === '/api/analyze/status') {
       return json(res, 200, analyser.status(db));
@@ -3461,18 +3471,20 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, { started: false, count: j.total - j.done, note: 'this crate is already prepping' });
       }
       const force = u.searchParams.get('force') === '1';
-      // a normal prep fills what is missing. A forced pass re-analyses the ones that have
-      // no musical sections yet, which is how a library analysed before sections existed
-      // gains cue points without redoing everything.
+      const V = analyser.ANALYSIS_VERSION;
+      // A normal prep does the work the playlist actually needs: tracks never analysed,
+      // tracks from an older analyser, and rows whose beat grid is missing. A forced pass
+      // redoes every owned track, which is only for "analyse it again from scratch".
       const ids = (force
         ? db.prepare(`SELECT t.id FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
             JOIN files f ON f.track_id=t.id AND f.tier='owned'
-            WHERE pt.playlist_id=? AND (t.sections IS NULL OR t.sections = '' OR t.analyzed_at IS NULL)`)
+            WHERE pt.playlist_id=?`)
         : db.prepare(`SELECT t.id FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
             JOIN files f ON f.track_id=t.id AND f.tier='owned'
-            WHERE pt.playlist_id=? AND (t.analyzed_at IS NULL OR t.beat_grid IS NULL OR t.beat_grid = '')`)
+            WHERE pt.playlist_id=? AND (t.analyzed_at IS NULL OR COALESCE(t.analysis_version,0) < ${V}
+              OR t.beat_grid IS NULL OR t.beat_grid = '')`)
       ).all(pid).map((r) => r.id);
-      if (!ids.length) return json(res, 200, { started: false, count: 0, note: force ? 'this playlist is already analysed' : 'this playlist has no tracks missing a beat grid' });
+      if (!ids.length) return json(res, 200, { started: false, count: 0, note: 'this playlist is up to date with the current analyser' });
       crateJobs.set(pid, { total: ids.length, done: 0, failed: 0, at: Date.now(), finishedAt: 0 });
       (async () => {
         // two at a time: the analyser is one process per track, and a crate of forty
@@ -3496,7 +3508,7 @@ const server = http.createServer(async (req, res) => {
         const j = crateJobs.get(pid);
         if (j) { j.finishedAt = Date.now(); j.last = db.prepare(`SELECT COUNT(*) c FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
           JOIN files f ON f.track_id=t.id AND f.tier='owned'
-          WHERE pt.playlist_id=? AND t.beat_grid IS NOT NULL AND t.beat_grid != ''`).get(pid).c; }
+          WHERE pt.playlist_id=? AND COALESCE(t.analysis_version,0) >= ${analyser.ANALYSIS_VERSION} AND t.beat_grid IS NOT NULL AND t.beat_grid != ''`).get(pid).c; }
         console.log('[crate analyze]', pid, `${j ? j.done : 0}/${ids.length}`, j && j.failed ? `${j.failed} failed` : '');
       })();
       return json(res, 202, { started: true, count: ids.length });
@@ -4138,7 +4150,8 @@ const server = http.createServer(async (req, res) => {
         let id = `own-${slug}-${Date.now().toString(36)}`;
         let n = 1;
         while (db.prepare('SELECT 1 FROM playlists WHERE id=?').get(id)) id = `own-${slug}-${Date.now().toString(36)}-${n++}`;
-        db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)').run(id, name, 'manual', now(), now());
+        const kind = b.kind === 'listen' ? 'listen' : 'dj';
+        db.prepare('INSERT INTO playlists (id,name,source,kind,created_at,updated_at) VALUES (?,?,?,?,?,?)').run(id, name, 'manual', kind, now(), now());
         json(res, 200, { id, name });
       });
       return;
@@ -4219,18 +4232,26 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (u.pathname === '/api/playlists') {
+      const V = analyser.ANALYSIS_VERSION;
       const rows = db.prepare(`SELECT p.*, (SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id=p.id) n_tracks,
         (SELECT COUNT(*) FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
            JOIN files f ON f.track_id=t.id AND f.tier='owned'
            WHERE pt.playlist_id=p.id AND t.analyzed_at IS NOT NULL) analyzed,
         (SELECT COUNT(*) FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
            JOIN files f ON f.track_id=t.id AND f.tier='owned'
-           WHERE pt.playlist_id=p.id AND t.analyzed_at IS NOT NULL
+           WHERE pt.playlist_id=p.id AND t.analyzed_at IS NOT NULL AND COALESCE(t.analysis_version,0) >= ${V}
              AND t.beat_grid IS NOT NULL AND t.beat_grid != '') prepped,
+        (SELECT COUNT(*) FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
+           JOIN files f ON f.track_id=t.id AND f.tier='owned'
+           WHERE pt.playlist_id=p.id AND t.analyzed_at IS NOT NULL AND COALESCE(t.analysis_version,0) < ${V}) outdated,
+        (SELECT COUNT(*) FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
+           JOIN files f ON f.track_id=t.id AND f.tier='owned'
+           WHERE pt.playlist_id=p.id AND t.analyzed_at IS NULL) never,
         (SELECT COUNT(*) FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
            JOIN files f ON f.track_id=t.id AND f.tier='owned'
            WHERE pt.playlist_id=p.id) owned
         FROM playlists p ORDER BY p.name`).all();
+      for (const r of rows) r.analysis_version = V;
       return json(res, 200, rows);
     }
 
@@ -4453,8 +4474,21 @@ const server = http.createServer(async (req, res) => {
     if (m && req.method === 'PATCH') {
       let body = ''; req.on('data', c => body += c);
       req.on('end', () => {
-        const b = JSON.parse(body);
-        db.prepare('UPDATE playlists SET name=?, updated_at=? WHERE id=?').run(String(b.name).slice(0, 120), now(), decodeURIComponent(m[1]));
+        let b = null;
+        try { b = JSON.parse(body || '{}'); } catch { return json(res, 400, { error: 'bad request body' }); }
+        const id = decodeURIComponent(m[1]);
+        const cur = db.prepare('SELECT id FROM playlists WHERE id=?').get(id);
+        if (!cur) return json(res, 404, { error: 'no such playlist' });
+        if (b.name !== undefined) {
+          const name = String(b.name).trim().slice(0, 120);
+          if (!name) return json(res, 400, { error: 'a playlist needs a name' });
+          db.prepare('UPDATE playlists SET name=?, updated_at=? WHERE id=?').run(name, now(), id);
+        }
+        // dj = prepped for export; listen = playback only, and Prep leaves it alone
+        if (b.kind !== undefined) {
+          const kind = b.kind === 'listen' ? 'listen' : 'dj';
+          db.prepare('UPDATE playlists SET kind=?, updated_at=? WHERE id=?').run(kind, now(), id);
+        }
         json(res, 200, { ok: true });
       });
       return;

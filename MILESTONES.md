@@ -6,6 +6,37 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · "analysed" was not a yes/no, and not every playlist is a crate (`v463`)
+
+**Analysis has a version, so "latest" is answerable**
+- `tracks.analysis_version` and `ANALYSIS_VERSION = 2` (1 = BPM/key/grid, 2 = sections and
+  energy10). Migration 4 labels existing rows: 2 where sections exist, 1 where there is
+  only BPM/key, 0 where nothing was analysed.
+- `GET /api/analyze/status` reports `current / outdated / never / prepped / sections` and
+  the version; the three states add up to the total. Prep's meter counts only current as
+  prepared, and the hero reads "17/1461 up to date · 840 without sections · 604 never
+  analysed · analyser v2" instead of a single misleading "612 prepped".
+- A playlist says which state it is in: "13 without sections", "4/31 up to date · 4
+  without sections · 23 never", and its button says *Update N* or *Prep N* rather than
+  "ready". Re-analyse is the explicit full redo, and the normal Prep pass now includes
+  outdated rows (it used to select only missing beat grids).
+- The playlist header carries the same verdict next to its length, and Settings → Library
+  says how many tracks are current.
+
+**A listening playlist is not a DJ crate**
+- `playlists.kind` = `dj` (default) or `listen`, switched with two chips in the playlist
+  header; `PATCH /api/playlists/:id` accepts `{kind}`.
+- Prep lists DJ sets only. Listening playlists are hidden behind "Show listening (N)" and,
+  when shown, carry no prep control and no export trio: there is no work to do and no
+  export to build.
+- The Playlists index marks them with "· listening", so the distinction is visible before
+  opening one.
+- Existing playlists migrate as `dj`; nothing disappears from Prep on upgrade, and a
+  listening-only installation can mark its sets and stop seeing prep work entirely.
+
+Acceptance: migration 4 applied on the live DB; 39/39 API tests (5 new: analysis
+accounting, kind round-trip), unit 8/8, design-check --dom OK, smoke green.
+
 ### 2026-11-24 · a queue that survives the lock screen, and a children's brief that is safe (`v455`)
 
 **Playback: the advance no longer awaits anything**

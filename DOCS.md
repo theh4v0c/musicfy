@@ -683,10 +683,38 @@ Measured on this box: 36 seconds per track for 10 to 11 minute club tracks, whic
 threaded, or about an hour with three workers. Memory is small, one process peaks around
 300 MB. The song list shows BPM and key once analysed.
 
-Endpoints: `POST /api/analyze/run?limit=&workers=` (batch) and `GET /api/analyze/status`.
-`POST /api/analyze/track/:id` analyses a single track on demand, so only the tracks you actually
-play live (electronic) need BPM and key, and only those feed a Rekordbox export. The row context
-menu has an "Analyze BPM & key" action for this.
+Endpoints: `POST /api/analyze/run?limit=&workers=&mode=never|outdated` (batch) and
+`GET /api/analyze/status`. `POST /api/analyze/track/:id` analyses a single track on demand,
+so only the tracks you actually play live need BPM and key, and only those feed a Rekordbox
+export. The row context menu has an "Analyze BPM & key" action for this.
+
+### Freshness: what "analysed" means
+
+The analyser writes a version with every result (`ANALYSIS_VERSION`, currently 2: BPM, key,
+beat grid, sections and energy10). Bumping it is how a new kind of data becomes visible
+without pretending the old rows have it:
+
+| state | meaning |
+|---|---|
+| current | analysed by v2, sections included — this is what "up to date" means |
+| outdated | analysed by v1: BPM and key are valid, but there are no sections, so cues are missing |
+| never | no analysis at all |
+
+`GET /api/analyze/status` returns `version`, `total`, `current`, `outdated`, `never`,
+`prepped` and `sections`; the three states always add up to the total. Prep only counts
+**current** tracks as prepared, so a playlist analysed last month shows "13 without
+sections" and an *Update 13* button instead of a false "ready". Re-analysing is per
+playlist: the normal Prep run selects never-analysed, outdated and grid-less rows; the
+Re-analyse button (`force=1`) redoes every owned track.
+
+### Playlist role: DJ set or listening
+
+`playlists.kind` is `dj` (default) or `listen`. Prep is a DJ page: it lists only `dj`
+playlists, and a listening playlist is never analysed, never shows a prep control or an
+export button. The switch lives in the playlist header; the Playlists index marks the
+listening ones with a `· listening` note. `PATCH /api/playlists/:id` accepts `{kind}`.
+An installation that only wants to play music can mark everything listening and Prep
+stops asking for work that will never be needed.
 
 Essentia itself does not install here: there is no aarch64 wheel for Python 3.11 and the
 source build fails after six minutes. librosa covers BPM, key, loudness and energy without
