@@ -4,6 +4,7 @@ const nodePath = require('node:path');
 // Turns a sentence into query filters through the WNL LLM endpoint.
 // The model never sees the library: it only produces a structured request.
 const https = require('node:https');
+const http = require('node:http');
 const fs = require('node:fs');
 const { URL } = require('node:url');
 
@@ -31,67 +32,83 @@ Rules: omit any filter not requested. "in Dm" means key D and scale minor. "arou
 "not downloaded" means owned false. "never played" means plays {"max":0}. Use order "random" for shuffled or mixed requests,
 "plays" for most played or trending. limit is the number of songs requested, default 50, maximum 200.`;
 
-function ask(question, timeoutMs = 12000) {
+/* A model endpoint is a URL a person types, so it is validated like one. http is
+   accepted for a model on this machine (Ollama listens on http://localhost:11434 and
+   cannot speak TLS); anything else has to be https. Cloud metadata addresses are refused
+   outright: they are never a model, only a way to read the host's credentials. */
+function isLocalHost(host) {
+  const h = String(host || '').toLowerCase().replace(/^\[|\]$/g, '');
+  return h === 'localhost' || h === '::1' || h === 'host.docker.internal' || /\.local$/.test(h)
+    || /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h)
+    || /^fc|^fd/.test(h);
+}
+function isMetadataHost(host) {
+  return /^(169\.254\.169\.254|100\.100\.100\.200|metadata\.google\.internal|fd00:ec2::254)$/i.test(String(host || ''));
+}
+function endpoint(baseUrl) {
+  const raw = String(baseUrl || '').trim();
+  if (!/^https?:\/\//i.test(raw)) throw new Error('the model endpoint must start with http:// or https://');
+  const base = new URL(raw.endsWith('/v1') ? raw.replace(/\/$/, '') : raw);
+  if (isMetadataHost(base.hostname)) throw new Error('that address is not a model endpoint');
+  if (base.protocol === 'http:' && !isLocalHost(base.hostname)) {
+    throw new Error('http is only allowed for a model on this machine; use https for a remote endpoint');
+  }
+  return { url: new URL('/v1/chat/completions', base), mod: base.protocol === 'http:' ? http : https };
+}
+
+function post(body, timeoutMs) {
   const c = config();
   if (!c) return Promise.reject(new Error('llm not configured'));
-  const url = new URL('/v1/chat/completions', c.base_url.endsWith('/v1') ? c.base_url.replace(/\/$/, '') : c.base_url);
-  const body = JSON.stringify({
-    model: c.model || 'Auto',
-    temperature: 0,
-    max_tokens: 300,
-    messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: question }],
-  });
+  let target;
+  try { target = endpoint(c.base_url); } catch (e) { return Promise.reject(e); }
+  const payload = Buffer.from(body);
+  const MAX = 2 * 1024 * 1024;
   return new Promise((resolve, reject) => {
-    const req = https.request(url, {
+    const req = target.mod.request(target.url, {
       method: 'POST',
       timeout: timeoutMs,
       headers: {
         'content-type': 'application/json',
-        'content-length': Buffer.byteLength(body),
+        'content-length': payload.length,
         authorization: `Bearer ${c.api_key}`,
       },
     }, (res) => {
       let data = '';
       res.setEncoding('utf8');
-      res.on('data', (chunk) => { data += chunk; });
+      res.on('data', (chunk) => {
+        data += chunk;
+        if (data.length > MAX) { req.destroy(new Error('llm response too large')); }
+      });
       res.on('end', () => {
         if (res.statusCode >= 400) return reject(new Error(`llm ${res.statusCode}`));
-        try {
-          const parsed = JSON.parse(data);
-          const text = parsed.choices[0].message.content.trim();
-          const json = JSON.parse(text.replace(/^```(json)?/i, '').replace(/```$/, '').trim());
-          resolve(json);
-        } catch (e) { reject(new Error('llm returned unparsable json')); }
+        try { resolve(JSON.parse(data)); } catch { reject(new Error('llm returned unparsable json')); }
       });
     });
     req.on('timeout', () => req.destroy(new Error('llm timeout')));
     req.on('error', reject);
-    req.write(body);
+    req.write(payload);
     req.end();
   });
 }
 
-// raw completion, used by the agent planner
-function askRaw(prompt, timeoutMs = 10000) {
-  const c = config();
-  if (!c) return Promise.reject(new Error('llm not configured'));
-  const url = new URL('/v1/chat/completions', c.base_url.endsWith('/v1') ? c.base_url.replace(/\/$/, '') : c.base_url);
-  const body = JSON.stringify({ model: c.model || 'Auto', temperature: 0, max_tokens: 700, messages: [{ role: 'user', content: prompt }] });
-  return new Promise((resolve, reject) => {
-    const req = https.request(url, { method: 'POST', timeout: timeoutMs, headers: {
-      'content-type': 'application/json', 'content-length': Buffer.byteLength(body), authorization: `Bearer ${c.api_key}` } }, (res) => {
-      let data = '';
-      res.setEncoding('utf8');
-      res.on('data', (chunk) => { data += chunk; });
-      res.on('end', () => {
-        if (res.statusCode >= 400) return reject(new Error('llm ' + res.statusCode));
-        try { resolve(JSON.parse(data).choices[0].message.content); } catch (e) { reject(e); }
-      });
-    });
-    req.on('timeout', () => req.destroy(new Error('llm timeout')));
-    req.on('error', reject);
-    req.write(body); req.end();
+async function ask(question, timeoutMs = 12000) {
+  const body = JSON.stringify({
+    model: (config() || {}).model || 'Auto',
+    temperature: 0,
+    max_tokens: 300,
+    messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: question }],
   });
+  const parsed = await post(body, timeoutMs);
+  const text = String((((parsed.choices || [])[0] || {}).message || {}).content || '').trim();
+  if (!text) throw new Error('llm returned nothing');
+  return JSON.parse(text.replace(/^```(json)?/i, '').replace(/```$/, '').trim());
+}
+
+// raw completion, used by the agent planner
+async function askRaw(prompt, timeoutMs = 10000) {
+  const body = JSON.stringify({ model: (config() || {}).model || 'Auto', temperature: 0, max_tokens: 700, messages: [{ role: 'user', content: prompt }] });
+  const parsed = await post(body, timeoutMs);
+  return String((((parsed.choices || [])[0] || {}).message || {}).content || '');
 }
 
 // write the model endpoint from the Settings page
@@ -106,8 +123,7 @@ function saveConfig(patch) {
     c[k] = patch[k];
   }
   require('node:fs').writeFileSync(file, JSON.stringify(c, null, 2), { mode: 0o600 });
-  if (cached) cached = null;
   return c;
 }
 
-module.exports = { ask, askRaw, available, config, saveConfig, CONFIG };
+module.exports = { ask, askRaw, available, config, saveConfig, endpoint, CONFIG };

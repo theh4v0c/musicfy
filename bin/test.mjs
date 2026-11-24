@@ -1,5 +1,6 @@
 // Real assertions, not just status codes. Run: node bin/test.mjs
-const BASE = process.env.BASE || 'http://LAN_IP:8710';
+// defaults to a local instance; set BASE to test a deployed one
+const BASE = process.env.BASE || 'http://localhost:8710';
 let pass = 0, fail = 0;
 const ok = (name, cond, detail = '') => {
   if (cond) { pass += 1; console.log('  ok   ' + name); }

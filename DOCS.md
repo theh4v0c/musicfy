@@ -34,7 +34,7 @@ Web assets are versioned with `?v=N` in `web/index.html`. Bump it on every deplo
 
 ## Source rungs
 
-`yt-dlp` (pinned at `/opt/musicfy/ytdlp-venv/bin/yt-dlp`) resolves YouTube and acts as the generic extractor. YouTube Music catalogue is the primary music source; the plain YouTube video sweep was removed deliberately because it produced random uploaders. SoundCloud and Internet Archive follow. Bandcamp is implemented but disabled, its search answers with a bot challenge from this network.
+`yt-dlp` (`MUSICFY_YTDLP`, default `$MUSICFY_HOME/ytdlp-venv/bin/yt-dlp`) resolves YouTube and acts as the generic extractor. YouTube Music catalogue is the primary music source; the plain YouTube video sweep was removed deliberately because it produced random uploaders. SoundCloud and Internet Archive follow. Bandcamp is implemented but disabled, its search answers with a bot challenge from this network.
 
 Filters reject lyrics videos, interviews, documentaries, podcasts, reactions, mixes, full albums, emoji titles, clips under 45 seconds, and for artist queries anything where the artist does not lead the title or own the uploader. Label channels (`- Topic`, VEVO) get a scoring bonus.
 

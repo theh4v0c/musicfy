@@ -67,6 +67,18 @@ test('harmonicOrder takes the best available move at every step', () => {
   }
 });
 
+test('recommend does not carry a second, wrong wheel', async () => {
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const dir = new URL('../core/', import.meta.url).pathname;
+  const wheels = readdirSync(dir)
+    .filter((f) => f.endsWith('.js'))
+    .filter((f) => /const CAMELOT\b|const MINOR_A\b/.test(readFileSync(join(dir, f), 'utf8')));
+  assert.deepEqual(wheels, ['harmonic.js'], `wheel defined in ${wheels.join(', ')}`);
+  // and the score recommend now reads is the relative pair, not silence
+  assert.equal(H.harmonicScore(H.camelotOf('A', 'minor'), H.camelotOf('C', 'major')), 0.9);
+});
+
 test('a compatible chain stays on the wheel', () => {
   const t = (key, scale) => ({ id: key + scale, key, key_scale: scale });
   // A minor -> E minor -> B minor -> F# minor is the classic 8A..11A walk

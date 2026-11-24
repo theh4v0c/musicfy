@@ -6,6 +6,69 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · audit pass 2: the fixes that were claimed, and the ones that were real (`v452`)
+
+An external audit was re-run against the bundle rather than the changelog. It found that
+the paths refactor broke two scripts, that a second wrong Camelot wheel had survived, and
+that four new user-facing defects came with the interface round. Everything below is the
+answer to a measured finding, not a claim.
+
+**Broken by the paths refactor, now fixed**
+- `backup-db.js` and `import-history.js` used `paths` without requiring it: the nightly
+  snapshot had not run and the Spotify history import was dead (and with it `taste_*`,
+  `play_edges`, `/api/history/stats`). Both proved against a DB copy.
+- Backup now snapshots to a temporary file, runs `PRAGMA integrity_check`, and only then
+  rotates: a failed vacuum no longer leaves the day with no backup.
+- `Search` example chips called `navAandR`, deleted with the bridge. They now carry the
+  question to A&R.
+- `pioneer.js` `packTable` reserved a fixed 0x120 bytes while the row index grows per 16
+  rows, so a 150-track USB export threw "pdb page overflow". The cap is computed per row
+  count; 60/150/300-track PDBS verify with `rekordcrate`.
+- `recommend.js` carried its own CAMELOT table that scored A minor vs C major as 0. It
+  now imports `camelotOf`/`harmonicScore` from `harmonic.js`; `bin/unit.mjs` fails if a
+  second wheel appears anywhere in `core/`.
+- A&R answered "10 ambient tracks I don't have" with a library count, because a counted
+  noun was not recognised as a request for tracks. "20 dark techno at 130" too.
+- A catalogue hit unrelated to the request is no longer accepted: a result must share a
+  word with the query or its genre family, and a brief is not padded with whatever the
+  catalogue returned. "5 tracks by zzqqxxv" now answers "Nothing by zzqqxxv" with no
+  confirm button, instead of five unrelated Brazilian indie songs.
+- `ffprobe`/`ffmpeg` were four absolute paths, so previews and "Make playable" silently
+  no-oped off Debian. `paths.FFMPEG`/`FFPROBE` resolve through PATH, and boot prints both.
+- A fresh install followed `INSTALL.md` into `venv/` while the code looked for
+  `essentia-venv/`. Docs, defaults and the boot check now agree, and the analyser path is
+  printed; a missing interpreter is reported instead of returning zeroes forever.
+
+**The open queue, closed**
+- Download queue: `finish()` has a once-guard and every child (`error` + `close`) settles
+  once, so a retry cannot advance the chain twice or make the concurrency count negative.
+- Duplicate routes removed: the second `/api/settings` (unbounded `setSetting`) and the
+  duplicate `/api/likes` POST/DELETE.
+- Settings that lied are gone: `download_root`, `crossfade_ms`, `show_stream_rows` and the
+  fade control, which was stored and never applied (and cannot work on iOS).
+- Playlist create validates its name and uses a millisecond id: `{"name":5}` answers 400,
+  and two playlists in one second no longer collide.
+- `llm.js` speaks http for a local model (Ollama) and https for a remote one; metadata
+  addresses are refused; the response is size-capped; the endpoint is validated when saved.
+- 5xx responses no longer echo SQLite, ffmpeg or node paths; the real reason is logged.
+- Rate limiting is per client (`ip|route`), `httpGet` has a timeout and size cap, and the
+  preview/stream caches have ceilings.
+- ZIP exports go through one `streamZip` that deletes the staging tree on close, error and
+  abandoned download; `/tmp` spelling is `os.tmpdir()`.
+- CSP added (`default-src 'self'`, no inline script, no framing) and the auth cookie gets
+  `Secure` only when the request arrived over TLS.
+- `tagwrite.js` refuses a corrupt ID3 header instead of treating the whole file as an
+  empty payload, refuses to write a file with no audio, and writes UTF-16 for non-Latin
+  metadata. Verified with ffprobe on `Ünïcode 東京`.
+- `query.js` no longer reads the first number in a sentence as a limit ("between 120 and
+  130 bpm" set limit=120). Genre misses expire after 90 days. Dead harmonic exports gone.
+- Test tooling defaults to `localhost:8710`, not the live Pi: a DOM gate that measured
+  production passed a build it had never seen.
+
+Acceptance: 24 JS files parse, `node --test bin/unit.mjs` 8/8, `design-check --dom` passes,
+`bin/test.mjs` 34/34 against the deployed instance, `bin/smoke.sh` ALL GREEN, sandbox boot
+on an empty `MUSICFY_HOME` serves `/api/tracks` on first call.
+
 ### 2026-11-24 · interface contract, exports, playback (`v434`, `61de3fa`)
 
 **Playback**
@@ -114,7 +177,7 @@ undo, teaching that is permanent, visible and deletable)
   `/opt/musicfy` literals removed; INSTALL.md documents every variable.
 - **`MUSICFY_BIND` exists**, and the server warns at boot when it is exposed without a
   token.
-- **The Camelot wheel has one definition** (`core/harmonic.js`) and seven unit tests.
+- **The Camelot wheel has one definition** (`core/harmonic.js`); `recommend.js` imports it, and eight unit tests fail if a second wheel appears. (Before this round `recommend.js` carried its own wrong table, so this claim was false when first written.)
   The duplicate major-only function that won by hoisting is gone; relative major/minor is
   0.90, not 1.0.
 - **Key display switches**: `Am` or `8A`, in Settings → Playback. Exports stay musical.

@@ -51,10 +51,17 @@ function planLocally(text) {
   // "build me 20 tracks of dark techno" is a draft request, not a library report. The
   // verb list was missing every synonym of create except 'create', so the most natural
   // way to ask for a set fell through to report_library and answered with a count.
+  // a counted noun is a request for that many tracks ("10 ambient tracks I don't
+  // have"), and a style with a tempo is a set ("20 dark techno at 130"). Both used to
+  // fall through to report_library, which answered a request for music with a count.
+  const reportish = /\b(how many|how much|what do i have|what'?s in|what is in|do i have any)\b/.test(t);
+  const countedRequest = countMatch && !reportish;
+  const styledTempo = /\b\d{2,3}\s*bpm\b|\bat\s+1[0-9]{2}\b/.test(t);
   const wantsPlaylist = /\b(playlist|set|mix|selection|lineup)\b/.test(t)
     || /\b(create|build|make|curate|put together|throw together|assemble)\b/.test(t)
     || /\b(give me|i need|i want|can you get|can i get)\b/.test(t)
-    || /\b(something|anything)\b/.test(t) || /\bmusic for\b/.test(t);
+    || /\b(something|anything)\b/.test(t) || /\bmusic for\b/.test(t)
+    || countedRequest || styledTempo;
   const wantsDownload = /\bdownload\b/.test(t);
   if (/\balbum\b/.test(t) && wantsDownload) {
     const latest = /\b(latest|newest|new|recent)\b/.test(t);
@@ -323,7 +330,7 @@ function listName(query) {
   const n = String(query || '')
     .replace(/[^\w\s'-]/g, ' ')
     .replace(/\b\d+\b/g, ' ')
-    .replace(/\b(create|make|build|please|a|an|the|playlist|of|with|for|me|tracks?|songs?|items?|top|rated|best|rating)\b/gi, ' ')
+    .replace(/\b(create|make|build|please|a|an|the|playlist|of|with|for|me|tracks?|songs?|items?|top|rated|best|rating|at|around|about|bpm)\b/gi, ' ')
     .replace(/\s+/g, ' ').trim();
   if (!n) return 'Made by request';
   return (n.charAt(0).toUpperCase() + n.slice(1)).slice(0, 60);
@@ -335,8 +342,26 @@ function ownedIdFor(db, dupKey) {
 }
 
 // related artists of the tracks we picked, so online candidates follow taste, not a keyword
+/* iTunes matches fuzzily: searching a name that does not exist returns real but
+   unrelated songs. A fill is only allowed to answer the question that was asked, so a
+   result must share a word with the request or at least its genre family. */
+const REL_STOP = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'tracks', 'track', 'songs', 'song', 'from', 'into', 'some', 'any', 'new', 'more', 'like', 'music']);
+function relevanceGate(queryText) {
+  const words = String(queryText || '').toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3 && !REL_STOP.has(w));
+  if (!words.length) return () => true;                 // no subject to test against
+  const genreLib = require('./genre');
+  const families = new Set(words.map((w) => genreLib.familyOfString(w)).filter(Boolean));
+  return (t) => {
+    const hay = `${t.title || ''} ${t.artist || ''} ${t.album || ''} ${t.genre || ''}`.toLowerCase();
+    if (words.some((w) => hay.includes(w))) return true;
+    const fam = t.family || (t.genre ? genreLib.familyOfString(t.genre) : null);
+    return !!(fam && families.has(fam));
+  };
+}
+
 async function onlineFill(db, localPicks, need, queryText) {
   if (need <= 0) return [];
+  const related = relevanceGate(queryText);
   const inLib = new Set(db.prepare('SELECT dup_key FROM tracks').all().map((r) => r.dup_key));
   const seen = new Set();
   const seenTitle = new Set();
@@ -353,8 +378,11 @@ async function onlineFill(db, localPicks, need, queryText) {
     seen.add(key);
     return true;
   };
-  const push = ({ title, artist, album, duration, cover, preview }) => {
-    if (out.length >= need || !keep({ title, artist, duration })) return;
+  const push = ({ title, artist, album, duration, cover, preview, genre, family }) => {
+    if (out.length >= need) return;
+    // the catalogue answering a different question is not an answer
+    if (!related({ title, artist, album, genre, family })) return;
+    if (!keep({ title, artist, duration })) return;
     out.push({ title, artist, album: album || '', duration: duration || null, source: 'online', owned: false,
       cover: cover || null, preview: preview || null, key: dupOf(artist, title) });
   };
@@ -464,11 +492,8 @@ async function briefFill(db, { artists = [], themes = [], need = 0 }) {
     }
     if (!took) break;
   }
-  // still short: broaden each theme without the strict word filter
-  for (const list of lists) {
-    if (out.length >= need) break;
-    for (const t of list) { if (out.length >= need) break; push(t); }
-  }
+  // Short is short. Padding a brief with whatever the catalogue happened to return is
+  // how "5 tracks by zzqqxxv" came back with five unrelated songs.
   return out;
 }
 
@@ -522,6 +547,13 @@ async function propose(db, plan) {
     const searchQ = q
       .replace(/\b(i|we|you|do|does|don'?t|do not|not|have|has|own|my|the|outside|in|library|unheard|discover|new|to|me|from|with|some|any|that|which|are|is|and|or|of|for|please|create|make|build|playlist|crate|set|tracks?|songs?)\b/gi, ' ')
       .replace(/\s+/g, ' ').trim();
+    // "tracks by X" names one artist. If X is not here, the mood of the sentence is not a
+    // substitute for X, and neither is whatever the catalogue returned for a name it did
+    // not recognise — the honest answer is that there is nothing.
+    const byName = (q.match(/\bby\s+([a-z0-9][a-z0-9 .&'\-]{1,48})/i) || [])[1];
+    const wantedArtist = byName
+      ? byName.replace(/\b(i|we|you|don'?t|do not|have|has|not|my|the|library|please|now|that|which|are|is|and|or|new|unheard)\b.*$/i, '').trim()
+      : '';
     let local = [];
     if (brief) {
       // the brief names people and things: match those, not the sentence
@@ -538,8 +570,16 @@ async function propose(db, plan) {
         return byArtist || byTheme;
       }).sort((a, b) => (b.owned || 0) - (a.owned || 0)).slice(0, count);
     }
-    if (outsideOnly) local = [];
-    else if (!local.length) local = picked.tracks;
+    if (outsideOnly || wantedArtist) {
+      if (wantedArtist) {
+        const needle = wantedArtist.toLowerCase();
+        const rows = db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.bpm, t.key, t.key_scale, t.genre, t.genre_family,
+            (SELECT COUNT(*) FROM files f WHERE f.track_id=t.id AND f.tier='owned') owned,
+            (SELECT COUNT(*) FROM listens l WHERE l.track_id=t.id) plays
+          FROM tracks t`).all();
+        local = rows.filter((t) => String(t.artist || '').toLowerCase().includes(needle));
+      } else local = [];
+    } else if (!local.length) local = picked.tracks;
     // a brief goes outside unless the request says to stay in the library
     const allowExternal = !onlyLocal && (brief || plan.args.allowExternal !== false);
     // a brief that says "don't limit yourself" must leave room outside: 20 local tracks
@@ -553,12 +593,18 @@ async function propose(db, plan) {
     } else {
       targetOnline = onlyLocal ? 0 : Math.max(Math.round(count * discovery), count - local.length);
       if (outsideOnly) targetOnline = count;
+      if (wantedArtist) targetOnline = Math.max(targetOnline, count - local.length);
       if (targetOnline > 0 && !outsideOnly && local.length > count - targetOnline) local = local.slice(0, Math.max(0, count - targetOnline));
-      online = await onlineFill(db, outsideOnly ? [] : local, Math.min(targetOnline, Math.max(0, count - local.length)), searchQ || picked.ctx.text.join(' '));
+      // a count is not a search term: "10 ambient" used to be sent to the catalogue whole
+      const onlineQuery = (wantedArtist || searchQ || picked.ctx.text.join(' '))
+        .replace(/\b\d+\b/g, ' ').replace(/\s+/g, ' ').trim();
+      online = await onlineFill(db, outsideOnly || wantedArtist ? [] : local,
+        Math.min(targetOnline, Math.max(0, count - local.length)),
+        onlineQuery);
     }
     // if the network gave us less than we hoped, top up from the rest of the local picks —
     // unless the request was explicitly for music that is not here
-    if (!outsideOnly && local.length + online.length < count) {
+    if (!outsideOnly && !wantedArtist && local.length + online.length < count) {
       const rest = picked.tracks.filter((t) => !local.includes(t)).slice(0, count - local.length - online.length);
       local = [...local, ...rest];
     }
@@ -589,12 +635,23 @@ async function propose(db, plan) {
     } else if (local.length) reasonBits.push(`${played} of ${local.length} you already play.`);
     // 'include some I don't have' is an instruction, not a search term
     const FILLER = /^(include|including|some|any|ones|tracks|songs|track|song|that|which|i|dont|don't|have|has|not|no|in|my|library|new|find|more|from|the|a|an|and|or|with|of|for|to|please|create|make|build|playlist|crate|set)$/i;
-    const sourceName = picked.ctx.text.filter((w) => !FILLER.test(w)).join(' ');
+    const sourceName = (searchQ || picked.ctx.text.join(' '))
+      .replace(/\b\d+\b/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .split(' ')
+      .filter((w) => !FILLER.test(w))
+      .join(' ');
     if (outsideOnly) {
       reasonBits = [`None of these are in your library.`, `${online.length} found in the catalogue${sourceName ? ` for “${sourceName}”` : ''}.`, online.length ? 'Confirm and I will fetch them.' : ''];
+    } else if (wantedArtist && !tracks.length) {
+      reasonBits = [`Nothing by “${wantedArtist}” is in your library, and the catalogue returned no match for that name.`];
+    } else if (wantedArtist) {
+      reasonBits = [`${local.length} by “${wantedArtist}” in your library, ${online.length ? `${online.length} new from the catalogue.` : 'nothing new found.'}`];
     } else if (!brief) {
       reasonBits.push(online.length ? (local.length ? `${online.length} new from artists around your rotation.` : `${online.length} new from ${sourceName ? `“${sourceName}”` : 'the catalogue'}.`) : (targetOnline ? 'Nothing new turned up this time.' : 'All from your library.'));
     }
+    if (!tracks.length && wantedArtist) name = `Nothing by ${wantedArtist}`;
     return {
       kind: 'playlist', name, trackIds: local.map((t) => t.id), online, tracks,
       download: !!plan.args.download,
@@ -741,5 +798,5 @@ function commit(db, proposal, deps) {
   return { spoken: 'Nothing to do.', data: {} };
 }
 
-module.exports = { planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan };
+module.exports = { planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan, relevanceGate };
 

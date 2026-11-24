@@ -17,14 +17,6 @@
 const FLAT_TO_SHARP = { Db: 'C#', Eb: 'D#', Gb: 'F#', Ab: 'G#', Bb: 'A#', Cb: 'B', Fb: 'E' };
 const MAJOR_B = { B: 1, 'F#': 2, 'C#': 3, 'G#': 4, 'D#': 5, 'A#': 6, F: 7, C: 8, G: 9, D: 10, A: 11, E: 12 };
 const MINOR_A = { 'G#': 1, 'D#': 2, 'A#': 3, F: 4, C: 5, G: 6, D: 7, A: 8, E: 9, B: 10, 'F#': 11, 'C#': 12 };
-const A_TO_MAJOR = Object.fromEntries(Object.entries(MINOR_A).map(([k, n]) => [n, k]));
-
-function normKey(key) {
-  const k = String(key || '').trim();
-  if (!k) return '';
-  return (FLAT_TO_SHARP[k] || k.replace('♯', '#').replace('♭', 'b')).toUpperCase().replace('B', 'B');
-}
-
 /* key + scale -> { n: 1..12, minor: bool } or null */
 function camelotOf(key, scale) {
   let k = String(key || '').trim();
@@ -39,11 +31,6 @@ function camelotOf(key, scale) {
 function camelotLabel(key, scale) {
   const c = camelotOf(key, scale);
   return c ? `${c.n}${c.minor ? 'A' : 'B'}` : '';
-}
-
-function noteLabel(key, scale) {
-  if (!key) return '';
-  return `${key}${String(scale || '').toLowerCase() === 'minor' ? 'm' : ''}`;
 }
 
 function harmonicScore(a, b) {
@@ -83,4 +70,4 @@ function harmonicOrder(tracks) {
   return [...order, ...rest];
 }
 
-module.exports = { camelotOf, camelotLabel, noteLabel, harmonicScore, harmonicOrder, MINOR_A, MAJOR_B, A_TO_MAJOR };
+module.exports = { camelotOf, camelotLabel, harmonicScore, harmonicOrder, MINOR_A, MAJOR_B };

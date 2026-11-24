@@ -5,6 +5,7 @@
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const paths = require('./paths');
 
 // what Pioneer (rekordbox + CDJ from the 850/2000 on) and Traktor both open natively
 const PLAYABLE = new Set(['.mp3', '.m4a', '.wav', '.aiff', '.aif', '.flac']);
@@ -84,7 +85,7 @@ async function toPlayable(file, opts = {}) {
   args.push(outPath);
 
   await new Promise((resolve, reject) => {
-    execFile('/usr/bin/ffmpeg', args, { timeout: 15 * 60 * 1000, maxBuffer: 8 * 1024 * 1024 },
+    execFile(paths.FFMPEG, args, { timeout: 15 * 60 * 1000, maxBuffer: 8 * 1024 * 1024 },
       (err) => (err ? reject(err) : resolve()));
   }).catch(() => null);
 
@@ -132,7 +133,7 @@ async function toFaststart(file) {
   const base = path.basename(file);
   const tmp = path.join(dir, `.fs-${process.pid}-${base}`);
   const run = (args) => new Promise((resolve) => {
-    execFile('/usr/bin/ffmpeg', args, { timeout: 20 * 60 * 1000, maxBuffer: 8 * 1024 * 1024 }, (err) => resolve(!err));
+    execFile(paths.FFMPEG, args, { timeout: 20 * 60 * 1000, maxBuffer: 8 * 1024 * 1024 }, (err) => resolve(!err));
   });
   // keep artwork and tags when the muxer accepts them, fall back to plain audio if not
   let ok = await run(['-v', 'error', '-y', '-i', file, '-map', '0', '-c', 'copy', '-map_metadata', '0', '-movflags', '+faststart', tmp]);

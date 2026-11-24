@@ -29,7 +29,10 @@ function parseBpm(text) {
 }
 
 function parseLimit(text, fallback = 50) {
-  const m = text.match(/(\d{1,3})\s*(?:songs?|tracks?|items?|of them)?/i);
+  // the first number in a sentence is usually a tempo or a year: "tracks between 120 and
+  // 130 bpm" set limit=120. A limit has to be said as a count.
+  const m = text.match(/\b(\d{1,3})\s+(?:songs?|tracks?|items?)\b/i)
+    || text.match(/^\s*(\d{1,3})\s*$/);
   if (!m) return fallback;
   const v = Number(m[1]);
   return v > 0 && v <= 500 ? v : fallback;

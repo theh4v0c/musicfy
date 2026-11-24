@@ -266,14 +266,22 @@ function dataPage(index, type, next, rows) {
   return p;
 }
 
+/* A page holds rows plus the row index, which grows backwards in 0x24-byte groups of
+   sixteen. Both have to fit, so the cap is computed per candidate row count, not chosen
+   once: a fixed reserve overflowed at about 150 tracks. */
 function packTable(type, rows) {
   const perPage = [];
   let current = [];
-  // leave room for the 36-byte row-index group that grows backwards per 16 rows
-  const limit = PAGE - HEAD - 0x120;
   let used = 0;
+  const cap = PAGE - HEAD;
+  const indexBytes = (n) => Math.ceil(Math.max(n, 1) / 16) * 0x24;
   for (const r of rows) {
-    if (used + r.length > limit) { perPage.push(current); current = []; used = 0; }
+    const nextCount = current.length + 1;
+    if (current.length && used + r.length + indexBytes(nextCount) > cap) {
+      perPage.push(current);
+      current = [];
+      used = 0;
+    }
     current.push(r);
     used += r.length;
   }

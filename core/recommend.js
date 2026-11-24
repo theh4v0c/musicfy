@@ -2,23 +2,7 @@
 // Recommendations that follow what is being played now.
 // Inputs: recent listens (weighted heavily), the historical co-listening graph, and
 // feature proximity (genre family, key, tempo). No model required, so it cannot drift.
-const KEY_NEIGHBOURS = {};
-const CAMELOT = { A: 8, 'A#': 3, B: 10, C: 5, 'C#': 0, D: 7, 'D#': 2, E: 9, F: 4, 'F#': 11, G: 6, 'G#': 1 };
-
-function camelot(key, scale) {
-  const n = CAMELOT[String(key || '').toUpperCase()];
-  if (n === undefined) return null;
-  return scale === 'minor' ? n + 1 : n;
-}
-
-function harmonic(a, b) {
-  if (a === null || b === null) return 0;
-  const d = Math.min(Math.abs(a - b), 12 - Math.abs(a - b));
-  if (d === 0) return 1;
-  if (d === 1) return 0.6;
-  if (d === 7) return 0.3;   // relative major/minor
-  return 0;
-}
+const { camelotOf, harmonicScore } = require('./harmonic');
 
 function build(db, { days = 30, limit = 40, excludePlaylisted = false, avoid = [] } = {}) {
   const now = Math.floor(Date.now() / 1000);
@@ -59,8 +43,8 @@ function build(db, { days = 30, limit = 40, excludePlaylisted = false, avoid = [
   for (const p of played) {
     if (p.genre_family) famCount[p.genre_family] = (famCount[p.genre_family] || 0) + (recentWeight.get(p.id) || 1);
     if (p.bpm) { bpmSum += p.bpm; bpmN += 1; }
-    const c = camelot(p.key, p.key_scale);
-    if (c !== null) keys.push(c);
+    const c = camelotOf(p.key, p.key_scale);
+    if (c) keys.push(c);
   }
   const topFamily = Object.entries(famCount).sort((a, b) => b[1] - a[1])[0];
   const avgBpm = bpmN ? bpmSum / bpmN : null;
@@ -93,9 +77,9 @@ function build(db, { days = 30, limit = 40, excludePlaylisted = false, avoid = [
       if (delta <= 3) { score += 16; reasons.push('tempo matches your current rotation'); }
       else if (delta <= 8) { score += 9; reasons.push('close tempo'); }
     }
-    const pc = camelot(p.key, p.key_scale);
-    if (pc !== null && keys.length) {
-      const best = Math.max(...keys.slice(-20).map((k) => harmonic(k, pc)));
+    const pc = camelotOf(p.key, p.key_scale);
+    if (pc && keys.length) {
+      const best = Math.max(...keys.slice(-20).map((k) => harmonicScore(k, pc)));
       if (best >= 0.6) { score += 12; reasons.push('harmonically compatible'); }
       else if (best > 0) score += 5;
     }

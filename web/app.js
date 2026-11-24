@@ -2565,7 +2565,6 @@ async function renderSettings() {
       </section>
       <section class="set-card">
         <h2>Downloads</h2>
-        <label>Download folder<input id="set-root" value="${esc(s.download_root || '')}" placeholder="/srv/music/owned"></label>
         <label>Download format
           <select id="set-format">
             <option value="best"${(s.preferred_format || 'best') === 'best' ? ' selected' : ''}>keep the original (no transcoding)</option>
@@ -2586,15 +2585,6 @@ async function renderSettings() {
         <p class="set-note">Display only. Exports always write musical notation, which is what Rekordbox and Traktor read.</p>
         <label class="set-check"><input type="checkbox" id="set-normalize"${s.normalize_loudness ? ' checked' : ''}> Normalize loudness</label>
         <p class="set-note">Turns loud tracks down towards a common level, using the loudness measured during analysis. It only ever attenuates — it cannot add distortion and it never rewrites a file. <b>iOS ignores per-track volume</b>, so on a phone or in a car this does nothing.</p>
-        <label class="set-check"><input type="checkbox" id="set-fade"${s.fade_on_play_ms ? ' checked' : ''}> Fade tracks in and out</label>
-        <label>Fade length
-          <select id="set-fadems">
-            <option value="0"${!s.fade_on_play_ms ? ' selected' : ''}>off</option>
-            <option value="350"${String(s.fade_on_play_ms) === '350' ? ' selected' : ''}>0.35 s</option>
-            <option value="800"${String(s.fade_on_play_ms) === '800' ? ' selected' : ''}>0.8 s</option>
-            <option value="1500"${String(s.fade_on_play_ms) === '1500' ? ' selected' : ''}>1.5 s</option>
-          </select>
-        </label>
         <label>Target level
           <select id="set-target">
             <option value="-12"${String(s.target_loudness) === '-12' ? ' selected' : ''}>-12 dB (loud)</option>
@@ -2622,13 +2612,6 @@ async function renderSettings() {
     const f = document.getElementById('set-facts');
     if (f) f.innerHTML = `<div><b>${st.tracks}</b> tracks</div><div><b>${(st.owned_bytes / 1e9).toFixed(2)} GB</b> on disk</div><div><b>${st.listens}</b> plays recorded</div>`;
   }).catch(() => {});
-  // keep the fade checkbox and its length select in agreement
-  const fadeCb = document.getElementById('set-fade');
-  const fadeSel = document.getElementById('set-fadems');
-  if (fadeCb && fadeSel) {
-    fadeCb.onchange = () => { fadeSel.value = fadeCb.checked ? (fadeSel.value === '0' ? '350' : fadeSel.value) : '0'; };
-    fadeSel.onchange = () => { fadeCb.checked = fadeSel.value !== '0'; };
-  }
   // the exclusion field, shown back as the terms the app will actually use
   const avoidInput = document.getElementById('set-taste-avoid');
   const avoidHost = document.getElementById('set-avoid-terms');
@@ -2657,14 +2640,10 @@ async function renderSettings() {
       city: document.getElementById('set-city').value.trim(),
       llm_base_url: document.getElementById('set-llm-url').value.trim(),
       llm_model: document.getElementById('set-llm-model').value.trim(),
-      download_root: document.getElementById('set-root').value.trim(),
       preferred_format: document.getElementById('set-format').value,
       key_format: document.getElementById('set-keyfmt').value,
       normalize_loudness: document.getElementById('set-normalize').checked,
       target_loudness: Number(document.getElementById('set-target').value),
-      fade_on_play_ms: document.getElementById('set-fade').checked
-        ? (Number(document.getElementById('set-fadems').value) || 350)
-        : 0,
       autoplay_next: document.getElementById('set-autoplay').checked,
       prefetch_ahead: Number(document.getElementById('set-buffer').value),
       taste_genres: document.getElementById('set-taste-genres').value.trim(),
@@ -2686,9 +2665,9 @@ async function renderSettings() {
   const LABELS = {
     display_name: 'name', email: 'email', timezone: 'time zone', city: 'city',
     llm_base_url: 'model endpoint', llm_model: 'model', llm_api_key: 'API key',
-    download_root: 'download folder', preferred_format: 'format',
+    preferred_format: 'format',
     normalize_loudness: 'loudness switch', target_loudness: 'target level',
-    fade_on_play_ms: 'fade', autoplay_next: 'autoplay', prefetch_ahead: 'buffer',
+    autoplay_next: 'autoplay', prefetch_ahead: 'buffer',
     taste_genres: 'genres', taste_artists: 'artists', taste_context: 'listening context',
     taste_avoid: 'pick exclusions',
   };
@@ -2879,6 +2858,15 @@ function renderActionCard(a, out, stateEl) {
     card.appendChild(meta);
   }
   const tracks = a.action.tracks || [];
+  // nothing found is an answer, not a draft: no confirm button for an empty set
+  if (!tracks.length) {
+    const none = document.createElement('div');
+    none.className = 'ask-action-safety';
+    none.textContent = 'Nothing to build from this one.';
+    card.appendChild(none);
+    out.appendChild(card);
+    return;
+  }
   const list = document.createElement('div');
   list.className = 'ask-preview';
   tracks.slice(0, 20).forEach((t) => {
@@ -3296,9 +3284,11 @@ async function renderSearch() {
     draw();
   };
   // every example is a question, so it opens the place that answers them
+  // the examples are questions; A&R is where a question is answered
   document.querySelectorAll('#search-hints .ask-ex').forEach((b) => b.onclick = () => {
     q.value = b.textContent;
-    navAandR(b.textContent);
+    state.arPending = b.textContent;
+    nav('askai');
   });
   const paintLS = () => {
     const ls = $('long-sets');
@@ -3957,8 +3947,6 @@ function trackProgress(trackId, anchorEl) {
 }
 
 // loudness normalisation: turn every track down to a common target, never boost
-// short fades at both ends: not a true crossfade, but no hard cut between tracks
-let fadeTimer = null;
 
 function targetVolume() {
   const s = state.settings || {};

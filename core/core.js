@@ -6,6 +6,7 @@ const zlib = require('node:zlib');
 const https = require('node:https');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const { createHash } = require('node:crypto');
 const { execFile, execFileSync, spawn } = require('node:child_process');
 const { normalize, scoreCandidate, QUALITY_RANK } = require('./ladder');
@@ -271,15 +272,25 @@ async function ingestWnlFolder(folder, name) {
   return { ok, fail };
 }
 
-function httpGet(url) {
+function httpGet(url, { timeout = 15000, maxBytes = 8 * 1024 * 1024 } = {}) {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith('https:') ? https : http;
-    mod.get(url, (res) => {
-      if (res.statusCode !== 200) { res.resume(); return reject(new Error(`HTTP ${res.statusCode} ${url}`)); }
+    let settled = false;
+    const fail = (e) => { if (settled) return; settled = true; reject(e); };
+    const req = mod.get(url, { timeout }, (res) => {
+      if (res.statusCode !== 200) { res.resume(); return fail(new Error(`HTTP ${res.statusCode} ${url}`)); }
       const chunks = [];
-      res.on('data', c => chunks.push(c));
-      res.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-    }).on('error', reject);
+      let size = 0;
+      res.on('data', (c) => {
+        size += c.length;
+        if (size > maxBytes) { req.destroy(); return fail(new Error('response too large')); }
+        chunks.push(c);
+      });
+      res.on('end', () => { if (settled) return; settled = true; resolve(Buffer.concat(chunks).toString('utf8')); });
+      res.on('error', fail);
+    });
+    req.on('timeout', () => { req.destroy(); fail(new Error('timeout')); });
+    req.on('error', fail);
   });
 }
 // external lookups must never hold a request open indefinitely
@@ -367,7 +378,7 @@ const STREAM_TTL = 4 * 60 * 60 * 1000;
 // read the real length of a remote stream so a 30 second preview cannot be mistaken for a track
 function probeStreamDuration(url) {
   return new Promise((resolve, reject) => {
-    const child = spawn('/usr/bin/ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', url], { timeout: 15000 });
+    const child = spawn(paths.FFPROBE, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', url], { timeout: 15000 });
     let out = '';
     child.stdout.on('data', (c) => { out += c; });
     child.on('error', reject);
@@ -401,6 +412,10 @@ async function resolveStreamUrl(t) {
     }
   }
   streamUrlCache.set(t.id, { url: loc, exp: Date.now() + STREAM_TTL });
+  if (streamUrlCache.size > 400) {
+    const now2 = Date.now();
+    for (const [id, v] of streamUrlCache) if (v.exp <= now2 || streamUrlCache.size > 400) streamUrlCache.delete(id);
+  }
   return loc;
 }
 
@@ -436,7 +451,10 @@ setInterval(() => {
     const st = analyze.status(db);
     if (!st.active && st.remaining > 0) {
       analyze.run(db, { limit: Math.min(25, st.remaining), workers: 2 })
-        .then((r) => console.log('[analyze] auto', JSON.stringify(r).slice(0, 120)))
+        .then((r) => {
+          if (r && r.error) { console.error('[analyze] cannot progress:', r.error); return; }
+          console.log('[analyze] auto', JSON.stringify(r).slice(0, 120));
+        })
         .catch((e) => console.error('[analyze] auto fail', e.message));
     }
   } catch {}
@@ -730,7 +748,15 @@ function readBody(req, limit = MAX_BODY_BYTES) {
 // 2. cheap token bucket for the expensive routes only
 const RATE = { window: 60000, max: 40 };
 const buckets = new Map();
-function allow(key) {
+function clientOf(req) {
+  // a reverse proxy on this machine is the only thing allowed to speak for a client
+  const forwarded = req.headers['x-forwarded-for'];
+  const remote = (req.socket && req.socket.remoteAddress) || 'local';
+  const loopback = /^(::1|127\.|::ffff:127\.)/.test(remote);
+  return loopback && forwarded ? String(forwarded).split(',')[0].trim() : remote;
+}
+function allow(req, route) {
+  const key = `${clientOf(req)}|${route}`;
   const now = Date.now();
   const list = (buckets.get(key) || []).filter((t) => now - t < RATE.window);
   if (list.length >= RATE.max) { buckets.set(key, list); return false; }
@@ -762,6 +788,20 @@ setInterval(() => {
     if (kept.length) buckets.set(k, kept); else buckets.delete(k);
   }
 }, 60000);
+
+/* A staged ZIP has one owner: this function. The temp tree is removed when the response
+   closes (finished or abandoned), when the read fails, and when the headers cannot be
+   written. It used to be removed only on stream.close, so a failed zip left gigabytes in /tmp. */
+function streamZip(res, tmpDir, zipPath, headers) {
+  const cleanup = () => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} };
+  let size = 0;
+  try { size = fs.statSync(zipPath).size; } catch (e) { cleanup(); return serverError(res, e, 'zip'); }
+  res.writeHead(200, { ...headers, 'content-length': size });
+  const stream = fs.createReadStream(zipPath);
+  stream.on('error', (e) => { cleanup(); console.error('[zip] read failed:', e.message); try { res.destroy(); } catch {} });
+  res.on('close', cleanup);
+  stream.pipe(res);
+}
 
 // 3. ladder results are expensive and rarely change inside a few minutes
 const LADDER_TTL = Number(process.env.MUSICFY_LADDER_TTL || 5 * 60 * 1000);
@@ -839,13 +879,21 @@ function migrate() {
 
 // 5. dependencies must fail loudly at boot, not silently mid download
 function checkDependencies() {
-  const onPath = (name) => String(process.env.PATH || '').split(':').filter(Boolean)
+  const onPath = (name) => String(process.env.PATH || '').split(path.delimiter).filter(Boolean)
     .some((d) => { try { return fs.existsSync(path.join(d, name)); } catch { return false; } });
-  const bins = [['ffprobe', 'ffprobe'], ['ffmpeg', 'ffmpeg'], [paths.YTDLP, 'yt-dlp']];
-  for (const [full, name] of bins) {
+  const bins = [[paths.FFPROBE, 'ffprobe', 'MUSICFY_FFPROBE'], [paths.FFMPEG, 'ffmpeg', 'MUSICFY_FFMPEG'], [paths.YTDLP, 'yt-dlp', 'MUSICFY_YTDLP']];
+  for (const [full, name, env] of bins) {
     const ok = path.isAbsolute(full) ? fs.existsSync(full) : onPath(name);
-    if (!ok) console.error('[deps] MISSING', name, '— install it, or point PATH / MUSICFY_YTDLP at it');
+    if (!ok) console.error(`[deps] MISSING ${name} (looked for ${full}) — install it, or set ${env} or PATH`);
+    else if (path.isAbsolute(full)) console.log(`[deps] ${name} ${full}`);
   }
+  // the analyser is the one dependency that fails silently: it spawns per batch, so a
+  // missing interpreter looks like "nothing to analyse" forever
+  const py = paths.ESSENTIA_PY;
+  if (!fs.existsSync(py)) {
+    const venv = /\/bin\/python[0-9.]*$/.test(py) ? path.dirname(path.dirname(py)) : null;
+    console.error(`[deps] MISSING analyser interpreter ${py} — ${venv ? `create it (python3 -m venv ${venv} && ${venv}/bin/pip install librosa numpy), or` : ''} set MUSICFY_PYTHON`);
+  } else console.log('[deps] analyser', py);
 }
 
 function plCoverFile(pid) {
@@ -858,7 +906,7 @@ function plCoverFile(pid) {
 function saveImageCover(buf, destJpg) {
   return new Promise((resolve, reject) => {
     if (!buf || !buf.length) return reject(new Error('empty image'));
-    const tmp = path.join('/tmp', `mfimg-${crypto.randomUUID()}`);
+    const tmp = path.join(os.tmpdir(), `mfimg-${crypto.randomUUID()}`);
     fs.writeFileSync(tmp, buf);
     execFile('ffmpeg', ['-y', '-v', 'error', '-i', tmp, '-vf', 'scale=600:-1', '-q:v', '3', destJpg],
       { timeout: 30000 }, (err) => {
@@ -1101,7 +1149,13 @@ function startLadderDownload(jobId, b, onDone) {
   // hash the full id: retry ids append '-r' and would otherwise share a directory
   const dir = path.join(OWNED, 'web', createHash('sha1').update(String(jobId)).digest('hex').slice(0, 10));
   fs.mkdirSync(dir, { recursive: true });
+  // a child can emit 'error' and then 'close', and a retry can call finish while the
+  // cover fetch is still in flight: one attempt gets one completion, or the queue
+  // advances twice and the concurrency counter goes negative
+  let finished = false;
   const finish = (state, detail) => {
+    if (finished) return;
+    finished = true;
     runningChildren.delete(jobId);
     if (cancelledJobs.has(jobId)) { state = 'cancelled'; detail = ''; }
     db.prepare('UPDATE jobs SET state=?, detail=?, progress=?, finished_at=? WHERE payload LIKE ?')
@@ -1144,7 +1198,7 @@ function startLadderDownload(jobId, b, onDone) {
       const conv = fp.replace(/\.[^.]+$/, '') + '.m4a';
       try {
         await new Promise((resolve, reject) => {
-          execFile('/usr/bin/ffmpeg', ['-v', 'error', '-y', '-i', fp, '-vn', '-c:a', 'aac', '-b:a', '256k', conv],
+          execFile(paths.FFMPEG, ['-v', 'error', '-y', '-i', fp, '-vn', '-c:a', 'aac', '-b:a', '256k', conv],
             { timeout: 900000, maxBuffer: 8 * 1024 * 1024 }, (err) => (err ? reject(err) : resolve()));
         });
         if (fs.existsSync(conv) && fs.statSync(conv).size > 10000) { try { fs.unlinkSync(fp); } catch {} fp = conv; name = path.basename(conv); }
@@ -1275,8 +1329,10 @@ function startLadderDownload(jobId, b, onDone) {
       ], { stdio: ['ignore', 'pipe', 'pipe'] });
       watch(child);
       runningChildren.set(jobId, child);
-      child.on('error', next);
-      child.on('close', () => { if (gotAudio()) return ingestDownloaded(); next(); });
+      let settled = false;
+      const settle = (fn) => { if (settled) return; settled = true; fn(); };
+      child.on('error', () => settle(next));
+      child.on('close', () => settle(() => (gotAudio() ? ingestDownloaded() : next())));
     };
     // five candidates each, filtered by title, first survivor wins
     trySource(`ytsearch5:${query}`, () => trySource(`scsearch5:${query}`, () => finish('error', 'no source in search')));
@@ -1294,9 +1350,12 @@ function startLadderDownload(jobId, b, onDone) {
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
     watch(child);
     runningChildren.set(jobId, child);
-    child.on('error', (e) => finish('error', String(e.message).slice(0, 200)));
+    let settled = false;
+    const settle = (fn) => { if (settled) return; settled = true; fn(); };
+    child.on('error', (e) => settle(() => finish('error', String(e.message).slice(0, 200))));
     child.on('close', (code) => {
-      if (code === 0) return ingestDownloaded();
+      if (code === 0) return settle(ingestDownloaded);
+      settle(() => {
       // several YouTube videos only answer to a specific client, so walk the list
       const clients = ['android', 'ios', 'web_safari', 'tv'];
       const tryClient = (index) => {
@@ -1311,13 +1370,15 @@ function startLadderDownload(jobId, b, onDone) {
           ], { stdio: ['ignore', 'pipe', 'pipe'] });
           watch(retry);
           runningChildren.set(jobId, retry);
-          retry.on('error', (e) => finish('error', String(e.message).slice(0, 160)));
-          retry.on('close', () => {
+          let retrySettled = false;
+          const settleRetry = (fn) => { if (retrySettled) return; retrySettled = true; fn(); };
+          retry.on('error', (e) => settleRetry(() => finish('error', String(e.message).slice(0, 160))));
+          retry.on('close', () => settleRetry(() => {
             // same 101 quirk: judge by the file on disk, not the exit code
             const got = fs.readdirSync(dir).some((f) => /\.(mp3|m4a|aac|opus|ogg|flac|wav)$/i.test(f) && !/\.part$/i.test(f));
             if (!got) return finish('error', `yt-dlp exit ${code}, clients and search failed`);
             ingestDownloaded();
-          });
+          }));
           return;
         }
         const attempt = spawn(paths.YTDLP, [
@@ -1327,13 +1388,13 @@ function startLadderDownload(jobId, b, onDone) {
         ], { stdio: ['ignore', 'pipe', 'pipe'] });
         watch(attempt);
         runningChildren.set(jobId, attempt);
-        attempt.on('error', () => tryClient(index + 1));
-        attempt.on('close', (c) => {
-          if (c === 0) return ingestDownloaded();
-          tryClient(index + 1);
-        });
+        let attemptSettled = false;
+        const settleAttempt = (fn) => { if (attemptSettled) return; attemptSettled = true; fn(); };
+        attempt.on('error', () => settleAttempt(() => tryClient(index + 1)));
+        attempt.on('close', (c) => settleAttempt(() => (c === 0 ? ingestDownloaded() : tryClient(index + 1))));
       };
       tryClient(0);
+      });
     });
   } else if (b.rung === 'soundcloud' && b.url) {
     setProgress(5);
@@ -1461,6 +1522,18 @@ function compressJson(body) {
   jsonGzip.set(key, gz);
   return gz;
 }
+
+// A 5xx is our problem, not the client's: log the real reason, return a sentence. An
+// SQLite message or a full node path in a response is an information leak, not a service.
+const serverError = (res, e, where) => {
+  console.error(`[error] ${where}:`, (e && e.message) || e);
+  return json(res, 500, { error: 'the server could not complete that request' });
+};
+const upstreamError = (res, e, where) => {
+  console.error(`[upstream] ${where}:`, (e && e.message) || e);
+  return json(res, 502, { error: 'the external service did not answer' });
+};
+
 const json = (res, code, obj) => {
   const body = Buffer.from(JSON.stringify(obj));
   const ae = String((res.req && res.req.headers['accept-encoding']) || '');
@@ -1490,6 +1563,22 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('referrer-policy', 'no-referrer');
   res.setHeader('x-frame-options', 'DENY');
   res.setHeader('permissions-policy', 'geolocation=(), camera=(), microphone=()');
+  // no inline scripts, no third-party script, no framing. Styles may be inline because the
+  // client draws with style attributes; nothing else is relaxed.
+  res.setHeader('content-security-policy', [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "media-src 'self' blob: https:",
+    "connect-src 'self' https:",
+    "font-src 'self' data:",
+    "worker-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+  ].join('; '));
   // a throw inside a req.on('end') callback escapes the async try below and strands the
   // socket with no response. Wrap every 'end' listener so a bad body answers 400, never hangs.
   const _on = req.on.bind(req);
@@ -1511,7 +1600,11 @@ const server = http.createServer(async (req, res) => {
     if (qtoken && qtoken === AUTH_TOKEN) {
       u.searchParams.delete('token');
       const clean = u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '');
-      res.writeHead(302, { 'set-cookie': `mf_auth=${AUTH_TOKEN}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000`, location: clean });
+      // Secure only when the request actually arrived over TLS: a LAN install on plain
+      // http would otherwise receive a cookie the browser refuses to store
+      const secure = req.socket.encrypted || (/^(::1|127\.|::ffff:127\.)/.test(String(req.socket.remoteAddress || ''))
+        && String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https');
+      res.writeHead(302, { 'set-cookie': `mf_auth=${AUTH_TOKEN}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000${secure ? '; Secure' : ''}`, location: clean });
       return res.end();
     }
   }
@@ -1573,7 +1666,7 @@ const server = http.createServer(async (req, res) => {
       return res.end(fs.readFileSync(path.join(WEB, 'icon.svg')));
     }
 
-    if ((u.pathname === '/api/search/ladder' || u.pathname === '/api/ask' || u.pathname === '/api/agent') && !allow(u.pathname)) {
+    if ((u.pathname === '/api/search/ladder' || u.pathname === '/api/ask' || u.pathname === '/api/agent') && !allow(req, u.pathname)) {
       return json(res, 429, { error: 'slow down', retry_after: 60 });
     }
     if (u.pathname === '/api/search/ladder') {
@@ -1797,7 +1890,7 @@ const server = http.createServer(async (req, res) => {
           .sort((a, b) => b.score - a.score || QUALITY_RANK(b) - QUALITY_RANK(a))
           .slice(0, 20);
         return json(res, 200, { track: info, results: all, rungs: ['yt-dlp', 'soundcloud', 'archive'], best: all[0] || null });
-      } catch (e) { return json(res, 502, { error: e.message }); }
+      } catch (e) { return upstreamError(res, e, ''); }
     }
 
     if (u.pathname === '/api/ladder/state') {
@@ -1811,7 +1904,7 @@ const server = http.createServer(async (req, res) => {
         const url = await ytdlp.streamUrl(mStreamYt[1]);
         res.writeHead(302, { location: url });
         return res.end();
-      } catch (e) { return json(res, 502, { error: e.message }); }
+      } catch (e) { return upstreamError(res, e, ''); }
     }
 
     // soundcloud: download once into a cache file, then stream that file as it grows.
@@ -1900,7 +1993,7 @@ const server = http.createServer(async (req, res) => {
         const loc = await ytdlp.streamUrlFor(target);
         res.writeHead(302, { location: loc });
         return res.end();
-      } catch (e) { return json(res, 502, { error: e.message }); }
+      } catch (e) { return upstreamError(res, e, '/api/ladder/stream/generic'); }
     }
 
 
@@ -1954,7 +2047,7 @@ const server = http.createServer(async (req, res) => {
           }
           enqueueDownload(jobId, payload);
           json(res, 200, { job: jobId });
-        } catch (e) { json(res, 400, { error: e.message }); }
+        } catch (e) { serverError(res, e, 'download start'); }
       });
       return;
     }
@@ -2009,7 +2102,7 @@ const server = http.createServer(async (req, res) => {
             https.get(info.cover, (r) => { if (r.statusCode === 200) { const w = fs.createWriteStream(dest); r.pipe(w); } else { r.resume(); } }).on('error', () => {});
           }
           json(res, 200, { playlist: pid, name: info.title, tracks: pos, added });
-        } catch (e) { json(res, 502, { error: e.message }); }
+        } catch (e) { upstreamError(res, e, '/api/mirror/spotify'); }
       });
       return;
     }
@@ -2096,7 +2189,10 @@ const server = http.createServer(async (req, res) => {
         await saveImageCover(buf, coverFile(tid));
         db.prepare('UPDATE tracks SET has_art=1 WHERE id=?').run(tid);
         return json(res, 200, { ok: true });
-      } catch (e) { return json(res, 400, { error: e.message }); }
+      } catch (e) {
+        console.error('[cover] track', tid, (e && e.message) || e);
+        return json(res, 400, { error: 'that image could not be read' });
+      }
     }
 
     // replace the artwork of one playlist
@@ -2117,7 +2213,7 @@ const server = http.createServer(async (req, res) => {
         try {
           fs.copyFileSync(src, plCoverFile(pid));
           return json(res, 200, { ok: true, track: tid });
-        } catch (e) { return json(res, 500, { error: e.message }); }
+        } catch (e) { return serverError(res, e, ''); }
       });
       return;
     }
@@ -2129,7 +2225,10 @@ const server = http.createServer(async (req, res) => {
       try {
         await saveImageCover(buf, plCoverFile(pid));
         return json(res, 200, { ok: true });
-      } catch (e) { return json(res, 400, { error: e.message }); }
+      } catch (e) {
+        console.error('[cover] playlist', pid, (e && e.message) || e);
+        return json(res, 400, { error: 'that image could not be read' });
+      }
     }
 
 
@@ -2145,7 +2244,7 @@ const server = http.createServer(async (req, res) => {
         const m = out.match(/\{[\s\S]*\}\s*$/);
         const stats = m ? JSON.parse(m[0]) : null;
         return json(res, 200, { ok: true, stats, log: out.split('\n').slice(-6).join('\n') });
-      } catch (e) { return json(res, 500, { error: e.message }); }
+      } catch (e) { return serverError(res, e, '/api/history/scan'); }
     }
 
     // what the history ingest learned
@@ -2191,7 +2290,7 @@ const server = http.createServer(async (req, res) => {
             db.prepare('INSERT OR IGNORE INTO playlist_tracks (playlist_id,track_id,position,added_at) VALUES (?,?,?,?)').run(pid, tid, pos, now());
           }
           return json(res, 200, { track: tid, title: info.title, playlist: pid, added: !!pid, existing: !!before });
-        } catch (e) { return json(res, 502, { error: e.message }); }
+        } catch (e) { return upstreamError(res, e, '/api/mirror/track'); }
       });
       return;
     }
@@ -2220,7 +2319,7 @@ const server = http.createServer(async (req, res) => {
             db.prepare('INSERT OR IGNORE INTO playlist_tracks (playlist_id,track_id,position,added_at) VALUES (?,?,?,?)').run(pid, tid, pos++, now());
           }
           json(res, 200, { playlist: pid, name, added: pos });
-        } catch (e) { json(res, 400, { error: e.message }); }
+        } catch (e) { serverError(res, e, 'history mirror'); }
       });
       return;
     }
@@ -2562,12 +2661,18 @@ const server = http.createServer(async (req, res) => {
         req.on('end', async () => {
           let b = {};
           try { b = JSON.parse(body || '{}'); } catch {}
+          // the endpoint is a URL a person typed: refuse one we cannot call, now, instead
+          // of storing it and failing silently on the first question
+          if (typeof b.llm_base_url === 'string' && b.llm_base_url.trim()) {
+            try { llm.endpoint(b.llm_base_url); }
+            catch (e) { return json(res, 400, { error: e.message }); }
+          }
           let s = {};
           try { s = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
           picksCache = { at: 0, data: null };
           for (const k of ['display_name', 'email', 'country', 'llm_base_url', 'llm_model', 'llm_api_key',
-            'download_root', 'preferred_format', 'key_format', 'autoplay_next', 'show_stream_rows',
-            'normalize_loudness', 'target_loudness', 'crossfade_ms', 'fade_on_play', 'fade_on_play_ms', 'prefetch_ahead',
+            'preferred_format', 'key_format', 'autoplay_next',
+            'normalize_loudness', 'target_loudness', 'prefetch_ahead',
             'taste_genres', 'taste_artists', 'taste_context', 'taste_avoid']) {
             if (b[k] !== undefined) s[k] = b[k];
           }
@@ -2650,13 +2755,13 @@ const server = http.createServer(async (req, res) => {
         WHERE l.played_at >= ? AND t.artist IS NOT NULL AND t.artist != ''
         GROUP BY t.artist ORDER BY n DESC LIMIT 1`).get(nowTs - 7 * 86400);
       const addAny = (rows, reason) => { for (const r of rows) { if (!exclude.matches(banned, r)) { add(r, reason); return; } } };
-      if (weekArtist && weekArtist.a) {
+      if (weekArtist && weekArtist.a && /[a-z]/i.test(weekArtist.a)) {
         addAny(db.prepare(`SELECT t.id,t.title,t.artist,t.album,t.genre,t.genre_family,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
           WHERE t.artist=? AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id AND l.played_at > ?)
           ORDER BY RANDOM() LIMIT 12`).all(weekArtist.a, nowTs - 14 * 86400),
           `your artist of the week, unheard lately`);
       }
-      if (last && last.artist) {
+      if (last && last.artist && /[a-z]/i.test(last.artist)) {
         addAny(db.prepare(`SELECT t.id,t.title,t.artist,t.album,t.genre,t.genre_family,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
           WHERE t.artist=? AND t.id<>? ORDER BY RANDOM() LIMIT 12`).all(last.artist, last.id),
           `more from ${last.artist}`);
@@ -2822,12 +2927,14 @@ const server = http.createServer(async (req, res) => {
       const bpmRow = db.prepare(`SELECT AVG(bpm) a FROM tracks WHERE bpm IS NOT NULL AND bpm>0`).get();
       const recent = db.prepare(`SELECT t.artist FROM listens l JOIN tracks t ON t.id=l.track_id
         WHERE l.played_at>=? AND t.artist IS NOT NULL AND t.artist!='' GROUP BY l.track_id ORDER BY MAX(l.played_at) DESC LIMIT 4`).all(week).map((r) => r.artist);
+      // a tag can be bars or dashes rather than a name: "more from ||||||||" is not a prompt
+      const named = (a) => /[a-z]/i.test(String(a || ''));
       const pool = [];
-      for (const a of topArtists.slice(0, 2)) pool.push(`more from ${a}`);
+      for (const a of topArtists.filter(named).slice(0, 2)) pool.push(`more from ${a}`);
       for (const k of keys.slice(0, 2)) pool.push(`tracks in ${k.k}${k.s === 'minor' ? 'm' : ''} I have not played`);
       for (const f of fams.slice(0, 2)) pool.push(`${f} I never played`);
       if (bpmRow && bpmRow.a) { const b = Math.round(bpmRow.a); pool.push(`tracks around ${b} bpm`, `tracks between ${b - 3} and ${b + 3} bpm`); }
-      for (const a of recent.slice(0, 2)) pool.push(`more from ${a}`);
+      for (const a of recent.filter(named).slice(0, 2)) pool.push(`more from ${a}`);
       pool.push('tracks I have not played in months', 'tracks added this week', 'long tracks for a set', 'tracks under 3 minutes');
       // dedupe, shuffle, take four — so the suggestions are not frozen
       const uniq = [...new Set(pool)];
@@ -3125,8 +3232,9 @@ const server = http.createServer(async (req, res) => {
         if (!url) return json(res, 404, { error: 'no preview source' });
         const data = { url, rung: best.rung, title: best.title, artist: best.artist };
         previewCache.set(key, { at: Date.now(), data });
+        if (previewCache.size > 200) previewCache.delete(previewCache.keys().next().value);
         return json(res, 200, data);
-      } catch (e) { return json(res, 502, { error: e.message }); }
+      } catch (e) { return upstreamError(res, e, '/api/preview'); }
     }
 
     if (u.pathname === '/api/ask' && req.method === 'POST') {
@@ -3245,7 +3353,7 @@ const server = http.createServer(async (req, res) => {
       try {
         const r = await analyser.runOne(db, tid);
         return json(res, r.error ? 400 : 200, r);
-      } catch (e) { return json(res, 500, { error: e.message }); }
+      } catch (e) { return serverError(res, e, ''); }
     }
     // ---------- bulk crate/album maintenance ----------
     function playlistTrackIds(pid) {
@@ -3402,7 +3510,7 @@ const server = http.createServer(async (req, res) => {
       const plan = trackTagMeta(db, tid);
       if (plan.error) return json(res, 400, plan);
       try { return json(res, 200, tagwrite.writeTags(plan.path, plan.meta, { dryRun })); }
-      catch (e) { return json(res, 500, { error: e.message }); }
+      catch (e) { return serverError(res, e, ''); }
     }
     const mTagPl = u.pathname.match(/^\/api\/playlists\/([^/]+)\/tags$/);
     if (mTagPl && req.method === 'POST') {
@@ -3712,7 +3820,7 @@ const server = http.createServer(async (req, res) => {
       try {
         await resolveStreamUrl(t);
         return json(res, 200, { ok: true, ready: true });
-      } catch (e) { return json(res, 502, { error: e.message }); }
+      } catch (e) { return upstreamError(res, e, ''); }
     }
 
     // fill missing cover art from the public iTunes catalogue
@@ -3790,33 +3898,18 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/api/soundcloud/token' && req.method === 'POST') {
       let body = ''; req.on('data', c => body += c);
       req.on('end', () => {
-        try {
-          const b = JSON.parse(body || '{}');
-          if (!b.token) return json(res, 400, { error: 'token required' });
-          const f = path.join(paths.DATA, 'soundcloud.json');
-          fs.writeFileSync(f, JSON.stringify({ token: b.token }, null, 2), { mode: 0o600 });
-          return json(res, 200, { ok: true });
-        } catch (e) { return json(res, 400, { error: e.message }); }
+        let b = null;
+        try { b = JSON.parse(body || '{}'); } catch { return json(res, 400, { error: 'bad request body' }); }
+        if (!b.token) return json(res, 400, { error: 'token required' });
+        const f = path.join(paths.DATA, 'soundcloud.json');
+        try { fs.writeFileSync(f, JSON.stringify({ token: b.token }, null, 2), { mode: 0o600 }); }
+        catch (e) { return serverError(res, e, 'soundcloud token save'); }
+        return json(res, 200, { ok: true });
       });
       return;
     }
     if (u.pathname === '/api/soundcloud/token') {
       return json(res, 200, { configured: soundcloud.hasToken() });
-    }
-
-    if (u.pathname === '/api/settings') {
-      if (req.method === 'POST') {
-        let body = ''; req.on('data', c => body += c);
-        req.on('end', () => {
-          try {
-            const b = JSON.parse(body || '{}');
-            for (const [k, v] of Object.entries(b)) setSetting(k, v);
-            json(res, 200, { ok: true, settings: { auto_download_plays: setting('auto_download_plays', '2') } });
-          } catch (e) { json(res, 400, { error: e.message }); }
-        });
-        return;
-      }
-      return json(res, 200, { auto_download_plays: setting('auto_download_plays', '2') });
     }
 
     if (u.pathname === '/api/stats') {
@@ -3971,16 +4064,6 @@ const server = http.createServer(async (req, res) => {
         ORDER BY l.created_at DESC`).all();
       return json(res, 200, rows);
     }
-    if (u.pathname === '/api/likes' && req.method === 'POST') {
-      let body = ''; req.on('data', c => body += c);
-      req.on('end', () => { const b = JSON.parse(body); toggleLike(b.track_id, true); json(res, 200, { ok: true }); });
-      return;
-    }
-    if (u.pathname === '/api/likes' && req.method === 'DELETE') {
-      let body = ''; req.on('data', c => body += c);
-      req.on('end', () => { const b = JSON.parse(body); toggleLike(b.track_id, false); json(res, 200, { ok: true }); });
-      return;
-    }
 
     // radio: same-artist first, then shared-playlist neighbors, all owned
     const mRadio = u.pathname.match(/^\/api\/radio\/(\d+)$/);
@@ -4045,10 +4128,18 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/api/playlists' && req.method === 'POST') {
       let body = ''; req.on('data', c => body += c);
       req.on('end', () => {
-        const b = JSON.parse(body);
-        const id = 'own-' + b.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + now();
-        db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)').run(id, b.name, 'manual', now(), now());
-        json(res, 200, { id, name: b.name });
+        // a name is text, and the id is not derived from a clock with one-second resolution:
+        // two playlists made in the same second used to collide on the primary key
+        let b = null;
+        try { b = JSON.parse(body || '{}'); } catch { return json(res, 400, { error: 'bad request body' }); }
+        const name = typeof b.name === 'string' ? b.name.trim().slice(0, 80) : '';
+        if (!name) return json(res, 400, { error: 'a playlist needs a name' });
+        const slug = name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'playlist';
+        let id = `own-${slug}-${Date.now().toString(36)}`;
+        let n = 1;
+        while (db.prepare('SELECT 1 FROM playlists WHERE id=?').get(id)) id = `own-${slug}-${Date.now().toString(36)}-${n++}`;
+        db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)').run(id, name, 'manual', now(), now());
+        json(res, 200, { id, name });
       });
       return;
     }
@@ -4174,7 +4265,7 @@ const server = http.createServer(async (req, res) => {
         WHERE pt.playlist_id=? ORDER BY pt.position`).all(pid);
       const files = rows.filter((r) => r.path && fs.existsSync(r.path));
       if (!files.length) return json(res, 404, { error: 'nothing downloaded in this playlist yet' });
-      const tmpDir = fs.mkdtempSync(path.join('/tmp', 'mfzip-'));
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mfzip-'));
       const stage = path.join(tmpDir, 'set');
       fs.mkdirSync(stage, { recursive: true });
       const lines = ['#EXTM3U'];
@@ -4192,14 +4283,10 @@ const server = http.createServer(async (req, res) => {
         execFile('zip', ['-r', '-q', zipPath, 'set'], { cwd: tmpDir, timeout: 120000 }, (err) => err ? reject(err) : resolve());
       });
       const name = ((pl && pl.name) || 'playlist').replace(/[\/:*?"<>|]+/g, '_').slice(0, 80);
-      res.writeHead(200, {
+      streamZip(res, tmpDir, zipPath, {
         'content-type': 'application/zip',
         'content-disposition': `attachment; filename="${name}.zip"`,
-        'content-length': fs.statSync(zipPath).size,
       });
-      const stream = fs.createReadStream(zipPath);
-      stream.pipe(res);
-      stream.on('close', () => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} });
       return;
     }
 
@@ -4251,7 +4338,7 @@ const server = http.createServer(async (req, res) => {
       const pid = decodeURIComponent(mUsb[1]);
       const pl = db.prepare('SELECT name FROM playlists WHERE id=?').get(pid) || { name: 'playlist' };
       const safe = (String(pl.name).replace(/[/\\:*?"<>|]+/g, '_').slice(0, 60) || 'playlist').trim();
-      const tmpDir = fs.mkdtempSync(path.join('/tmp', 'mfusb-'));
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mfusb-'));
       try {
         const built = pioneer.buildUsbTree(db, pid, tmpDir);
         if (!built.tracks) {
@@ -4270,19 +4357,15 @@ const server = http.createServer(async (req, res) => {
         await new Promise((resolve, reject) => {
           execFile('zip', ['-r', '-q', zipPath, 'PIONEER', 'Contents', 'MUSICFY-USB.txt'], { cwd: tmpDir, timeout: 600000 }, (err) => err ? reject(err) : resolve());
         });
-        res.writeHead(200, {
+        streamZip(res, tmpDir, zipPath, {
           'content-type': 'application/zip',
           'content-disposition': `attachment; filename="${safe} (CDJ USB).zip"`,
-          'content-length': fs.statSync(zipPath).size,
           'cache-control': 'no-store',
         });
-        const stream = fs.createReadStream(zipPath);
-        stream.pipe(res);
-        stream.on('close', () => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} });
         return;
       } catch (e) {
         try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-        return json(res, 500, { error: `usb export failed: ${e.message}` });
+        return serverError(res, e, 'usb export');
       }
     }
 
@@ -4294,7 +4377,7 @@ const server = http.createServer(async (req, res) => {
       const pl = db.prepare('SELECT name FROM playlists WHERE id=?').get(pid) || { name: 'playlist' };
       const safe = (String(pl.name).replace(/[\/:*?"<>|]+/g, '_').slice(0, 60) || 'playlist').trim();
       const root = `MUSICFY ${safe}`;
-      const tmpDir = fs.mkdtempSync(path.join('/tmp', 'mfdj-'));
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mfdj-'));
       const stage = path.join(tmpDir, root);
       const audioDir = path.join(stage, 'audio');
       fs.mkdirSync(audioDir, { recursive: true });
@@ -4337,15 +4420,11 @@ const server = http.createServer(async (req, res) => {
       await new Promise((resolve, reject) => {
         execFile('zip', ['-r', '-q', zipPath, root], { cwd: tmpDir, timeout: 180000 }, (err) => err ? reject(err) : resolve());
       });
-      res.writeHead(200, {
+      streamZip(res, tmpDir, zipPath, {
         'content-type': 'application/zip',
         'content-disposition': `attachment; filename="${safe} (${fmt}).zip"`,
-        'content-length': fs.statSync(zipPath).size,
         'cache-control': 'no-store',
       });
-      const stream = fs.createReadStream(zipPath);
-      stream.pipe(res);
-      stream.on('close', () => { try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {} });
       return;
     }
     if (u.pathname === '/api/docs') {
@@ -4444,7 +4523,7 @@ const server = http.createServer(async (req, res) => {
           db.exec('COMMIT');
         } catch (e) {
           try { db.exec('ROLLBACK'); } catch {}
-          return json(res, 500, { error: e.message });
+          return serverError(res, e, '/api/tracks/delete');
         }
         for (const p of freed) { try { fs.unlinkSync(p); } catch {} }
         return json(res, 200, { ok: true, deleted, files: freed.length });
@@ -4502,7 +4581,7 @@ const server = http.createServer(async (req, res) => {
             const loc = await resolveStreamUrl(t);
             res.writeHead(302, { location: loc });
             return res.end();
-          } catch (e) { return json(res, 502, { error: e.message }); }
+          } catch (e) { return upstreamError(res, e, ''); }
         }
         return json(res, 404, { error: 'no file' });
       }
@@ -4556,7 +4635,7 @@ const server = http.createServer(async (req, res) => {
     return json(res, 404, { error: 'not found' });
   } catch (e) {
     log('error', `${u.pathname}: ${e.message}`);
-    return json(res, 500, { error: e.message });
+    return serverError(res, e, '/api/ingest-wnl-all');
   }
 });
 

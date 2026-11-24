@@ -15,16 +15,23 @@ function ensureColumns(db) {
   }
 }
 
-const running = { active: 0, done: 0, failed: 0, startedAt: null };
+const running = { active: 0, done: 0, failed: 0, startedAt: null, lastError: null };
 
 function analyseBatch(items) {
   return new Promise((resolve) => {
     const child = spawn(PY, [SCRIPT], { stdio: ['pipe', 'pipe', 'pipe'] });
     let out = '';
+    let err = '';
     child.stdout.on('data', (c) => { out += c; });
-    child.stderr.on('data', () => {});
-    child.on('error', () => resolve([]));
-    child.on('close', () => {
+    child.stderr.on('data', (c) => { err = (err + c).slice(-600); });
+    child.on('error', (e) => {
+      running.lastError = e.code === 'ENOENT'
+        ? `analyser interpreter not found: ${PY} — create the venv or set MUSICFY_PYTHON`
+        : `analyser could not start: ${e.message}`;
+      resolve([]);
+    });
+    child.on('close', (code) => {
+      if (!out.trim() && code) running.lastError = `analyser exited ${code}${err.trim() ? `: ${err.trim().split('\n').slice(-1)[0]}` : ''}`;
       const rows = out.split('\n').filter(Boolean).map((l) => {
         try { return JSON.parse(l); } catch { return null; }
       }).filter(Boolean);
@@ -36,12 +43,21 @@ function analyseBatch(items) {
 
 async function run(db, { limit = 50, workers = 2, batch = 4 } = {}) {
   ensureColumns(db);
+  // a missing interpreter is a configuration error, not a slow analysis: say so once
+  // instead of returning zeroes that make the retry loop run forever
+  if (!fs.existsSync(PY)) {
+    return { analysed: 0, failed: 0, remaining: null, error: `analyser interpreter not found: ${PY} — create the venv or set MUSICFY_PYTHON` };
+  }
   const files = db.prepare(`SELECT t.id, f.path FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned'
     WHERE t.analyzed_at IS NULL ORDER BY t.id LIMIT ?`).all(limit);
   if (!files.length) return { analysed: 0, remaining: 0 };
 
   running.startedAt = running.startedAt || Date.now();
+  running.lastError = null;
+  const startDone = running.done;
+  const startFailed = running.failed;
   const queue = files.filter((f) => fs.existsSync(f.path));
+  const queuedCount = queue.length;
   const upd = db.prepare(`UPDATE tracks SET bpm=?, key=?, key_scale=?, key_confidence=?, loudness=?, energy=?, beat_grid=?, sections=?, energy10=?, analyzed_at=?
     WHERE id=?`);
 
@@ -67,7 +83,13 @@ async function run(db, { limit = 50, workers = 2, batch = 4 } = {}) {
 
   await Promise.all(Array.from({ length: Math.max(1, Math.min(workers, 3)) }, worker));
   const remaining = db.prepare("SELECT COUNT(*) c FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned' WHERE t.analyzed_at IS NULL").get().c;
-  return { analysed: running.done, failed: running.failed, remaining };
+  const progressed = running.done - startDone;
+  const failed = running.failed - startFailed;
+  // nothing moved and something was wrong: report the reason, do not present it as work
+  if (!progressed && queuedCount && running.lastError) {
+    return { analysed: 0, failed: queuedCount, remaining, error: running.lastError };
+  }
+  return { analysed: progressed, failed, remaining };
 }
 
 function status(db) {
@@ -87,7 +109,7 @@ async function runOne(db, trackId) {
   if (!fs.existsSync(f.path)) return { error: 'audio file is missing' };
   const rows = await analyseBatch([{ id: f.id, path: f.path }]);
   const r = rows.find((x) => x && x.id === f.id) || rows[0];
-  if (!r) return { error: 'analysis failed' };
+  if (!r) return { error: running.lastError || 'analysis failed' };
   if (r.error) return { error: String(r.error).slice(0, 160) };
   db.prepare(`UPDATE tracks SET bpm=?, key=?, key_scale=?, key_confidence=?, loudness=?, energy=?, beat_grid=?, sections=?, energy10=?, analyzed_at=?
     WHERE id=?`).run(r.bpm || null, r.key || null, r.key_scale || null, r.key_confidence || null,

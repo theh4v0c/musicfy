@@ -76,7 +76,11 @@ function readId3(buf) {
   if (buf.length < 10 || buf.toString('ascii', 0, 3) !== 'ID3') return { frames: [], audioOffset: 0, version: 4 };
   const ver = buf[3];
   const size = unsyncsafe(buf, 6);
-  const end = Math.min(10 + size, buf.length);
+  // a size beyond the file means a corrupt or hostile header. Trusting it made
+  // audioOffset larger than the buffer, so the "audio" was empty and the atomic rename
+  // replaced the track with tag-only bytes.
+  if (10 + size > buf.length) return { frames: [], audioOffset: 0, version: ver, corrupt: true };
+  const end = 10 + size;
   const frames = [];
   let o = 10;
   while (o + 10 <= end) {
@@ -107,13 +111,25 @@ function buildId3v24(frames) {
   return Buffer.concat([h, body, Buffer.alloc(pad)]);
 }
 
-const textFrame = (id, t) => ({ id, data: Buffer.concat([Buffer.from([0]), Buffer.from(String(t), 'latin1'), Buffer.from([0])]) });
+const textFrame = (id, t) => {
+  const value = String(t);
+  // latin1 silently replaces CJK/cyrillic/accents with '?'. Use UTF-16 with a BOM for
+  // anything latin1 cannot carry.
+  if (/^[\x00-\xff]*$/.test(value)) {
+    return { id, data: Buffer.concat([Buffer.from([0]), Buffer.from(value, 'latin1'), Buffer.from([0])]) };
+  }
+  // utf16le bytes with a little-endian BOM: the pair must agree, or readers decode noise
+  const body = Buffer.from(value, 'utf16le');
+  return { id, data: Buffer.concat([Buffer.from([1]), Buffer.from([0xff, 0xfe]), body, Buffer.from([0, 0])]) };
+};
 const isTraktorPriv = (f) => f.id === 'PRIV' && f.data.length >= 8 && f.data.toString('latin1', 0, 8) === 'TRAKTOR4';
 
 function writeTags(filePath, meta, opts = {}) {
   const buf = fs.readFileSync(filePath);
   const id3 = readId3(buf);
   const audio = buf.subarray(id3.audioOffset);
+  // never write a file whose payload would be empty: that turns a tag write into data loss
+  if (!audio.length) throw new Error('refusing to rewrite a file with no audio payload');
   // preserve existing frames, replacing the ones we own
   // replace the frames we own, including the standard text ones, from DB metadata
   const owned = new Set(['TBPM', 'TKEY', 'TIT2', 'TPE1', 'TALB', 'TCON', 'TDRC']);

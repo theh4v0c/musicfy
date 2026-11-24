@@ -4,6 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
+const paths = require('./paths');
 
 const DB = paths.DB;
 const dir = process.argv[2];

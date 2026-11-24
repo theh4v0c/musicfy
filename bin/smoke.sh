@@ -1,6 +1,7 @@
 #!/bin/sh
 # fast health sweep: every critical endpoint answers, and the ones that must not be empty are not
-BASE=${BASE:-http://LAN_IP:8710}
+# defaults to a local instance; set BASE to sweep a deployed one
+BASE=${BASE:-http://localhost:8710}
 fail=0
 check() {
   code=$(curl -s -o /tmp/smoke_body -w '%{http_code}' -m "${3:-25}" "$BASE$1")

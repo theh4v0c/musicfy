@@ -159,7 +159,10 @@ async function fetchArtistTags(artist) {
   // a hit is final; an empty result is only final for a single name, because a
   // collaboration string has to be split before anyone can answer for it
   if (cached && cached.genres && cached.genres.length) return cached;
-  if (cached && !cached.err && artistCandidates(artist).length <= 1) return cached;
+  // a single-name miss is cached, but not forever: MusicBrainz gains tags, and a miss
+  // from two years ago is a guess about today. Collaborations always retry.
+  const MISS_TTL = 90 * 86400 * 1000;
+  if (cached && !cached.err && artistCandidates(artist).length <= 1 && Date.now() - (cached.at || 0) < MISS_TTL) return cached;
   for (const cand of artistCandidates(artist)) {
     const entry = await lookupOne(cand);
     if (entry && entry.genres && entry.genres.length) {

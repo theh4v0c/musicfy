@@ -1,9 +1,9 @@
 # Installing MUSICFY
 
-MUSICFY is a single-user, self-hosted music library and DJ-prep server. This is the honest
-state: it runs on one box, for one person, and today several paths are hardcoded to the
-reference Pi. Below is what works now, what must change before a stranger can `git clone`,
-and how configuration is meant to look.
+MUSICFY is a single-user, self-hosted music library and DJ-prep server. It runs on one box,
+for one person; every path it uses comes from the environment, so a clone on another
+machine finds its own data, audio and venvs. Below is what a fresh install needs, and the
+honest distance between that and a public release.
 
 ---
 
@@ -17,61 +17,65 @@ and how configuration is meant to look.
 
 ---
 
-## 2. Configuration (the intended shape)
+## 2. Configuration
 
-Today the app reads a few env vars but hardcodes the rest. The target is one config file,
-`config.json`, next to `core/`, plus env overrides. Nothing secret is committed.
+There is no config file to edit. Every path comes from an environment variable, read once
+at boot by `core/paths.js`; the defaults are the reference Pi's, so a second machine sets
+the few it differs on and inherits the rest of the behaviour.
 
-```json
-{
-  "root": "/opt/musicfy",
-  "owned": "/srv/musicfy/owned",
-  "db": "/opt/musicfy/data/musicfy.db",
-  "port": 8710,
-  "python": "/opt/musicfy/venv/bin/python",
-  "ytdlp": "/opt/musicfy/ytdlp-venv/bin/yt-dlp",
-  "wnl_url": "http://127.0.0.1:8742",
-  "llm": { "base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini", "api_key": "" }
-}
-```
-
-The hardcoded constants to replace (all in `core/core.js`) are:
-
-| constant | current | should be |
+| variable | default | what it is |
 |---|---|---|
-| `ROOT` | `/opt/musicfy` | `config.root` / `MUSICFY_ROOT` |
-| `OWNED` | `/srv/music/owned` | `config.owned` / `MUSICFY_OWNED` |
-| `DB_PATH` | `ROOT/data/musicfy.db` | `config.db` / `MUSICFY_DB` |
-| `PORT` | `8710` | `MUSICFY_PORT` (already env) |
-| `PY` (analyze.js) | `/opt/musicfy/essentia-venv/bin/python` | `config.python` |
-| yt-dlp path | `/opt/musicfy/ytdlp-venv/bin/yt-dlp` | `config.ytdlp` |
-| `WNL` | `http://wnl-host:8742` | optional `config.wnl_url` |
+| `MUSICFY_HOME` | `/opt/musicfy` | root for data, logs, backups, venvs |
+| `MUSICFY_DATA` | `$MUSICFY_HOME/data` | database, settings, caches, covers |
+| `MUSICFY_OWNED` | `$MUSICFY_HOME/owned` | the audio library (may be another mount) |
+| `MUSICFY_DB` | `$MUSICFY_DATA/musicfy.db` | the SQLite file |
+| `MUSICFY_BIN` | `$MUSICFY_HOME/ytdlp-venv/bin` | where the downloader lives |
+| `MUSICFY_YTDLP` | `$MUSICFY_BIN/yt-dlp` | the downloader binary |
+| `MUSICFY_PYTHON` | `$MUSICFY_HOME/essentia-venv/bin/python` | the analyser interpreter |
+| `MUSICFY_FFMPEG` | found on `PATH` | ffmpeg |
+| `MUSICFY_FFPROBE` | found on `PATH` | ffprobe |
+| `MUSICFY_FFMPEG` | found on `PATH` | ffmpeg |
+| `MUSICFY_FFPROBE` | found on `PATH` | ffprobe |
+| `MUSICFY_BACKUP_DIR` | `$MUSICFY_HOME/backups` | nightly snapshots |
+| `MUSICFY_PORT` | `8710` | listen port |
+| `MUSICFY_BIND` | `0.0.0.0` | listen address |
 
-**This is the first refactor any public release needs.** It is mechanical: read the file
-once at boot, fall back to env, fall back to defaults, and never hardcode `/opt` or `/media`.
+The LLM endpoint is not an env var: it lives in `data/settings.json` and is edited in
+Settings → Model endpoint (section 4).
+
+At boot the server prints what it resolved, and names anything missing:
+
+```
+[deps] ffmpeg /opt/homebrew/bin/ffmpeg
+[deps] analyser /opt/musicfy/essentia-venv/bin/python
+[deps] MISSING analyser interpreter … — create the venv or set MUSICFY_PYTHON
+```
 
 ---
 
-## 3. Install (reference, once config is in place)
+## 3. Install
 
 ```bash
 git clone https://github.com/<you>/MUSICFY && cd MUSICFY
 
-# Node deps: none. Python deps:
-python3 -m venv venv
-./venv/bin/pip install librosa numpy
+# Node: no dependencies, Node 22+ only.
+# Python: the analyser. The directory name matters, or set MUSICFY_PYTHON.
+python3 -m venv essentia-venv
+./essentia-venv/bin/pip install librosa numpy scipy
 
-# yt-dlp:
+# yt-dlp, in its own venv (the default MUSICFY_BIN)
 python3 -m venv ytdlp-venv
 ./ytdlp-venv/bin/pip install -U yt-dlp
 
-# config
-cp config.example.json config.json   # edit root/owned/llm
-mkdir -p "$(jq -r .owned config.json)"
+# where the audio and the database live
+export MUSICFY_HOME="$PWD"
+export MUSICFY_OWNED="/path/to/your/music"
 
-# run
 node core/core.js
 ```
+
+The first boot creates `data/`, `logs/` and the schema, then serves on `:8710`. Nothing
+has to be seeded.
 
 ### systemd
 
@@ -83,6 +87,8 @@ After=network-online.target
 [Service]
 WorkingDirectory=/opt/musicfy
 ExecStart=/usr/bin/node --no-warnings /opt/musicfy/core/core.js
+Environment=MUSICFY_HOME=/opt/musicfy
+Environment=MUSICFY_OWNED=/media/yourdisk/musicfy/owned
 Restart=always
 Environment=MUSICFY_PORT=8710
 
@@ -118,31 +124,26 @@ on the same host.
 
 ## 5. Pointing at your own folders
 
-- **Library audio:** `owned/` in `config.json`. New downloads land here.
+- **Library audio:** `MUSICFY_OWNED`. New downloads land here.
 - **Downloads root:** Settings → Downloads → "Download folder".
-- **Existing library:** the DB is SQLite at `config.db`. To import an existing folder, the
-  clean approach is a one-off scanner (not built yet) that walks the folder and inserts
-  `tracks` + `files` rows. Today, audio enters via download, upload, or the WNL ingest.
+- **Existing library:** the DB is SQLite at `MUSICFY_DB`. To import an existing folder,
+  the clean approach is a one-off scanner (not built yet) that walks the folder and inserts
+  `tracks` + `files` rows. Today, audio enters via download or upload.
 
 ---
 
 ## 6. What a public release still needs
 
-1. **Config refactor** (section 2) — remove hardcoded paths. *Blocking.*
-2. **Auth / first-run setup** — a single-user token or a first-run admin password. *Blocking
-   for anything beyond a private LAN.*
-3. **A scanner for an existing folder** — so people do not have to re-download their library.
-4. **DJ export is the import path** — the ZIP carries audio + `rekordbox.xml`/`traktor.nml`
-   and is imported into Rekordbox/Traktor desktop. A true CDJ USB (PDB + ANLZ) is not built.
-5. **Platform matrix** — the analysis venv and yt-dlp are Linux/macOS; Windows needs paths
-   and possibly a different ffmpeg.
-6. **Tests** — `bin/test.mjs` currently depends on a route that does not exist; fix before
-   advertising CI.
+1. **Auth / first-run setup** — a single-user token exists (`MUSICFY_TOKEN`), but there is
+   no first-run password or account flow. *Blocking for anything beyond a private LAN.*
+2. **A scanner for an existing folder** — so people do not have to re-upload their library.
+3. **Packaging** — no Dockerfile or service installer is shipped; the systemd unit below
+   is a template.
+4. **Platform matrix** — the analysis venv and yt-dlp are Linux/macOS; Windows needs a
+   different ffmpeg and has not been tested.
 
-None of this is hidden in the app; it is the honest distance between "works on my Pi" and
-"anyone can install it".
-
----
+Paths, the schema-on-boot, the CDJ USB export (`export.pdb` + ANLZ) and the test suite are
+done; see `MILESTONES.md`.
 
 ## Security switches (env)
 
@@ -169,6 +170,8 @@ Nothing in the code spells an absolute path. An installation says where its part
 | `MUSICFY_BIN` | `$MUSICFY_HOME/ytdlp-venv/bin` | where the downloader lives |
 | `MUSICFY_YTDLP` | `$MUSICFY_BIN/yt-dlp` | the downloader binary |
 | `MUSICFY_PYTHON` | `$MUSICFY_HOME/essentia-venv/bin/python` | the analyser interpreter |
+| `MUSICFY_FFMPEG` | found on `PATH` | ffmpeg |
+| `MUSICFY_FFPROBE` | found on `PATH` | ffprobe |
 | `MUSICFY_BACKUP_DIR` | `$MUSICFY_HOME/backups` | nightly snapshots |
 | `MUSICFY_PORT` | `8710` | listen port |
 

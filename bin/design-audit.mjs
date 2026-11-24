@@ -29,7 +29,8 @@ if (!chromium) {
   process.exit(2);
 }
 
-const BASE = process.env.BASE || 'http://LAN_IP:8710';
+// defaults to a local instance; set BASE to audit a deployed one
+const BASE = process.env.BASE || 'http://localhost:8710';
 const json = process.argv.includes('--json');
 
 const ROLES = [

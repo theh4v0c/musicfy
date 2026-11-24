@@ -59,15 +59,15 @@ OPERATIONS.md    deploy, backup, restore, diagnose (generic)
 - `yt-dlp` and `ffmpeg`/`ffprobe` for downloads and streaming.
 - Python 3 with librosa for analysis (see `INSTALL.md`).
 
-The production install keeps the two venvs under `/opt/musicfy`; a portable `MUSICFY_HOME`
-is the next refactor before this is published.
+Every path comes from the environment (`MUSICFY_HOME`, `MUSICFY_OWNED`, `MUSICFY_PYTHON`,
+…); `/opt/musicfy` is only this machine's default. See `INSTALL.md` for the table.
 
 ## Running it
 
 ```sh
 node core/core.js          # listens on 0.0.0.0:8710
 ./bin/smoke.sh             # checks every critical endpoint
-node bin/test.mjs          # asserts real behaviour, 19 checks
+node bin/test.mjs          # asserts real behaviour, 34 checks
 ```
 
 Settings and secrets (`settings.json`, `llm.json`, `soundcloud.json`) live in the data
