@@ -144,45 +144,9 @@ for (const col of ['src_kind TEXT', 'src_id TEXT', 'src_url TEXT', 'isrc TEXT', 
 
 const now = () => Math.floor(Date.now() / 1000);
 
-// Camelot wheel for harmonic ordering (1A..12A minor, 1B..12B major)
-const FLAT_TO_SHARP = { Db: 'C#', Eb: 'D#', Gb: 'F#', Ab: 'G#', Bb: 'A#' };
-const MAJOR_B = { B: 1, 'F#': 2, 'C#': 3, 'G#': 4, 'D#': 5, 'A#': 6, F: 7, C: 8, G: 9, D: 10, A: 11, E: 12 };
-const MINOR_A = { 'G#': 1, 'D#': 2, 'A#': 3, F: 4, C: 5, G: 6, D: 7, A: 8, E: 9, B: 10, 'F#': 11, 'C#': 12 };
-function camelotOf(key, scale) {
-  let k = String(key || '').trim();
-  k = FLAT_TO_SHARP[k] || k.replace('♯', '#');
-  if (!k) return null;
-  if (scale === 'minor') { const n = MINOR_A[k]; return n ? { n, letter: 'A' } : null; }
-  const n = MAJOR_B[k]; return n ? { n, letter: 'B' } : null;
-}
-function harmonicScore(a, b) {
-  if (!a || !b) return 0;
-  const d = Math.min(Math.abs(a.n - b.n), 12 - Math.abs(a.n - b.n));
-  if (a.letter === b.letter) return d === 0 ? 1 : d === 1 ? 0.85 : d === 2 ? 0.4 : 0;
-  if (a.n === b.n) return 0.9; // relative major/minor
-  if (d === 1) return 0.45;
-  return 0;
-}
-// greedy nearest-neighbour on the wheel: each track lands next to the most compatible one
-function harmonicOrder(tracks) {
-  const items = tracks.map((t) => ({ t, c: camelotOf(t.key, t.key_scale) }));
-  const keyed = items.filter((x) => x.c);
-  const rest = items.filter((x) => !x.c).map((x) => x.t);
-  if (keyed.length < 2) return tracks;
-  const counts = {};
-  for (const x of keyed) { const k = `${x.c.letter}${x.c.n}`; counts[k] = (counts[k] || 0) + 1; }
-  const startKey = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
-  let cur = keyed.find((x) => `${x.c.letter}${x.c.n}` === startKey) || keyed[0];
-  const used = new Set([cur]);
-  const order = [cur.t];
-  while (order.length < keyed.length) {
-    let best = null; let bestScore = -1;
-    for (const x of keyed) { if (used.has(x)) continue; const sc = harmonicScore(cur.c, x.c); if (sc > bestScore) { bestScore = sc; best = x; } }
-    if (!best) break;
-    order.push(best.t); used.add(best); cur = best;
-  }
-  return [...order, ...rest];
-}
+// the Camelot wheel lives in core/harmonic.js: one definition, unit-tested
+const { camelotOf, harmonicScore, harmonicOrder } = require('./harmonic');
+
 function weatherWord(code) {
   const c = Number(code);
   if (!Number.isFinite(c)) return 'clear';
@@ -602,12 +566,6 @@ function sendStatic(req, res, body, type) {
 
 // ---------- harmonic / tempo matching ----------
 // Camelot numbers, so "what follows this" is a musical answer, not a similarity score
-const CAMELOT = { C: 8, G: 9, D: 10, A: 11, E: 12, B: 1, 'F#': 2, 'C#': 3, 'G#': 4, 'D#': 5, 'A#': 6, F: 7 };
-function camelotOf(key, scale) {
-  const n = CAMELOT[String(key || '').toUpperCase().replace('♯', '#')];
-  if (!n) return null;
-  return { n, minor: String(scale || '').toLowerCase() === 'minor' };
-}
 function sessionSummary(hours = 12) {
   try {
     const rows = db.prepare(`SELECT l.played_at, t.id, t.title, t.bpm, t.artist FROM listens l JOIN tracks t ON t.id=l.track_id
@@ -2590,7 +2548,7 @@ const server = http.createServer(async (req, res) => {
           try { s = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
           picksCache = { at: 0, data: null };
           for (const k of ['display_name', 'email', 'country', 'llm_base_url', 'llm_model', 'llm_api_key',
-            'download_root', 'preferred_format', 'autoplay_next', 'show_stream_rows',
+            'download_root', 'preferred_format', 'key_format', 'autoplay_next', 'show_stream_rows',
             'normalize_loudness', 'target_loudness', 'crossfade_ms', 'fade_on_play', 'fade_on_play_ms', 'prefetch_ahead',
             'taste_genres', 'taste_artists', 'taste_context', 'taste_avoid']) {
             if (b[k] !== undefined) s[k] = b[k];

@@ -330,7 +330,7 @@ $('ctx').addEventListener('click', async (e) => {
       pp.done();
       if (r.error) return toast(r.error, 6000);
       const bpmTxt = r.bpm ? `${Math.round(r.bpm)} BPM` : 'BPM n/a';
-      const keyTxt = r.key ? `${r.key}${r.key_scale === 'minor' ? 'm' : ''}` : 'key n/a';
+      const keyTxt = r.key ? keyLabel(r) : 'key n/a';
       toast(`Analysed · ${bpmTxt} · ${keyTxt}`, 6000);
       state.allTracks = null; afterWrite(); refreshView();
     } catch { pp.done(); toast('Analysis failed', 5000); }
@@ -960,6 +960,21 @@ const VIEW_ICONS = {
   compact: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="3" height="3" rx="1"/><rect x="7" y="2" width="3" height="3" rx="1"/><rect x="12" y="2" width="2" height="3" rx="1"/><rect x="2" y="7" width="3" height="3" rx="1"/><rect x="7" y="7" width="3" height="3" rx="1"/><rect x="12" y="7" width="2" height="3" rx="1"/><rect x="2" y="12" width="3" height="2" rx="1"/><rect x="7" y="12" width="3" height="2" rx="1"/><rect x="12" y="12" width="2" height="2" rx="1"/></svg>',
 };
 const VIEW_LABELS = { list: 'List', grid: 'Grid', compact: 'Compact' };
+/* Key names, in either notation, from one setting: "Am" or "8A". The wheel values are the
+   same numbers the analysis and the harmonic ordering use. */
+const CAMELOT_MINOR = { 'G#': 1, 'D#': 2, 'A#': 3, F: 4, C: 5, G: 6, D: 7, A: 8, E: 9, B: 10, 'F#': 11, 'C#': 12 };
+const CAMELOT_MAJOR = { B: 1, 'F#': 2, 'C#': 3, 'G#': 4, 'D#': 5, 'A#': 6, F: 7, C: 8, G: 9, D: 10, A: 11, E: 12 };
+const FLAT_SHARP = { Db: 'C#', Eb: 'D#', Gb: 'F#', Ab: 'G#', Bb: 'A#' };
+const keyFormat = () => (state.settings && state.settings.key_format) === 'camelot' ? 'camelot' : 'notes';
+function keyLabel(t) {
+  if (!t || !t.key) return '';
+  const minor = String(t.key_scale || '').toLowerCase() === 'minor';
+  if (keyFormat() === 'notes') return `${t.key}${minor ? 'm' : ''}`;
+  const k = FLAT_SHARP[t.key] || String(t.key).replace('♯', '#');
+  const n = (minor ? CAMELOT_MINOR : CAMELOT_MAJOR)[k];
+  return n ? `${n}${minor ? 'A' : 'B'}` : `${t.key}${minor ? 'm' : ''}`;
+}
+
 const songView = () => { try { return localStorage.getItem('mf-view-songs') || 'list'; } catch { return 'list'; } };
 const libView = () => { try { return localStorage.getItem('mf-view-library') || 'grid'; } catch { return 'grid'; } };
 const plView = () => { try { return localStorage.getItem('mf-view-playlist') || 'list'; } catch { return 'list'; } };
@@ -2538,6 +2553,13 @@ async function renderSettings() {
       </section>
       <section class="set-card">
         <h2>Playback</h2>
+        <label>Key names
+          <select id="set-keyfmt">
+            <option value="notes"${(s.key_format || 'notes') === 'notes' ? ' selected' : ''}>Musical (Am, F#m)</option>
+            <option value="camelot"${s.key_format === 'camelot' ? ' selected' : ''}>Wheel values (8A, 11A)</option>
+          </select>
+        </label>
+        <p class="set-note">Display only. Exports always write musical notation, which is what Rekordbox and Traktor read.</p>
         <label class="set-check"><input type="checkbox" id="set-normalize"${s.normalize_loudness ? ' checked' : ''}> Normalize loudness</label>
         <p class="set-note">Turns loud tracks down towards a common level, using the loudness measured during analysis. It only ever attenuates — it cannot add distortion and it never rewrites a file. <b>iOS ignores per-track volume</b>, so on a phone or in a car this does nothing.</p>
         <label class="set-check"><input type="checkbox" id="set-fade"${s.fade_on_play_ms ? ' checked' : ''}> Fade tracks in and out</label>
@@ -2613,6 +2635,7 @@ async function renderSettings() {
       llm_model: document.getElementById('set-llm-model').value.trim(),
       download_root: document.getElementById('set-root').value.trim(),
       preferred_format: document.getElementById('set-format').value,
+      key_format: document.getElementById('set-keyfmt').value,
       normalize_loudness: document.getElementById('set-normalize').checked,
       target_loudness: Number(document.getElementById('set-target').value),
       fade_on_play_ms: document.getElementById('set-fade').checked
@@ -3751,7 +3774,7 @@ function trow(t, i, list) {
   el.innerHTML = `
     <div class="tno"><span class="tno-num">${String(i + 1).padStart(2, '0')}</span><button class="tno-play" aria-label="Play">${IC.play}</button></div>
     ${artTag(t, 'tart', 96)}
-    <div class="tmeta"><div class="tt">${esc(t.title)}</div>${t.album ? `<div class="talbum-line">${t.artist ? `<span class="tal-artist alink" data-kind="artist">${esc(t.artist)}</span><span class="tal-sep"> &middot; </span>` : ''}<span class="alink">${esc(t.album)}</span></div>` : ''}${t.genre || t.genre_family ? `<button class="genrechip" data-kind="genre">${esc(t.genre_family || t.genre)}</button>` : ''}${t.bpm ? `<div class="tbpm">${Math.round(t.bpm)} BPM${t.key ? ` <button class="keychip key-${keyHueClass(t.key, t.key_scale)}" data-kind="key" title="Sort by key">${esc(t.key)}${t.key_scale === 'minor' ? 'm' : ''}</button>` : ''}</div>` : ''}</div>
+    <div class="tmeta"><div class="tt">${esc(t.title)}</div>${t.album ? `<div class="talbum-line">${t.artist ? `<span class="tal-artist alink" data-kind="artist">${esc(t.artist)}</span><span class="tal-sep"> &middot; </span>` : ''}<span class="alink">${esc(t.album)}</span></div>` : ''}${t.genre || t.genre_family ? `<button class="genrechip" data-kind="genre">${esc(t.genre_family || t.genre)}</button>` : ''}${t.bpm ? `<div class="tbpm">${Math.round(t.bpm)} BPM${t.key ? ` <button class="keychip key-${keyHueClass(t.key, t.key_scale)}" data-kind="key" title="Sort by key">${esc(keyLabel(t))}</button>` : ''}</div>` : ''}</div>
     <div class="tartist"><span class="alink ${t.artist ? '' : 'muted'}" data-kind="artist">${esc(t.artist || 'unknown artist')}</span></div>
     <div class="talbum"><span class="alink" data-kind="album">${esc(t.album || '')}</span></div>
     <div class="tadded">${esc(added)}</div>
@@ -4614,6 +4637,7 @@ function streamUrl(t, bust) {
    does not mediate, so the audio element holds a blob it owns and the lock screen cannot
    take it away. */
 const savedBlobs = new Map();
+const SAVED_BLOB_KEEP = 3;
 async function savedAudioUrl(id) {
   if (savedBlobs.has(id)) return savedBlobs.get(id);
   try {
@@ -4622,16 +4646,23 @@ async function savedAudioUrl(id) {
     if (!hit) return null;
     const url = URL.createObjectURL(await hit.blob());
     savedBlobs.set(id, url);
+    // three tracks of audio is enough for a car queue; older blobs are released
+    while (savedBlobs.size > SAVED_BLOB_KEEP) {
+      const [oldest, oldUrl] = savedBlobs.entries().next().value;
+      try { URL.revokeObjectURL(oldUrl); } catch {}
+      savedBlobs.delete(oldest);
+    }
     return url;
   } catch { return null; }
 }
 
-// no network, but the track was saved: play the copy on the device
+/* A saved track plays from the device, always. Not "only when the OS says offline":
+ * in a car the server is behind a tunnel, a dead hotspot or a locked screen, and
+ * navigator.onLine says true the whole time. The stream is the fallback. */
 async function offlineSrcIfNeeded(t, src) {
   if (!t || !t.id) return src;
   const saved = state.offlineIds && state.offlineIds.has(t.id);
   if (!saved) return src;
-  if (navigator.onLine !== false) return src;
   return (await savedAudioUrl(t.id)) || src;
 }
 

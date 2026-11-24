@@ -105,6 +105,22 @@ undo, teaching that is permanent, visible and deletable)
 - A crate has the same list / grid / compact switch as every other list
   (`mf-view-playlist`), so a set can be read by cover.
 
+### 2026-11-24 · the app is installable, the wheel is right, a saved track plays (`v442`)
+
+- **Fresh installs work.** Migration step 3 creates the analysis columns; `logs/` is
+  created at boot; `/api/tracks` answers 200 on an empty `MUSICFY_HOME` on the first call.
+- **No path is written in code.** `core/paths.js` derives ROOT, DATA, OWNED, DB, BIN,
+  YTDLP, PYTHON, LOGS, BACKUPS, PORT and BIND from the environment. All 34
+  `/opt/musicfy` literals removed; INSTALL.md documents every variable.
+- **`MUSICFY_BIND` exists**, and the server warns at boot when it is exposed without a
+  token.
+- **The Camelot wheel has one definition** (`core/harmonic.js`) and seven unit tests.
+  The duplicate major-only function that won by hoisting is gone; relative major/minor is
+  0.90, not 1.0.
+- **Key display switches**: `Am` or `8A`, in Settings → Playback. Exports stay musical.
+- **A saved track plays from the device**, not only when the OS reports offline.
+- `node --test bin/unit.mjs` is the start of a real test suite.
+
 ## Planned
 
 ### v0.2 Guided Ask — delivered

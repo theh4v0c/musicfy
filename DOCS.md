@@ -124,6 +124,31 @@ the list of forbidden patterns. `bin/design-check.mjs` enforces it (tokens ↔ C
 the built pages at 1440 and 390) and exits non-zero on drift. Run it before and after
 any visual change.
 
+## Keys: one wheel, two notations
+
+`core/harmonic.js` is the only definition of the Camelot wheel, and `bin/unit.mjs` tests
+it: twelve minors, twelve majors, flats equal to sharps, and the four compatibility rules
+(same key 1.0, relative major/minor 0.90, one along 0.85, two along 0.40, energy boost
+0.45, everything else 0).
+
+`harmonicOrder` is a greedy walk that always takes the best available move and, when
+nothing is compatible, the shortest jump on the wheel. The home rotation, `/api/mix/next`
+and the crate's Harmonic button all use it — previously a duplicate, major-only
+definition won by hoisting and scored every key as `undefined`, which made a minor and
+its parallel major identical.
+
+**Display**: Settings → Playback → *Key names* switches the interface between `Am` and
+`8A`. It is a display preference only; every export writes musical notation, which is
+what Rekordbox (`Tonality`) and Traktor (`KEY`) read.
+
+## Offline playback
+
+A saved track plays from the device, **always** — the blob from Cache Storage, not the
+stream. `navigator.onLine` is not a reliable signal in a car: the Pi is behind a tunnel,
+a dead hotspot or a locked screen while the flag still says online. The stream is the
+fallback when no copy exists. Three blobs are kept in memory; older object URLs are
+released.
+
 ## The A&R
 
 One destination (`askai`, labelled A&R in the sidebar and the phone bar). It answers,
