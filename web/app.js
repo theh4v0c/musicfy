@@ -1992,9 +1992,9 @@ async function renderDjExport() {
   const v = $('view');
   v.innerHTML = `
     <div class="prep-hero">
-      <div class="prep-kicker">SET PREPARATION</div>
+      <div class="prep-kicker">EXPORT</div>
       <div class="prep-title">Prep</div>
-      <p class="prep-sub">For the playlists you play out: BPM, key, beat grid and sections for cue points. <b>Up to date</b> means analysed by the current analyser (v2, which adds sections). A playlist marked Listening is never analysed and stays off this page.</p>
+      <p class="prep-sub">The playlists you play out — BPM, key, beat grid and cue points ready to export. Listening playlists stay off this page.</p>
       <div class="prep-meter"><div class="prep-meter-bar"><i id="prep-fill" style="width:0%"></i></div><span id="prep-cov">…</span></div>
       <div class="prep-actions">
         <button class="btn btn-primary" id="dj-analyze">Analyze unanalyzed</button>
@@ -2019,10 +2019,9 @@ async function renderDjExport() {
     const pct = st.total ? Math.round((st.current / st.total) * 100) : 0;
     if (cov) {
       cov.textContent = [
-        `${st.current}/${st.total} up to date`,
-        st.outdated ? `${st.outdated} without sections` : '',
-        st.never ? `${st.never} never analysed` : '',
-        `analyser v${st.version}`,
+        `${Number(st.current).toLocaleString()}/${Number(st.total).toLocaleString()} up to date`,
+        st.outdated ? `${Number(st.outdated).toLocaleString()} without cue points` : '',
+        st.never ? `${Number(st.never).toLocaleString()} never analysed` : '',
       ].filter(Boolean).join(' · ');
     }
     if (fill) fill.style.width = pct + '%';
@@ -2031,7 +2030,7 @@ async function renderDjExport() {
       // never-analysed is a library-wide job; outdated is per playlist, and a button
       // that only says "update a playlist below" is a button that does not act
       ab.hidden = !remaining;
-      ab.textContent = `Analyse ${remaining} never analysed`;
+      ab.textContent = `Analyse ${Number(remaining).toLocaleString()} never analysed`;
     }
   } catch {}
   const btn = document.getElementById('dj-analyze');
@@ -2069,7 +2068,7 @@ async function renderDjExport() {
   const prepWork = (p) => Math.max(0, (p.owned || 0) - (p.prepped || 0));
   const prepMeta = (p) => {
     const bits = [`${p.n_tracks || 0} tracks`, `${p.prepped || 0}/${p.owned || 0} up to date`];
-    if (p.outdated) bits.push(`${p.outdated} without sections`);
+    if (p.outdated) bits.push(`${p.outdated} without cue points`);
     if (p.never) bits.push(`${p.never} never`);
     return bits.join(' · ');
   };
@@ -2079,11 +2078,11 @@ async function renderDjExport() {
     const work = prepWork(p);
     if (work > 0) {
       const label = (p.never || 0) > 0 ? `Prep ${work}` : `Update ${work}`;
-      const why = [p.never ? `${p.never} never analysed` : '', p.outdated ? `${p.outdated} from the older analyser (no sections)` : '']
+      const why = [p.never ? `${p.never} never analysed` : '', p.outdated ? `${p.outdated} need cue points` : '']
         .filter(Boolean).join(' · ') || 'this playlist is up to date';
       return `<button class="crate-analyze" title="${esc(why)}">${label}</button>`;
     }
-    return `<span class="crate-row-state"><span class="crate-ready-tag">ready</span><button class="crate-again" title="Redo every track with the current analyser (sections and cue points included)">Re-analyse</button></span>`;
+    return `<span class="crate-row-state"><span class="crate-ready-tag">ready</span><button class="crate-again" title="Analyse every track again, including cue points">Re-analyse</button></span>`;
   };
   const drawCrates = (view) => {
     list.className = view === 'list' ? 'crate-list' : view === 'compact' ? 'crate-grid compact' : 'crate-grid';
@@ -2780,7 +2779,7 @@ async function renderSettings() {
     const f = document.getElementById('set-facts');
     if (!f) return;
     f.innerHTML = `<div><b>${Number(st.tracks).toLocaleString()}</b> tracks</div><div><b>${(st.owned_bytes / 1e9).toFixed(2)} GB</b> on disk</div><div><b>${Number(st.listens).toLocaleString()}</b> plays recorded</div>`
-      + `<div><b>${an.current}</b> current · <b>${an.outdated}</b> without sections · analyser v${an.version}</div>`;
+      + `<div><b>${Number(an.current).toLocaleString()}</b> current · <b>${Number(an.outdated).toLocaleString()}</b> without cue points</div>`;
   }).catch(() => {});
   // the exclusion field, shown back as the terms the app will actually use
   const avoidInput = document.getElementById('set-taste-avoid');

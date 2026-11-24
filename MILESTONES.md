@@ -6,6 +6,17 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · Prep says what it does, not what version it is (`v482`)
+
+- The hero was three sentences of implementation detail ("analyser v2, which adds
+  sections"). It now reads: "The playlists you play out — BPM, key, beat grid and cue
+  points ready to export. Listening playlists stay off this page." Kicker is EXPORT, not
+  the redundant SET PREPARATION.
+- "Without sections" became "without cue points" everywhere the person sees it; the
+  analyser version is no longer in the meter or Settings. Counts use thousands separators.
+- Tooltips lost "current analyser"; Re-analyse is "Analyse every track again, including
+  cue points".
+
 ### 2026-11-24 · Metadata repair updates the row, not the page (`v480`)
 
 "Fix metadata" changed the data correctly, then called `refreshView()`: the whole view was
