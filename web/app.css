@@ -24,6 +24,9 @@
   --r-lg: 14px;
   --r-xl: 18px;
   --r-pill: 99px;
+  /* the wordmark is one lockup: same weight and same tracking wherever it is drawn */
+  --brand-track: -.04em;
+  --brand-gradient: linear-gradient(90deg, #ff9a4a, #ff5c39 55%, #ff3d6e);
   /* THE CONTROL CONTRACT. Three roles, one size each. bin/design-audit.mjs fails the
      build when a view disagrees, so these numbers are the only ones allowed to exist:
        action  a button or a chip that does something
@@ -63,7 +66,7 @@ input, textarea, select, [contenteditable="true"] { -webkit-user-select: text; u
 
 /* ============ sidebar ============ */
 .sidebar { grid-area: side; background: var(--bg-elev); border-right: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
-.brand { font-weight: 700; letter-spacing: -.04em; font-size: 28px; padding: 22px 22px 18px; }
+.brand { font-weight: 700; letter-spacing: var(--brand-track); font-size: 28px; padding: 22px 22px 18px; }
 .brand::after { content: none; }
 .snav { display: flex; flex-direction: column; gap: 2px; padding: 0 12px; }
 /* settings sits with the other entries on the rail, and at the far right on the phone bar */
@@ -1067,10 +1070,14 @@ main.main { transition: margin-right .18s ease; }
 
 /* collapsible sidebar (desktop): collapsed is an icon-only rail */
 .brand-row { display: flex; align-items: center; justify-content: space-between; padding: 20px 16px 14px 22px; }
-.brand { padding: 0;
-  background: linear-gradient(90deg, #ff9a4a, #ff5c39 55%, #ff3d6e);
+.brand,
+.brand-mini,
+.view-title .wordmark {
+  background: var(--brand-gradient);
   -webkit-background-clip: text; background-clip: text;
-  color: transparent; -webkit-text-fill-color: transparent; }
+  color: transparent; -webkit-text-fill-color: transparent;
+}
+.brand { padding: 0; }
 .side-icon { background: none; border: none; color: var(--fg-mute); padding: 6px; border-radius: var(--r-xs); cursor: pointer; display: inline-flex; align-items: center; }
 .side-icon:hover { color: var(--fg); background: var(--bg-elev2); }
 #app.side-collapsed { grid-template-columns: 68px 1fr; }
@@ -1082,11 +1089,11 @@ main.main { transition: margin-right .18s ease; }
 #app.side-collapsed .slib-add { display: none; }
 #app.side-collapsed .brand-row { justify-content: center; padding: 20px 0 14px; }
 /* collapsed to an icon rail: the name becomes a monogram, so the app still says who it is */
-.brand-mini { display: none; font-weight: 700; font-size: 15px; letter-spacing: -.04em; color: var(--fg-soft); }
+.brand-mini { display: none; font-weight: 700; font-size: 15px; letter-spacing: var(--brand-track); }
 #app.side-collapsed .brand-mini { display: block; }
 
 /* the wordmark replaces "Home" where the sidebar cannot say it: phone, and collapsed rail */
-.view-title .wordmark { display: none; font-size: 11px; font-weight: 700; letter-spacing: .22em; color: var(--fg-soft); }
+.view-title .wordmark { display: none; font-size: 15px; font-weight: 700; letter-spacing: var(--brand-track); }
 @media (max-width: 920px) {
   .view-title .wordmark { display: inline; }
   .view-title .view-name { display: none; }

@@ -26,7 +26,8 @@ const cssNoComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
 const tokens = JSON.parse(fs.readFileSync(tokensPath, 'utf8'));
 
 const problems = [];
-const norm = (v) => String(v).replace(/\s+/g, '').toLowerCase();
+// -.04em and -0.04em are the same number; compare canonically
+const norm = (v) => String(v).replace(/\s+/g, '').toLowerCase().replace(/(-?)0\.(\d)/g, '$1.$2');
 
 /* ---- 1. the :root block ---- */
 const rootBlock = cssNoComments.match(/:root\s*\{([\s\S]*?)\}/);
@@ -60,6 +61,8 @@ expect.push(
   ['--fs-meta', tokens.type.meta],
   ['--fs-kicker', tokens.type.kicker],
   ['--fs-micro', tokens.type.micro],
+  ['--brand-track', tokens.brand.tracking],
+  ['--brand-gradient', tokens.brand.gradient],
 );
 
 const missing = [];

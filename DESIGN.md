@@ -54,6 +54,20 @@ Two consequences worth stating plainly:
 Rules: one accent colour. Accent fills the primary action only — never two filled
 actions in one row. Text is `--fg`, `--fg-soft` or `--fg-mute`; there is no fourth grey.
 
+### 3.1 The brand lockup
+
+The name is one thing, drawn at two sizes. It always carries the same weight (700), the
+same tracking (`--brand-track`, -0.04em) and the same gradient
+(`--brand-gradient`: `#ff9a4a → #ff5c39 → #ff3d6e`, clipped to the text).
+
+| where | size |
+|---|---|
+| sidebar | 28px |
+| phone bar wordmark, collapsed-rail monogram | 15px |
+
+A flat-coloured copy of the name is a different logo. If the name appears somewhere new,
+it uses these two tokens, not a new colour or a new letter-spacing.
+
 ## 4. Type
 
 | role | token | size | weight | class |
