@@ -39,6 +39,17 @@ work; this file records what changed and why.
 - The local planner recognises a child brief without the model ("five year old" as words)
   and no longer classifies a song called *Baby* as a children's request.
 
+**Prep: the Re-analyse pill was a stretched bar (`v460`)**
+- `.crate-btn` carried `flex: 1 1 30%` for the three export buttons; the Re-analyse pill
+  used the same class, so as a direct flex child of the row it grew to 514px and read as a
+  progress bar. The flex rule is scoped to `.crate-acts` now.
+- Re-analyse is an outlined pill at the row's control height (`--h-tab`), with `ready` in
+  the same `crate-row-state` group; Prep got its accent back by dropping the neutral
+  `.crate-btn` base.
+- Export pills and both maintenance controls share one height and one type size in the row.
+- On a phone the state and the export buttons get their own right-aligned lines instead of
+  squeezing the title; in a 190px card the count takes one line, the action the next.
+
 ### 2026-11-24 · audit pass 2: the fixes that were claimed, and the ones that were real (`v452`)
 
 An external audit was re-run against the bundle rather than the changelog. It found that

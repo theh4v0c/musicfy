@@ -1958,7 +1958,7 @@ async function renderDjExport() {
         <span class="lrow-idx">${pad(p.idx)}</span>
         <img class="crate-row-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=120&v=${state.artV || 0}" alt="" loading="lazy">
         <div class="crate-row-t"><b>${esc(p.name)}</b><i>${p.n_tracks || 0} tracks · ${p.prepped || 0}/${p.owned || 0} prepped</i></div>
-        ${(p.owned && cov < 100) ? `<button class="crate-btn crate-analyze">Prep ${prepLabel(p)}</button>` : `<span class="crate-ready-tag">ready</span>${p.owned ? ' <button class="crate-btn crate-again" title="Analyse again to pick up sections, energy and cue points">Re-analyse</button>' : ''}`}
+        ${(p.owned && cov < 100) ? `<button class="crate-analyze">Prep ${prepLabel(p)}</button>` : `<span class="crate-row-state"><span class="crate-ready-tag">ready</span>${p.owned ? '<button class="crate-again" title="Analyse again to pick up sections, energy and cue points">Re-analyse</button>' : ''}</span>`}
         <div class="crate-row-acts">
           <button class="crate-btn" data-rb title="rekordbox XML + audio">Rekordbox</button>
           <button class="crate-btn" data-tr title="Traktor NML + audio">Traktor</button>
@@ -1972,7 +1972,7 @@ async function renderDjExport() {
       </div>
       <div class="crate-name"><span class="crate-no">${pad(p.idx)}</span>${esc(p.name)}</div>
       <div class="crate-ready"><i style="width:${cov}%"></i></div>
-      <div class="crate-meta"><span>${p.n_tracks || 0} tracks · ${p.prepped || 0}/${p.owned || 0} prepped</span>${(p.owned && cov < 100) ? `<button class="crate-analyze">Prep ${prepLabel(p)}</button>` : `<span class="crate-ready-tag">ready</span>${p.owned ? ' <button class="crate-again" title="Analyse again to pick up sections, energy and cue points">Re-analyse</button>' : ''}`}</div>
+      <div class="crate-meta"><span>${p.n_tracks || 0} tracks · ${p.prepped || 0}/${p.owned || 0} prepped</span>${(p.owned && cov < 100) ? `<button class="crate-analyze">Prep ${prepLabel(p)}</button>` : `<span class="crate-row-state"><span class="crate-ready-tag">ready</span>${p.owned ? '<button class="crate-again" title="Analyse again to pick up sections, energy and cue points">Re-analyse</button>' : ''}</span>`}</div>
       <div class="crate-acts">
         <button class="crate-btn" data-rb title="Download a ZIP with the audio + rekordbox XML">Rekordbox</button>
         <button class="crate-btn" data-tr title="Download a ZIP with the audio + Traktor NML">Traktor</button>

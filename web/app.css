@@ -741,9 +741,20 @@ main.main { transition: margin-right .18s ease; }
 .crate-row-t b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .crate-row-t i { font-style: normal; font-size: 11px; color: var(--fg-mute); }
 .crate-row-acts { display: flex; gap: 6px; flex: none; }
-.crate-row-acts .crate-btn { width: auto; padding: 6px 10px; font-size: 10px; }
-.crate-row .crate-analyze { flex: none; width: auto; min-width: 88px; padding: 7px 14px; font-size: 11px; }
-.crate-row .crate-ready-tag { flex: none; min-width: 88px; text-align: center; }
+.crate-row-acts .crate-btn { width: auto; height: var(--h-tab); padding: 0 10px; font-size: var(--fs-tab); }
+.crate-row .crate-analyze { flex: none; display: inline-flex; align-items: center; justify-content: center;
+  min-width: 96px; height: var(--h-tab); padding: 0 14px; font-size: var(--fs-tab); }
+/* the row's maintenance control: an outlined pill on the same height as the export
+   buttons, so it reads as an action and not as a progress bar */
+.crate-row-state { display: flex; align-items: center; gap: 10px; flex: none; }
+.crate-row .crate-ready-tag { flex: none; text-align: center; }
+.crate-again { flex: none; display: inline-flex; align-items: center; justify-content: center;
+  min-width: 96px; height: var(--h-tab); padding: 0 12px; border: 1px solid var(--line);
+  border-radius: var(--r-pill); background: transparent; color: var(--fg-soft);
+  font-family: inherit; font-size: var(--fs-tab); font-weight: 600; letter-spacing: .02em;
+  white-space: nowrap; transition: color .15s, border-color .15s, background .15s; }
+.crate-again:hover { color: var(--fg); border-color: var(--acc); background: var(--acc-soft); }
+.crate-again:disabled { opacity: .55; cursor: default; }
 .crate { background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px; cursor: pointer; transition: transform .15s ease, border-color .15s; }
 .crate:hover { transform: translateY(-2px); border-color: var(--acc); }
 .crate-artwrap { position: relative; }
@@ -752,7 +763,11 @@ main.main { transition: margin-right .18s ease; }
 .crate-name { font-size: 14px; font-weight: 600; margin: 9px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .crate-ready { height: 4px; border-radius: var(--r-pill); background: var(--bg-elev2); overflow: hidden; }
 .crate-ready i { display: block; height: 100%; background: linear-gradient(90deg, var(--acc), #ffb454); }
-.crate-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--fg-mute); margin: 6px 0 9px; }
+/* a card is 190px wide: the count needs its own line, and the action sits under it,
+   instead of three words wrapping around a 96px pill */
+.crate-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 11px; color: var(--fg-mute); margin: 6px 0 9px; }
+.crate-meta > span:first-child { flex: 1 1 100%; }
+.crate-meta .crate-row-state, .crate-meta .crate-analyze { margin-left: auto; }
 .crate-analyze { border: 1px solid rgba(255,92,57,.5); background: var(--acc-soft); color: #ff8a6a; border-radius: var(--r-pill); padding: 3px 11px; font-family: inherit; font-size: 10.5px; font-weight: 600; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
 .crate-analyze:hover { background: var(--acc); color: #fff; border-color: var(--acc); }
 .crate-analyze:disabled { opacity: .55; cursor: default; }
@@ -1056,7 +1071,7 @@ main.main { transition: margin-right .18s ease; }
 
 /* three export buttons in a crate: wrap instead of overflow */
 .crate-acts { flex-wrap: wrap; }
-.crate-btn { flex: 1 1 30%; min-width: 46px; font-size: 10.5px; padding: 7px 4px; }
+.crate-acts .crate-btn { flex: 1 1 30%; min-width: 46px; font-size: 10.5px; padding: 7px 4px; }
 
 /* quiet meta text + collapsible maintenance, instead of diagnostic pills */
 .meta-line { color: var(--fg-mute); font-size: 12px; }
@@ -1262,12 +1277,12 @@ main.main { transition: margin-right .18s ease; }
 
 /* prep rows on a phone: two lines, controls under the title, nothing off-screen */
 @media (max-width: 920px) {
-  .crate-row { display: grid; grid-template-columns: 20px 40px minmax(0, 1fr) auto;
-    grid-template-areas: "idx art name act" ". . acts acts"; column-gap: 10px; row-gap: 8px; align-items: center; }
+  .crate-row { display: grid; grid-template-columns: 20px 40px minmax(0, 1fr);
+    grid-template-areas: "idx art name" ". . state" ". . acts"; column-gap: 10px; row-gap: 8px; align-items: center; }
   .crate-row .lrow-idx { grid-area: idx; width: auto; }
   .crate-row-art { grid-area: art; }
   .crate-row-t { grid-area: name; }
-  .crate-row .crate-analyze, .crate-row .crate-ready-tag { grid-area: act; }
+  .crate-row .crate-analyze, .crate-row-state { grid-area: state; justify-self: end; }
   .crate-row-acts { grid-area: acts; justify-content: flex-end; flex-wrap: wrap; }
-  .crate-row-acts .crate-btn { font-size: 10.5px; padding: 7px 10px; }
+  .crate-row-acts .crate-btn { font-size: var(--fs-tab); height: var(--h-tab); padding: 0 10px; }
 }
