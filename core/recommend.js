@@ -70,14 +70,13 @@ function build(db, { days = 30, limit = 40, excludePlaylisted = false, avoid = [
     : null;
 
   const avoidList = avoid.map((w) => String(w).toLowerCase()).filter(Boolean);
+  const exclude = require('./exclude');
   const scored = [];
   for (const p of pool) {
     if (!p.owned) continue;                                  // only recommend what can be played
     if (playlisted && playlisted.has(p.id)) continue;         // weekly list must surface something new
-    if (avoidList.length) {
-      const hay = `${p.artist || ''} ${p.title || ''} ${p.genre_family || ''}`.toLowerCase();
-      if (avoidList.some((w) => hay.includes(w))) continue;
-    }
+    // artist, album, title, genre and family, so "reggaeton" in a genre column counts
+    if (avoidList.length && exclude.matches(avoidList, p)) continue;
     const playedRecently = recentWeight.get(p.id);
     if (playedRecently && playedRecently > 1) continue;       // do not just repeat the current rotation
     let score = 0;

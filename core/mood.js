@@ -1,4 +1,5 @@
 'use strict';
+const exclude = require('./exclude');
 // Turns a plain request into a scored selection from the local library.
 // No model: style and mood are keyword presets, the ranking is numbers we already store.
 
@@ -139,16 +140,12 @@ function select(db, query, count) {
   let avoid = [];
   try {
     const s = JSON.parse(fs.readFileSync('/opt/musicfy/data/settings.json', 'utf8'));
-    avoid = String(s.taste_avoid || '').split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
+    avoid = exclude.parse(s.taste_avoid || '');
   } catch {}
+  // asking for a banned thing by name overrides the ban for that request
   const qLower = String(query || '').toLowerCase();
   avoid = avoid.filter((w) => !qLower.includes(w));
-  if (avoid.length) {
-    rows = rows.filter((t) => {
-      const hay = `${t.artist || ''} ${t.title || ''} ${t.genre || ''} ${t.genre_family || ''}`.toLowerCase();
-      return !avoid.some((w) => hay.includes(w));
-    });
-  }
+  if (avoid.length) rows = rows.filter((t) => !exclude.matches(avoid, t));
   // a genre word that the library does not use must not empty the result: ask for
   // "ambient" in a library tagged electronic and you still want the ambient-leaning
   // tracks, not a shrug. The style below decides when the family is unknown.

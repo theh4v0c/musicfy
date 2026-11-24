@@ -124,6 +124,22 @@ the list of forbidden patterns. `bin/design-check.mjs` enforces it (tokens ↔ C
 the built pages at 1440 and 390) and exits non-zero on drift. Run it before and after
 any visual change.
 
+## Exclusions ("keep out of picks")
+
+Settings stores one free-text field, `taste_avoid`. `core/exclude.js` turns it into
+terms: it splits on commas, semicolons, newlines and "and", strips instruction prefixes
+("no", "non", "avoid", "keep out of picks"), normalises accents, and expands a small
+synonym table once (latin -> reggaeton, dembow, bachata, cumbia…; edm -> big room,
+electro house, dance pop…).
+
+A track is excluded when a term appears in **artist, album, title, genre or genre
+family**. Terms of three characters or fewer match whole words only, so `pop` does not
+bite `populate`.
+
+Every surface that picks music filters through it: home picks (ON DECK), `/api/recommend`,
+`/api/flow`, `/api/radio` (the home rotation), `/api/mix/next`, and `mood.select` for
+briefs. Saving settings invalidates the picks cache, so the change is immediate.
+
 ## DJ export
 
 Three artefacts come out of a crate. The formats were checked against real parsers, not

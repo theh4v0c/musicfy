@@ -27,6 +27,7 @@ const archive = require('./archive');
 const spotify = require('./spotify');
 const exporter = require('./export');
 const pioneer = require('./pioneer');
+const exclude = require('./exclude');
 const tagwrite = require('./tagwrite');
 const transcode = require('./transcode');
 const { DatabaseSync } = require('node:sqlite');
@@ -523,10 +524,11 @@ function soundcloudFallbackDownload(b, dir, finish, ingestDownloaded, setProgres
     .catch((e) => finish('error', `soundcloud resolve: ${String(e.message).slice(0, 120)}`));
 }
 
+// the free-text "keep out of picks" field, parsed once per call into real terms
 function tasteAvoid() {
   try {
     const s = JSON.parse(fs.readFileSync('/opt/musicfy/data/settings.json', 'utf8'));
-    return String(s.taste_avoid || '').split(',').map((w) => w.trim().toLowerCase()).filter(Boolean);
+    return exclude.parse(s.taste_avoid || '');
   } catch { return []; }
 }
 
@@ -2538,6 +2540,7 @@ const server = http.createServer(async (req, res) => {
           try { b = JSON.parse(body || '{}'); } catch {}
           let s = {};
           try { s = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
+          picksCache = { at: 0, data: null };
           for (const k of ['display_name', 'email', 'country', 'llm_base_url', 'llm_model', 'llm_api_key',
             'download_root', 'preferred_format', 'autoplay_next', 'show_stream_rows',
             'normalize_loudness', 'target_loudness', 'crossfade_ms', 'fade_on_play', 'fade_on_play_ms', 'prefetch_ahead',
@@ -2605,10 +2608,12 @@ const server = http.createServer(async (req, res) => {
       const last = db.prepare(`SELECT t.id, t.artist, t.title, t.bpm, t.key, t.key_scale
         FROM listens l JOIN tracks t ON t.id=l.track_id ORDER BY l.played_at DESC LIMIT 1`).get();
       const owned = `JOIN files f ON f.track_id=t.id AND f.tier='owned'`;
+      const banned = tasteAvoid();
       const picks = [];
       const seen = new Set();
       const add = (row, reason) => {
         if (!row || seen.has(row.id) || picks.length >= 3) return;
+        if (exclude.matches(banned, row)) return;   // what "keep out of picks" means
         seen.add(row.id);
         picks.push({
           id: row.id, title: row.title, artist: row.artist, has_art: !!row.has_art,
@@ -2620,48 +2625,49 @@ const server = http.createServer(async (req, res) => {
       const weekArtist = db.prepare(`SELECT t.artist a, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
         WHERE l.played_at >= ? AND t.artist IS NOT NULL AND t.artist != ''
         GROUP BY t.artist ORDER BY n DESC LIMIT 1`).get(nowTs - 7 * 86400);
+      const addAny = (rows, reason) => { for (const r of rows) { if (!exclude.matches(banned, r)) { add(r, reason); return; } } };
       if (weekArtist && weekArtist.a) {
-        add(db.prepare(`SELECT t.id,t.title,t.artist,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
+        addAny(db.prepare(`SELECT t.id,t.title,t.artist,t.album,t.genre,t.genre_family,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
           WHERE t.artist=? AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id AND l.played_at > ?)
-          ORDER BY RANDOM() LIMIT 1`).get(weekArtist.a, nowTs - 14 * 86400),
+          ORDER BY RANDOM() LIMIT 12`).all(weekArtist.a, nowTs - 14 * 86400),
           `your artist of the week, unheard lately`);
       }
       if (last && last.artist) {
-        add(db.prepare(`SELECT t.id,t.title,t.artist,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
-          WHERE t.artist=? AND t.id<>? ORDER BY RANDOM() LIMIT 1`).get(last.artist, last.id),
+        addAny(db.prepare(`SELECT t.id,t.title,t.artist,t.album,t.genre,t.genre_family,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
+          WHERE t.artist=? AND t.id<>? ORDER BY RANDOM() LIMIT 12`).all(last.artist, last.id),
           `more from ${last.artist}`);
       }
       if (last && last.key) {
-        add(db.prepare(`SELECT t.id,t.title,t.artist,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
+        addAny(db.prepare(`SELECT t.id,t.title,t.artist,t.album,t.genre,t.genre_family,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
           WHERE t.key=? AND t.id<>? AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id AND l.played_at > ?)
-          ORDER BY RANDOM() LIMIT 1`).get(last.key, last.id, nowTs - 30 * 86400),
+          ORDER BY RANDOM() LIMIT 12`).all(last.key, last.id, nowTs - 30 * 86400),
           `same key as “${String(last.title).slice(0, 22)}”`);
       }
       if (last && last.bpm) {
-        add(db.prepare(`SELECT t.id,t.title,t.artist,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
+        addAny(db.prepare(`SELECT t.id,t.title,t.artist,t.album,t.genre,t.genre_family,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
           WHERE t.bpm BETWEEN ? AND ? AND t.id<>? AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id)
-          ORDER BY RANDOM() LIMIT 1`).get(last.bpm - 3, last.bpm + 3, last.id),
+          ORDER BY RANDOM() LIMIT 12`).all(last.bpm - 3, last.bpm + 3, last.id),
           `${Math.round(last.bpm)} BPM, never played`);
       }
-      add(db.prepare(`SELECT t.id,t.title,t.artist,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
-        WHERE NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id) ORDER BY RANDOM() LIMIT 1`).get(),
+      addAny(db.prepare(`SELECT t.id,t.title,t.artist,t.album,t.genre,t.genre_family,t.has_art,t.bpm,t.key,t.key_scale FROM tracks t ${owned}
+        WHERE NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id) ORDER BY RANDOM() LIMIT 12`).all(),
         'in the library, never heard');
-      add(db.prepare(`SELECT t.id,t.title,t.artist,t.has_art,t.bpm,t.key,t.key_scale, COUNT(l.track_id) n, MAX(l.played_at) last
+      addAny(db.prepare(`SELECT t.id,t.title,t.artist,t.album,t.genre,t.genre_family,t.has_art,t.bpm,t.key,t.key_scale, COUNT(l.track_id) n, MAX(l.played_at) last
         FROM tracks t ${owned} LEFT JOIN listens l ON l.track_id=t.id
-        GROUP BY t.id HAVING n >= 3 AND last < ? ORDER BY n DESC LIMIT 1`).get(nowTs - 21 * 86400),
+        GROUP BY t.id HAVING n >= 3 AND last < ? ORDER BY n DESC LIMIT 12`).all(nowTs - 21 * 86400),
         'you wore this one out, then forgot it');
       // never hand back two when three were asked for, and never with a shrug twice
-      const pickOne = (where, args) => db.prepare(`SELECT t.id,t.title,t.artist,t.has_art,t.bpm,t.key,t.key_scale
+      const pickOne = (where, args) => db.prepare(`SELECT t.id,t.title,t.artist,t.album,t.genre,t.genre_family,t.has_art,t.bpm,t.key,t.key_scale
         FROM tracks t ${owned} WHERE t.id NOT IN (${[...seen].map(() => '?').join(',') || 'NULL'}) ${where}
-        ORDER BY RANDOM() LIMIT 1`).get(...[...seen], ...args);
+        ORDER BY RANDOM() LIMIT 12`).all(...[...seen], ...args);
       if (picks.length < 3) {
-        add(pickOne('AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id AND l.played_at > ?)', [nowTs - 60 * 86400]),
+        addAny(pickOne('AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id AND l.played_at > ?)', [nowTs - 60 * 86400]),
           'untouched for two months');
       }
       if (picks.length < 3) {
-        add(pickOne('AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id)', []), 'in the library, never heard');
+        addAny(pickOne('AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id)', []), 'in the library, never heard');
       }
-      add(pickOne('', []), 'no reason, it just slaps');
+      addAny(pickOne('', []), 'no reason, it just slaps');
       picksCache = { at: Date.now(), data: { picks } };
       return json(res, 200, { picks });
     }
@@ -2819,7 +2825,9 @@ const server = http.createServer(async (req, res) => {
       const seed = mixSeed();
       if (!seed) return json(res, 200, { seed: null, tracks: [] });
       const recent = db.prepare(`SELECT track_id FROM listens WHERE played_at >= ?`).all(now() - 3600).map((r) => r.track_id);
+      const bannedMix = tasteAvoid();
       const tracks = mixCandidates(seed, Math.min(Number(u.searchParams.get('limit')) || 25, 100), recent)
+        .filter((t) => !bannedMix.length || !exclude.matches(bannedMix, t))
         .map((t) => ({ ...t, owned: 1, rung: 'local' }));
       return json(res, 200, { seed: { id: seed.id, title: seed.title, bpm: Math.round(seed.bpm), key: seed.key, key_scale: seed.key_scale }, tracks });
     }
@@ -3985,7 +3993,9 @@ const server = http.createServer(async (req, res) => {
       // known family first. 'Tim Green' the house producer and 'Tim Green' the Death guitarist
       // are one string, so the genre column is the only thing that separates their neighbours
       if (fam) out.sort((a, b) => (a.genre_family === fam ? 0 : 1) - (b.genre_family === fam ? 0 : 1));
-      return json(res, 200, out);
+      const bannedRadio = tasteAvoid();
+      const kept = bannedRadio.length ? out.filter((t) => !exclude.matches(bannedRadio, t)) : out;
+      return json(res, 200, kept);
     }
 
     // playlist management

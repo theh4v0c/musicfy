@@ -112,6 +112,23 @@ Touch: on `(pointer: coarse)`, icon controls may grow to 44×44 and small target
 (26–30px play discs, 9px tags) get their hit area extended with a pseudo-element —
 never by making the visible control bigger than its role.
 
+### 5.1 Settings sections
+
+A settings card opens with a 6px tone dot before its heading, so the kind of setting is
+readable before the label:
+
+| tone | token | used for |
+|---|---|---|
+| accent | `--acc` | identity and machinery (You, Location, model, downloads) |
+| positive | `--ok` | taste, and anything the engine learns |
+| neutral | `--fg-mute` | housekeeping (maintenance, library) |
+
+### 5.2 Exclusion chips
+
+"Keep out of picks" is shown back as the terms the engine will use: pill chips,
+`--fs-meta`, `--acc-soft` fill, 1px border in accent at 40%. The label above them is a
+kicker: `never in picks`.
+
 ## 6. Containers
 
 | container | radius | padding | background | use |

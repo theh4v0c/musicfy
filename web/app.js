@@ -2427,14 +2427,14 @@ async function renderSettings() {
   const l = d.llm || {};
   v.innerHTML = `${heroBanner('SYSTEM', 'Settings', 'Your identity, taste and playback defaults.')}
     <div class="set-grid">
-      <section class="set-card">
+      <section class="set-card" data-tone="acc">
         <h2>You</h2>
         <label>Display name<input id="set-name" value="${esc(s.display_name || '')}" placeholder="Your name"></label>
         <label>Email<input id="set-email" value="${esc(s.email || '')}" placeholder="you@example.com"></label>
         <label>Timezone<input id="set-tz" value="${esc(s.timezone || '')}" placeholder="America/Sao_Paulo"></label>
         <p class="set-note">IANA name, e.g. America/Sao_Paulo. Setting a city below fills it in automatically.</p>
       </section>
-      <section class="set-card">
+      <section class="set-card" data-tone="acc">
         <h2>Location</h2>
         <p class="set-note">Used by the greeting and its weather line. Type a city and the coordinates and time zone are looked up for you.</p>
         <label>City<input id="set-city" value="${esc(s.city || '')}" placeholder="Brasília"></label>
@@ -2442,15 +2442,17 @@ async function renderSettings() {
           ? `<div><b>${esc(s.city || '')}</b>${s.country ? ` · ${esc(s.country)}` : ''}</div><div>${Number(s.latitude).toFixed(3)}, ${Number(s.longitude).toFixed(3)}</div><div>${esc(s.timezone || '')}</div>`
           : '<div>No city set</div>'}</div>
       </section>
-      <section class="set-card">
+      <section class="set-card" data-tone="ok">
         <h2>Taste</h2>
         <p class="set-note">Optional. Used to shape recommendations; the app learns from what you play anyway.</p>
         <label>Genres you love<input id="set-taste-genres" value="${esc(s.taste_genres || '')}" placeholder="techno, dub techno, ambient, jazz"></label>
         <label>Artists you love<input id="set-taste-artists" value="${esc(s.taste_artists || '')}" placeholder="Burial, Overmono, Floating Points"></label>
         <label>Usually listening<input id="set-taste-context" value="${esc(s.taste_context || '')}" placeholder="long drives, focus work, evening sets"></label>
-        <label>Keep out of picks<input id="set-taste-avoid" value="${esc(s.taste_avoid || '')}" placeholder="christmas music, metalcore"></label>
+        <label>Keep out of picks<input id="set-taste-avoid" value="${esc(s.taste_avoid || '')}" placeholder="non pop, reggaeton, latin, emo, edm"></label>
+        <div class="avoid-terms" id="set-avoid-terms" aria-live="polite"></div>
+        <p class="set-note">Commas. "no" and "non" are ignored, so "non pop" means pop. Matched against genre, family, artist, album and title.</p>
       </section>
-      <section class="set-card">
+      <section class="set-card" data-tone="mute">
         <h2>Maintenance</h2>
         <p class="set-note">Housekeeping for the library itself. Nothing here changes your files unless it says so.</p>
         <div class="set-tools">
@@ -2465,7 +2467,7 @@ async function renderSettings() {
         <label>Auto-save after plays<input id="set-auto-dl" type="number" min="0" max="20" value="${Number(s.auto_download_plays ?? 2)}"></label>
         <p class="set-note">0 turns automatic saving off.</p>
       </section>
-      <section class="set-card">
+      <section class="set-card" data-tone="acc">
         <h2>Model endpoint</h2>
         <p class="set-note">Used by the Ask view. ${l.configured ? 'Currently configured.' : 'Not configured.'}</p>
         <label>Base URL<input id="set-llm-url" value="${esc(s.llm_base_url || l.base_url || '')}" placeholder="https://host/v1"></label>
@@ -2531,6 +2533,32 @@ async function renderSettings() {
     fadeCb.onchange = () => { fadeSel.value = fadeCb.checked ? (fadeSel.value === '0' ? '350' : fadeSel.value) : '0'; };
     fadeSel.onchange = () => { fadeCb.checked = fadeSel.value !== '0'; };
   }
+  // the exclusion field, shown back as the terms the app will actually use
+  const avoidInput = document.getElementById('set-taste-avoid');
+  const avoidHost = document.getElementById('set-avoid-terms');
+  const paintAvoid = () => {
+    if (!avoidHost || !avoidInput) return;
+    const terms = avoidInput.value.split(/[\n,;]+|\band\b/gi)
+      .map((t) => t.trim().toLowerCase().replace(/^(?:no|non|not|without|avoid|skip|exclude|off)\s+/, '').replace(/\s+(?:music|tracks?|songs?)$/, ''))
+      .filter(Boolean);
+    avoidHost.innerHTML = terms.length
+      ? `<span class="avoid-label">never in picks</span>` + [...new Set(terms)].map((t) => `<span class="avoid-term">${esc(t)}</span>`).join('')
+      : '<span class="avoid-empty">Nothing excluded.</span>';
+  };
+  if (avoidInput) { avoidInput.addEventListener('input', paintAvoid); paintAvoid(); }
+
+  const saveBtn = document.getElementById('set-save');
+  const saveMsg = document.getElementById('set-msg');
+  const markDirty = () => {
+    if (!saveBtn) return;
+    saveBtn.classList.add('dirty');
+    if (saveMsg) saveMsg.textContent = 'Unsaved changes';
+  };
+  v.querySelectorAll('input, select, textarea').forEach((el) => {
+    el.addEventListener('input', markDirty);
+    el.addEventListener('change', markDirty);
+  });
+
   document.getElementById('set-save').onclick = async () => {
     const body = {
       display_name: document.getElementById('set-name').value.trim(),
@@ -2567,11 +2595,31 @@ async function renderSettings() {
           ? `<div><b>${esc(saved.city || '')}</b>${saved.country ? ` · ${esc(saved.country)}` : ''}</div><div>${Number(saved.latitude).toFixed(3)}, ${Number(saved.longitude).toFixed(3)}</div><div>${esc(saved.timezone || '')}</div>`
           : '<div>No city set</div>';
       }
-      document.getElementById('set-msg').textContent = saved.city && !saved.latitude ? 'Saved, but that city was not found' : 'Saved';
+      const notFound = saved.city && !saved.latitude;
+      if (saveBtn) {
+        saveBtn.classList.remove('dirty');
+        saveBtn.classList.add('saved');
+        saveBtn.textContent = notFound ? 'Saved (city not found)' : 'Saved';
+        setTimeout(() => {
+          if (!saveBtn) return;
+          saveBtn.classList.remove('saved');
+          saveBtn.textContent = 'Save settings';
+        }, 2800);
+      }
+      if (saveMsg) {
+        saveMsg.textContent = notFound
+          ? 'Saved, but that city was not found'
+          : `Saved — ${(body.taste_avoid || '').trim() ? 'picks use these exclusions now' : 'settings applied'}`;
+        saveMsg.dataset.tone = 'ok';
+      }
+      paintAvoid();
       state.settings = { ...(state.settings || {}), ...body, ...saved };
       applyLoudnessGain(state.current);
       if (body.display_name) state.profileName = body.display_name;
-    } catch { document.getElementById('set-msg').textContent = 'Could not save'; }
+    } catch {
+      if (saveBtn) { saveBtn.classList.remove('saved'); saveBtn.textContent = 'Save settings'; }
+      if (saveMsg) { saveMsg.textContent = 'Could not save'; saveMsg.dataset.tone = 'bad'; }
+    }
   };
   const cb = document.getElementById('set-clearbuf');
   if (cb) cb.onclick = async () => {
