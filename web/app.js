@@ -907,7 +907,7 @@ async function renderHome() {
   v.innerHTML = `
     <section class="mast">
       <div class="mast-glow" id="mast-glow"></div>
-      <div class="mast-meta"><span id="mast-clock"></span><span id="mast-name"></span><span class="mast-flex"></span></div>
+      <div class="mast-meta"><span id="mast-clock"></span><span id="mast-name"></span><span id="mast-session"></span><span class="mast-flex"></span></div>
       <div class="mast-main">
         <div class="mast-copy">
           <h1 class="mast-greet" id="mast-greet">${state.playlists.length} crates</h1>
@@ -915,10 +915,6 @@ async function renderHome() {
           <button class="mast-mix" id="mast-mix" hidden></button>
         </div>
         <div class="mast-side">
-          <div class="session" id="mast-session" hidden>
-            <div class="session-arc" id="mast-session-arc"></div>
-            <div class="session-meta"><span id="mast-session-line"></span><span id="mast-session-bpm"></span></div>
-          </div>
           <button class="flow-key beam" id="flow-btn" aria-label="Start Flow">
             <span class="flow-key-k">${IC.play}</span>
             <span class="flow-key-t"><b>Flow</b><i>endless mix from what you play</i></span>
@@ -961,8 +957,11 @@ async function renderHome() {
     if (greet) {
       // the headline is a mixing fact, not a greeting: what can follow what you played
       const mix = g.compatible;
-      if (mix && mix.count >= 3 && mix.seed) {
-        greet.innerHTML = `${mix.count} tracks would follow <span class="mast-name">${esc(mix.seed.title || '')}</span>`;
+      if (mix && mix.count >= 3 && mix.exact && mix.seed && mix.seed.title) {
+        greet.innerHTML = `${mix.count} tracks would follow <span class="mast-name">${esc(mix.seed.title)}</span>`;
+      } else if (mix && mix.count >= 3) {
+        // the last play had no tempo of its own: speak in the session's tempo
+        greet.innerHTML = `${mix.count} tracks near <span class="mast-name">${Math.round(mix.bpm)} BPM</span>`;
       } else if (g.session) {
         const mins = g.session.minutes;
         greet.textContent = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m in` : `${mins}m in`;
@@ -990,47 +989,23 @@ async function renderHome() {
     if (noteEl) {
       const fact = String(g.fact || g.sub || '').replace(/\s*·\s*$/, '');
       const mix = g.compatible;
-      const lead = (mix && mix.count >= 3 && mix.bpm)
+      // the tempo is already the headline when the seed was an average: do not repeat it
+      const lead = (mix && mix.count >= 3 && mix.exact && mix.bpm)
         ? `${mix.bpm} BPM${mix.key ? ` · ${mix.key}${mix.key_scale === 'minor' ? 'm' : ''}` : ''}`
         : '';
       const line = [lead, fact].filter(Boolean).join('. ');
       noteEl.innerHTML = line ? `<span class="mast-fact">${esc(line)}</span>` : '';
     }
-    // what this session actually is, drawn from the listens themselves
-    const sBox = document.getElementById('mast-session');
-    if (sBox && g.session) {
+    // one line of context, not a widget: how long the session is and what it averages
+    const sesEl = document.getElementById('mast-session');
+    if (sesEl && g.session) {
       const ses = g.session;
       const dur = ses.minutes >= 60 ? `${Math.floor(ses.minutes / 60)}h ${ses.minutes % 60}m` : `${ses.minutes}m`;
-      sBox.hidden = false;
-      const line = document.getElementById('mast-session-line');
-      if (line) line.textContent = `${dur} in · ${ses.tracks} tracks · ${ses.artists} artists`;
-      const bpmEl = document.getElementById('mast-session-bpm');
-      if (bpmEl) bpmEl.textContent = ses.avgBpm ? `${ses.avgBpm} BPM avg` : '';
-      // the covers say where the last hour went; the arc says how it moved
-      const arc = document.getElementById('mast-session-arc');
-      const recent = (ses.recent || []).filter((r) => r && r.id);
-      const series = (ses.series || []).filter((v) => Number.isFinite(v));
-      if (arc && recent.length) {
-        // the covers are the history of the night: tap one to go back to it
-        arc.innerHTML = `<div class="session-covers">${recent.map((r, i) => `<button class="session-cover" data-i="${i}" title="Play ${esc(r.title || '')}${r.artist ? ` — ${esc(r.artist)}` : ''}" aria-label="Play ${esc(r.title || '')}">${r.has_art
-          ? `<img src="/api/cover/${r.id}?s=80&v=${state.artV || 0}" alt="" loading="lazy">`
-          : '<span class="ph"></span>'}</button>`).join('')}</div>`;
-        arc.querySelectorAll('.session-cover').forEach((btn) => {
-          btn.onclick = () => {
-            const list = recent.map((r) => ({ id: r.id, title: r.title, artist: r.artist, owned: r.owned, has_art: r.has_art, rung: r.owned ? 'local' : null }));
-            playList(list, Number(btn.dataset.i) || 0, false, 'Tonight');
-          };
-        });
-      } else if (arc) {
-        if (series.length >= 6) {
-          const min = Math.min(...series), max = Math.max(...series), span = Math.max(1, max - min);
-          const W = 120, H = 24;
-          const pts = series.map((v, i) => `${((i / (series.length - 1)) * W).toFixed(1)},${(H - 2 - ((v - min) / span) * (H - 6)).toFixed(1)}`).join(' ');
-          arc.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="var(--acc)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
-        } else {
-          arc.innerHTML = '';
-        }
-      }
+      // a phone gets the two numbers that matter; a desktop can afford all three
+      const wide = innerWidth >= 700;
+      sesEl.textContent = wide
+        ? `${dur} · ${ses.tracks} tracks${ses.avgBpm ? ` · ${ses.avgBpm} BPM` : ''}`
+        : `${dur}${ses.avgBpm ? ` · ${ses.avgBpm} BPM` : ` · ${ses.tracks} tracks`}`;
     }
     // the greeting already counts this week's additions; the library list may not be
     // loaded yet when the tiles first render

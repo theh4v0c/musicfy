@@ -593,11 +593,40 @@ function camelotOf(key, scale) {
   if (!n) return null;
   return { n, minor: String(scale || '').toLowerCase() === 'minor' };
 }
+function sessionSummary(hours = 12) {
+  try {
+    const rows = db.prepare(`SELECT l.played_at, t.id, t.title, t.bpm, t.artist FROM listens l JOIN tracks t ON t.id=l.track_id
+      WHERE l.played_at >= ? ORDER BY l.played_at DESC`).all(now() - hours * 3600);
+    const run = [];
+    let prev = null;
+    for (const r of rows) {
+      if (prev != null && prev - r.played_at > 90 * 60) break;
+      run.push(r);
+      prev = r.played_at;
+    }
+    if (run.length < 2) return null;
+    const bpms = run.filter((r) => r.bpm).map((r) => Math.round(r.bpm)).reverse();
+    return {
+      minutes: Math.max(1, Math.round((run[0].played_at - run[run.length - 1].played_at) / 60)),
+      tracks: run.length,
+      artists: new Set(run.map((r) => r.artist).filter(Boolean)).size,
+      avgBpm: bpms.length ? Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length) : null,
+      startedAt: run[run.length - 1].played_at,
+    };
+  } catch { return null; }
+}
+
+/* the seed for 'what follows': the last track you played, when it has a tempo. If it
+   does not, the session's average tempo stands in and the key is left out — better than
+   naming a track that is not the last one you played. */
 function mixSeed() {
   try {
-    return db.prepare(`SELECT t.id, t.title, t.artist, t.bpm, t.key, t.key_scale
-      FROM listens l JOIN tracks t ON t.id=l.track_id
-      WHERE t.bpm IS NOT NULL AND t.bpm > 0 ORDER BY l.played_at DESC LIMIT 1`).get();
+    const last = db.prepare(`SELECT t.id, t.title, t.artist, t.bpm, t.key, t.key_scale
+      FROM listens l JOIN tracks t ON t.id=l.track_id ORDER BY l.played_at DESC LIMIT 1`).get();
+    if (last && last.bpm) return { ...last, exact: true };
+    const s = sessionSummary();
+    if (s && s.avgBpm) return { id: last ? last.id : 0, title: null, artist: null, bpm: s.avgBpm, key: null, key_scale: null, exact: false };
+    return null;
   } catch { return null; }
 }
 function mixCandidates(seed, limit = 40, excludeIds = []) {
@@ -2672,44 +2701,18 @@ const server = http.createServer(async (req, res) => {
       const tracks = db.prepare('SELECT COUNT(*) c FROM tracks').get().c;
       const artists = db.prepare("SELECT COUNT(DISTINCT artist) c FROM tracks WHERE artist IS NOT NULL AND artist != ''").get().c;
       const addedWeek = weekNew;
-      // the session in progress: listens with no 90 minute gap, so the header can say
-      // "42 minutes in" and draw the tempo arc of the set instead of a generic greeting
-      let session = null;
-      try {
-        const rows = db.prepare(`SELECT l.played_at, t.id, t.title, t.has_art, t.bpm, t.artist
-          FROM listens l JOIN tracks t ON t.id=l.track_id
-          WHERE l.played_at >= ? ORDER BY l.played_at DESC`).all(nowTs - 12 * 3600);
-        const run = [];
-        let prev = null;
-        for (const r of rows) {
-          if (prev != null && prev - r.played_at > 90 * 60) break;
-          run.push(r);
-          prev = r.played_at;
-        }
-        if (run.length >= 2) {
-          const bpms = run.filter((r) => r.bpm).map((r) => Math.round(r.bpm)).reverse();
-          session = {
-            minutes: Math.max(1, Math.round((run[0].played_at - run[run.length - 1].played_at) / 60)),
-            tracks: run.length,
-            artists: new Set(run.map((r) => r.artist).filter(Boolean)).size,
-            avgBpm: bpms.length ? Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length) : null,
-            series: bpms.slice(-14),
-            recent: run.slice(0, 4).map((r) => {
-              const f = db.prepare("SELECT 1 FROM files WHERE track_id=? AND tier='owned' LIMIT 1").get(r.id);
-              return { id: r.id, title: r.title, artist: r.artist, has_art: !!r.has_art, owned: f ? 1 : 0 };
-            }),
-            startedAt: run[run.length - 1].played_at,
-          };
-        }
-      } catch {}
+      const session = sessionSummary();
 
       let compatible = null;
       try {
         const seed = mixSeed();
         if (seed && seed.bpm) {
           const recent = db.prepare(`SELECT track_id FROM listens WHERE played_at >= ?`).all(nowTs - 60 * 60).map((r) => r.track_id);
-          const list = mixCandidates(seed, 40, recent);
-          compatible = { count: list.length, bpm: Math.round(seed.bpm), key: seed.key || null, key_scale: seed.key_scale || null, seed: { id: seed.id, title: seed.title, artist: seed.artist } };
+          const list = mixCandidates(seed, 25, recent);
+          compatible = {
+            count: list.length, bpm: Math.round(seed.bpm), key: seed.key || null, key_scale: seed.key_scale || null,
+            seed: { id: seed.id, title: seed.title, artist: seed.artist }, exact: !!seed.exact,
+          };
         }
       } catch {}
 
