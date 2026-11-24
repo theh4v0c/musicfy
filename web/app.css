@@ -1190,7 +1190,11 @@ main.main { transition: margin-right .18s ease; }
 .ip-meta span { font-size: 12px; color: var(--fg-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ip-actions { display: flex; gap: 8px; }
 .ip-audio { grid-column: 1 / -1; width: 100%; height: 34px; accent-color: var(--acc); }
-.ip-note { grid-column: 1 / -1; font-size: 12px; color: var(--fg-mute); }@media (max-width: 760px){
+.ip-note { grid-column: 1 / -1; font-size: 12px; color: var(--fg-mute); }
+/* the download answer belongs to the panel that started it, not to another screen */
+.ip-status { grid-column: 1 / -1; font-size: var(--fs-meta); color: var(--fg-soft); margin-top: 2px; min-height: 14px; }
+.ip-status[data-tone="ok"] { color: var(--ok); }
+.ip-status[data-tone="bad"] { color: #ff8b74; }@media (max-width: 760px){
   .inline-preview { grid-template-columns: 52px minmax(0,1fr); }
   .ip-actions { grid-column: 1 / -1; }
   .ip-actions .btn { flex: 1; }

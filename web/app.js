@@ -806,7 +806,7 @@ function openPlaylistMenu(p, x, y) {
       return;
     }
     if (act === 'pl-upgrade') {
-      try { const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/upgrade`, { method: 'POST' }); toast(r.queued ? `${r.queued} higher quality downloads queued` : 'No low-bitrate tracks to upgrade', 6000); if (r.queued) openDownloads(); } catch { toast('Could not queue upgrades', 4000); }
+      try { const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/upgrade`, { method: 'POST' }); toast(r.queued ? `${r.queued} higher quality downloads queued` : 'No low-bitrate tracks to upgrade', 6000); if (r.queued) toast(`${r.queued} queued — see Downloads for progress`, 6000); } catch { toast('Could not queue upgrades', 4000); }
       return;
     }
     if (act === 'pl-m3u') { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.m3u`; return; }
@@ -1210,6 +1210,7 @@ function toggleSuggestionPreview(s, anchor, opts = {}) {
   panel.innerHTML = `<div class="ip-art"></div>
     <div class="ip-meta"><b>${esc(s.title || '')}</b><span>${esc(s.artist || '')}${s.album ? ` · ${esc(s.album)}` : ''}${mins ? ` · ${mins}` : ''}</span></div>
     <div class="ip-actions"><button class="btn btn-primary" data-dl${owned ? ' disabled' : ''}>${owned ? 'In your library' : 'Download'}</button><button class="btn btn-ghost" data-close>Close</button></div>
+    <div class="ip-status" data-status hidden></div>
     ${s.preview ? `<audio class="ip-audio" controls preload="none" src="${esc(s.preview)}"></audio>` : (s.owned && s.id ? `<audio class="ip-audio" controls preload="none" src="/api/stream/${s.id}"></audio>` : '<div class="ip-note">Finding a preview…</div>')}`;
   const art = panel.querySelector('.ip-art');
   if (s.cover) art.style.backgroundImage = `url("${s.cover}")`;
@@ -1239,19 +1240,52 @@ function toggleSuggestionPreview(s, anchor, opts = {}) {
       .catch(() => { if (inlinePreview === panel) noteEl.textContent = 'No preview available.'; });
   }
   const dl = panel.querySelector('[data-dl]');
+  const st = panel.querySelector('[data-status]');
+  const say = (text, tone) => {
+    if (!st) return;
+    st.hidden = !text;
+    st.textContent = text || '';
+    st.dataset.tone = tone || '';
+  };
   dl.onclick = async () => {
     if (owned) return;
     dl.disabled = true;
+    dl.textContent = 'Downloading…';
+    say(`Finding “${s.title}”…`);
     try {
       const r = s.id
         ? await api(`/api/tracks/${s.id}/download`, { method: 'POST' })
         : await api('/api/ladder/download', { method: 'POST', headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ rung: 'search', title: s.title, artist: s.artist, duration: s.duration }) });
-      closeInlinePreview();
-      toast(`Fetching ${s.title}`, 4000);
-      openDownloads();
-      if (r.job) waitForJob(r.job, s.title);
-    } catch { dl.disabled = false; toast('Could not start', 3000); }
+      // the panel stays open: this is the confirmation, and it names the track
+      say(`Downloading “${s.title}”${s.artist ? ' — ' + s.artist : ''} · 0%`);
+      const res = await watchDownload({
+        trackId: s.id || null, job: r.job,
+        onTick: (pct, state2) => {
+          if (state2 === 'done') return;
+          say(`Downloading “${s.title}”${s.artist ? ' — ' + s.artist : ''} · ${pct}%`);
+        },
+      });
+      if (res.ok) {
+        dl.textContent = 'Downloaded';
+        say(`“${s.title}” is in your library`, 'ok');
+        bustCache();
+        if (s.id) markRowOwned(s.id);
+        if (state.view === 'search' || state.view === 'songs') { /* rows patched in place */ }
+      } else if (res.why === 'still running') {
+        dl.disabled = false;
+        dl.textContent = 'Still downloading';
+        say('Still running in the background — it will land in your library', '');
+      } else {
+        dl.disabled = false;
+        dl.textContent = 'Retry download';
+        say(`Could not get “${s.title}”${res.why ? ' — ' + String(res.why).replace(/^error\s*/i, '').slice(0, 70) : ''}`, 'bad');
+      }
+    } catch (e) {
+      dl.disabled = false;
+      dl.textContent = 'Retry download';
+      say(`Could not start: ${(e.message || 'unknown').slice(0, 70)}`, 'bad');
+    }
   };
 }
 
@@ -1573,8 +1607,7 @@ async function openPlaylist(pid, push = true) {
       dl.disabled = true;
       try {
         const r = await api(`/api/playlists/${encodeURIComponent(pid)}/download`, { method: 'POST' });
-        toast(`${r.queued} downloads queued`, 5000);
-        openDownloads();
+        toast(`${r.queued} downloads queued — progress stays in the Downloads tab`, 6000);
       } catch { toast('could not queue downloads', 5000); }
       dl.disabled = false;
     };
@@ -2364,8 +2397,12 @@ async function renderImport() {
         const r = await api('/api/mirror/spotify', { method: 'POST', headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ url: link[0], target: link[0], name }) });
         afterWrite(); await loadPlaylists();
-        toast(r && r.created ? `Imported ${r.created} tracks` : 'Imported from Spotify', 7000);
-        nav('songs');
+        const made = r && (r.playlist || r.created);
+        toast(`Imported ${(r && r.tracks) || (r && r.created) || 0} tracks`, 7000);
+        // land on the thing that was just imported, not at the top of the library
+        if (made && typeof made === 'object' && made.id) openPlaylist(made.id, false);
+        else if (typeof made === 'string') openPlaylist(made, false);
+        else nav('songs');
         return;
       }
       if (link) return toast('Only Spotify links import directly. Paste the track list for other services.', 8000);
@@ -2683,7 +2720,7 @@ function renderActionCard(a, out, stateEl) {
       if (stateEl) stateEl.textContent = 'Done';
       if (r.spoken) toast(r.spoken, 5000);
       if (r.data && r.data.playlist) { afterWrite(); await loadPlaylists(); openPlaylist(r.data.playlist.id, false); }
-      if (r.data && r.data.queued) openDownloads();
+      if (r.data && r.data.queued) toast(`${r.data.queued} downloads queued in the background`, 6000);
     } catch { btn.disabled = false; toast('That draft went stale, ask again', 5000); }
   };
   if (a.action.kind === 'playlist' && missing > 0) {
@@ -3273,7 +3310,7 @@ async function renderSearch() {
                 body: JSON.stringify({ q: `download the album ${al.name} by ${al.artist}` }) })
                 .then((r) => {
                   if (r.action) renderActionCard(r, box, null);
-                  else { toast(r.spoken || 'Queueing album', 9000); if (r.data && r.data.queued) openDownloads(); }
+                  else { toast(r.spoken || 'Queueing album', 9000); if (r.data && r.data.queued) toast(`${r.data.queued} queued — see Downloads for progress`, 6000); }
                 })
                 .catch(() => toast('Could not queue that album', 4000));
             };
@@ -3707,7 +3744,6 @@ function trow(t, i, list) {
         const d = await r.json();
         if (!d.job) throw new Error(d.error || 'failed');
         toast(`Downloading: ${t.title}`, 5000);
-        openDownloads();
         trackProgress(t.id, moreBtn);
         await waitForJob(d.job, t.title, t.id);
       } catch (err) {
@@ -3855,6 +3891,33 @@ function markRowOwned(trackId) {
   if (badge) { badge.className = 'trbadge rung-local'; badge.innerHTML = '<b>Local</b>'; }
 }
 
+/* Watch a download and report it in place. Downloads never change the screen: the
+   control that started one keeps the answer, and the Downloads tab is only ever opened
+   by the person pressing its button. */
+async function watchDownload({ trackId, job, onTick, minutes = 15 }) {
+  const started = Date.now();
+  while (Date.now() - started < minutes * 60 * 1000) {
+    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      const d = await api('/api/downloads', { nocache: true });
+      const item = (d.items || []).find((i) => (trackId && Number(i.track_id) === Number(trackId)) || (job && i.job_id === job));
+      if (item) {
+        const pct = item.state === 'done' ? 100 : Math.max(0, Math.min(99, Number(item.progress) || 0));
+        if (onTick) onTick(pct, item.state);
+        if (item.state === 'done') return { ok: true };
+        if (['error', 'failed'].includes(item.state)) return { ok: false, why: item.detail };
+        continue;
+      }
+      if (job) {
+        const j = await api(`/api/jobs/${encodeURIComponent(job)}`);
+        if (j.state === 'done') { if (onTick) onTick(100, 'done'); return { ok: true }; }
+        if (j.state === 'error') return { ok: false, why: j.detail };
+      }
+    } catch {}
+  }
+  return { ok: false, why: 'still running' };
+}
+
 async function waitForJob(jobId, title, trackId = null, tries = 90) {
   for (let i = 0; i < tries; i++) {
     await new Promise((r) => setTimeout(r, 2500));
@@ -3994,7 +4057,7 @@ async function renderAlbum(name, push = true) {
     try {
       const r = await api('/api/albums/download', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
       toast(r.queued ? `Downloading ${r.queued} of ${r.total} tracks` : 'Everything on this album is already here', 6000);
-      if (r.queued) { openDownloads(); refreshView(); }
+      if (r.queued) { toast(`${r.queued} queued — see Downloads for progress`, 6000); refreshView(); }
     } catch { toast('Could not queue the album', 4000); }
     btn.textContent = label;
     btn.disabled = false;
@@ -4006,7 +4069,7 @@ async function renderAlbum(name, push = true) {
     try { const r = await api(`/api/albums/${encodeURIComponent(name)}/covers`, { method: 'POST' }); toast(`Updating covers for ${r.count} tracks in the background`, 7000); setTimeout(() => { state.artV = Date.now(); refreshView(); }, 6000); } catch { toast('Could not start cover repair', 4000); }
   };
   $('g-upgrade').onclick = async () => {
-    try { const r = await api(`/api/albums/${encodeURIComponent(name)}/upgrade`, { method: 'POST' }); toast(r.queued ? `${r.queued} higher quality downloads queued` : 'No low-bitrate tracks to upgrade', 6000); if (r.queued) openDownloads(); } catch { toast('Could not queue upgrades', 4000); }
+    try { const r = await api(`/api/albums/${encodeURIComponent(name)}/upgrade`, { method: 'POST' }); toast(r.queued ? `${r.queued} higher quality downloads queued` : 'No low-bitrate tracks to upgrade', 6000); if (r.queued) toast(`${r.queued} queued — see Downloads for progress`, 6000); } catch { toast('Could not queue upgrades', 4000); }
   };
   $('g-pick').onclick = async () => {
     state.albumPick = !state.albumPick;
@@ -4029,8 +4092,7 @@ async function renderAlbum(name, push = true) {
       if (!chosen.length) { toast('Nothing selected', 3000); return; }
       let n = 0;
       for (const t of chosen) { try { await api(`/api/tracks/${t.id}/download`, { method: 'POST' }); n += 1; } catch {} }
-      toast(`Downloading ${n} tracks`, 5000);
-      if (n) openDownloads();
+      toast(`Downloading ${n} tracks — progress stays in the Downloads tab`, 6000);
     }
   };
 }
