@@ -116,6 +116,28 @@ Four parallel downloads, three parallel resolvers, progress parsed from yt-dlp p
 
 A track played twice downloads itself (`settings.auto_download_plays`, 0 disables).
 
+## Design truth
+
+There is one place that says what a control is, and one command that proves the pages
+agree with it.
+
+`web/app.css`, top of `:root`:
+
+| role | what it is | height | type | radius |
+|---|---|---|---|---|
+| action | a button or a chip that does something | 36px | 13px | pill |
+| tab | a filter that changes the list | 30px | 12px | pill |
+| icon | a square icon control | 30px | 18px | 8px |
+
+Type: section 19px, card title 14px, row title 14.5px, meta 11px, kicker 9.5px.
+Display type (the home mast, a playlist header) is outside the contract on purpose: it
+is a different container, not a different size of the same thing.
+
+`node bin/design-audit.mjs` (needs `NODE_PATH` pointing at a `node_modules` with
+playwright) loads every view at 1440 and 390, measures every control and every type
+role, and **exits non-zero when two views disagree**. That is the source of truth: a
+measurement, not a comment. Run it before touching CSS, and after.
+
 ## Playback
 
 `/api/stream/:id` serves owned files with ranges and a private one day cache, and 302 redirects stream rows to the resolved source, cached four hours (`resolveStreamUrl`). The client prefetches one track ahead, and only after the current one has played a while with buffer of its own: two prefetches over one slow uplink starve the track that is playing, which is what a car on mobile data actually hears.
