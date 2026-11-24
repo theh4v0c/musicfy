@@ -2659,7 +2659,10 @@ const server = http.createServer(async (req, res) => {
             artists: new Set(run.map((r) => r.artist).filter(Boolean)).size,
             avgBpm: bpms.length ? Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length) : null,
             series: bpms.slice(-14),
-            recent: run.slice(0, 4).map((r) => ({ id: r.id, title: r.title, has_art: !!r.has_art })),
+            recent: run.slice(0, 4).map((r) => {
+              const f = db.prepare("SELECT 1 FROM files WHERE track_id=? AND tier='owned' LIMIT 1").get(r.id);
+              return { id: r.id, title: r.title, artist: r.artist, has_art: !!r.has_art, owned: f ? 1 : 0 };
+            }),
             startedAt: run[run.length - 1].played_at,
           };
         }

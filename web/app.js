@@ -985,9 +985,16 @@ async function renderHome() {
       const recent = (ses.recent || []).filter((r) => r && r.id);
       const series = (ses.series || []).filter((v) => Number.isFinite(v));
       if (arc && recent.length) {
-        arc.innerHTML = `<div class="session-covers">${recent.map((r) => r.has_art
-          ? `<img src="/api/cover/${r.id}?s=80&v=${state.artV || 0}" alt="" loading="lazy" title="${esc(r.title || '')}">`
-          : `<span class="ph"></span>`).join('')}</div>`;
+        // the covers are the history of the night: tap one to go back to it
+        arc.innerHTML = `<div class="session-covers">${recent.map((r, i) => `<button class="session-cover" data-i="${i}" title="Play ${esc(r.title || '')}${r.artist ? ` — ${esc(r.artist)}` : ''}" aria-label="Play ${esc(r.title || '')}">${r.has_art
+          ? `<img src="/api/cover/${r.id}?s=80&v=${state.artV || 0}" alt="" loading="lazy">`
+          : '<span class="ph"></span>'}</button>`).join('')}</div>`;
+        arc.querySelectorAll('.session-cover').forEach((btn) => {
+          btn.onclick = () => {
+            const list = recent.map((r) => ({ id: r.id, title: r.title, artist: r.artist, owned: r.owned, has_art: r.has_art, rung: r.owned ? 'local' : null }));
+            playList(list, Number(btn.dataset.i) || 0, false, 'Tonight');
+          };
+        });
       } else if (arc) {
         if (series.length >= 6) {
           const min = Math.min(...series), max = Math.max(...series), span = Math.max(1, max - min);
