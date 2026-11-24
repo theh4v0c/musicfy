@@ -784,7 +784,7 @@ Re-analyse button (`force=1`) redoes every owned track.
 
 ### Playlist role: DJ set or listening
 
-`playlists.kind` is `dj` (default) or `listen`. Prep is a DJ page: it lists only `dj`
+`playlists.kind` is `listen` (the default for every new playlist) or `dj`. Prep is a DJ page: it lists only `dj`
 playlists, and a listening playlist is never analysed, never shows a prep control or an
 export button. The switch lives in the playlist header; the Playlists index marks the
 listening ones with a `· listening` note. `PATCH /api/playlists/:id` accepts `{kind}`.

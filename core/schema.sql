@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS playlists (
   name        TEXT NOT NULL,
   source      TEXT NOT NULL,             -- wnl-dl | spotify | manual
   spotify_id  TEXT,
-  kind        TEXT NOT NULL DEFAULT 'dj',  -- dj = prepped for export; listen = playback only
+  kind        TEXT NOT NULL DEFAULT 'listen', -- listen = playback only; dj = prepped for export
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL
 );

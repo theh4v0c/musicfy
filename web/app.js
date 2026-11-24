@@ -732,10 +732,10 @@ function renderSidebar() {
   add.textContent = '+ New playlist';
   add.onclick = async () => {
     const name = prompt('New playlist name:'); if (!name) return;
-    await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
+    await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, kind: 'listen' }) });
     afterWrite();
     await loadPlaylists();
-    toast('Playlist created');
+    toast('Listening playlist created — switch it to DJ set when you want it prepped');
   };
   el.appendChild(add);
   const imp = document.createElement('button');
@@ -1917,8 +1917,8 @@ async function renderLibrary() {
   $('lib-upload').onclick = () => pickFile('audio/*', (f) => uploadFiles([f]));
   $('lib-newpl').onclick = async () => {
     const name = prompt('New playlist name:'); if (!name) return;
-    await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
-    afterWrite(); await loadPlaylists(); renderLibrary(); toast('Playlist created');
+    await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, kind: 'listen' }) });
+    afterWrite(); await loadPlaylists(); renderLibrary(); toast('Listening playlist created — switch it to DJ set when you want it prepped');
   };
 }
 

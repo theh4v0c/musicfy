@@ -318,8 +318,8 @@ async function execute(db, plan, deps) {
 
   const pid = `ai-${Date.now().toString(36)}`;
   const name = String(plan.args.name || q || 'Made by request').slice(0, 60);
-  db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)')
-    .run(pid, name, 'ai', Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000));
+  db.prepare('INSERT INTO playlists (id,name,source,kind,created_at,updated_at) VALUES (?,?,?,?,?,?)')
+    .run(pid, name, 'ai', 'listen', Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000));
 
   let added = 0, queued = 0;
   const seen = new Set();
@@ -898,8 +898,8 @@ function commit(db, proposal, deps) {
   let queued = 0;
   if (proposal.kind === 'playlist') {
     const pid = `ai-${Date.now().toString(36)}`;
-    db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)')
-      .run(pid, proposal.name, 'ai', at, at);
+    db.prepare('INSERT INTO playlists (id,name,source,kind,created_at,updated_at) VALUES (?,?,?,?,?,?)')
+      .run(pid, proposal.name, 'ai', 'listen', at, at);
     const ids = [...proposal.trackIds];
     for (const t of (proposal.online || [])) {
       let row = ownedIdFor(db, t.key);

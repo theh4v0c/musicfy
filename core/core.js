@@ -265,9 +265,9 @@ async function ingestWnlFolder(folder, name) {
   if (!WNL) throw new Error('WNL_URL is not configured');
   const list = JSON.parse(await httpGet(`${WNL}/api/library/tracks/${encodeURIComponent(folder)}`));
   const playlistId = `wnl-${folder.replace(/^playlist-/, '')}`;
-  db.prepare(`INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)
+  db.prepare(`INSERT INTO playlists (id,name,source,kind,created_at,updated_at) VALUES (?,?,?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at`)
-    .run(playlistId, name || folder, 'wnl-dl', now(), now());
+    .run(playlistId, name || folder, 'wnl-dl', 'listen', now(), now());
 
   let ok = 0, fail = 0;
   for (const item of list) {
@@ -2153,9 +2153,9 @@ const server = http.createServer(async (req, res) => {
           if (info.kind === 'track') return json(res, 400, { error: 'That is a single track. Use its download button instead.' });
           // albums are imported as a playlist with the album name
           const pid = `sp-${info.id}`;
-          db.prepare(`INSERT INTO playlists (id,name,source,spotify_id,created_at,updated_at) VALUES (?,?,?,?,?,?)
+          db.prepare(`INSERT INTO playlists (id,name,source,spotify_id,kind,created_at,updated_at) VALUES (?,?,?,?,?,?,?)
             ON CONFLICT(id) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at`)
-            .run(pid, info.title || 'Spotify playlist', 'spotify', info.id, now(), now());
+            .run(pid, info.title || 'Spotify playlist', 'spotify', info.id, 'listen', now(), now());
           let pos = 0, added = 0;
           for (const tr of (info.tracks || [])) {
             if (!tr.title) continue;
@@ -2421,8 +2421,8 @@ const server = http.createServer(async (req, res) => {
             ORDER BY tt.plays DESC LIMIT ?`).all(minPlays, limit);
           if (!rows.length) return json(res, 200, { playlist: null, added: 0, note: 'nothing new to import' });
           const pid = `hist-${Date.now().toString(36)}`;
-          db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)')
-            .run(pid, name, 'history', now(), now());
+          db.prepare('INSERT INTO playlists (id,name,source,kind,created_at,updated_at) VALUES (?,?,?,?,?,?)')
+            .run(pid, name, 'history', 'listen', now(), now());
           let pos = 0;
           for (const r of rows) {
             const tid = upsertTrack({ title: r.title, artist: r.artist, album: r.album || '', duration: null, format: 'mirror', spotify_id: (r.uri || '').split(':').pop() });
@@ -3277,7 +3277,7 @@ const server = http.createServer(async (req, res) => {
         }
         if (!picks.length) return json(res, 200, { created: null, reason: 'nothing new to add this week' });
         const pid = `rec-${Date.now().toString(36)}`;
-        db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)').run(pid, name, 'recommend', now(), now());
+        db.prepare('INSERT INTO playlists (id,name,source,kind,created_at,updated_at) VALUES (?,?,?,?,?,?)').run(pid, name, 'recommend', 'listen', now(), now());
         let pos = 0;
         for (const p of picks) db.prepare('INSERT OR IGNORE INTO playlist_tracks (playlist_id,track_id,position,added_at) VALUES (?,?,?,?)').run(pid, p.id, pos++, now());
         return json(res, 200, { created: { id: pid, name, tracks: pos }, profile: out.profile });
@@ -3296,8 +3296,8 @@ const server = http.createServer(async (req, res) => {
         if (!out.picks.length) return json(res, 200, { created: null, reason: 'not enough listening history yet' });
         const name = String(b.name || `${recommendName(out.profile, out.picks)} · ${new Date().toISOString().slice(0, 10)}`).slice(0, 80);
         const pid = `rec-${Date.now().toString(36)}`;
-        db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)')
-          .run(pid, name, 'recommend', now(), now());
+        db.prepare('INSERT INTO playlists (id,name,source,kind,created_at,updated_at) VALUES (?,?,?,?,?,?)')
+          .run(pid, name, 'recommend', 'listen', now(), now());
         let pos = 0;
         for (const p of out.picks) {
           db.prepare('INSERT OR IGNORE INTO playlist_tracks (playlist_id,track_id,position,added_at) VALUES (?,?,?,?)').run(pid, p.id, pos++, now());
@@ -3455,8 +3455,8 @@ const server = http.createServer(async (req, res) => {
         if (b.create && rows.length) {
           const name = String(b.name || b.title || question).slice(0, 80);
           const pid = `ask-${Date.now().toString(36)}`;
-          db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)')
-            .run(pid, name, 'ask', now(), now());
+          db.prepare('INSERT INTO playlists (id,name,source,kind,created_at,updated_at) VALUES (?,?,?,?,?,?)')
+            .run(pid, name, 'ask', 'listen', now(), now());
           let pos = 0;
           for (const t of rows) {
             db.prepare('INSERT OR IGNORE INTO playlist_tracks (playlist_id,track_id,position,added_at) VALUES (?,?,?,?)')
@@ -3858,7 +3858,7 @@ const server = http.createServer(async (req, res) => {
         const existing = b.playlist_id ? db.prepare('SELECT id FROM playlists WHERE id=?').get(String(b.playlist_id)) : null;
         const pid = existing ? existing.id : `imp-${Date.now().toString(36)}`;
         if (!existing) {
-          db.prepare('INSERT INTO playlists (id,name,source,created_at,updated_at) VALUES (?,?,?,?,?)').run(pid, name, 'import', now(), now());
+          db.prepare('INSERT INTO playlists (id,name,source,kind,created_at,updated_at) VALUES (?,?,?,?,?,?)').run(pid, name, 'import', 'listen', now(), now());
         }
         let added = 0, queued = 0;
         let pos = (db.prepare('SELECT COALESCE(MAX(position),-1) m FROM playlist_tracks WHERE playlist_id=?').get(pid).m || -1) + 1;
@@ -4317,7 +4317,8 @@ const server = http.createServer(async (req, res) => {
         let id = `own-${slug}-${Date.now().toString(36)}`;
         let n = 1;
         while (db.prepare('SELECT 1 FROM playlists WHERE id=?').get(id)) id = `own-${slug}-${Date.now().toString(36)}-${n++}`;
-        const kind = b.kind === 'listen' ? 'listen' : 'dj';
+        // a new playlist is for listening; a DJ set is a deliberate choice
+        const kind = b.kind === 'dj' ? 'dj' : 'listen';
         db.prepare('INSERT INTO playlists (id,name,source,kind,created_at,updated_at) VALUES (?,?,?,?,?,?)').run(id, name, 'manual', kind, now(), now());
         json(res, 200, { id, name });
       });
@@ -4653,7 +4654,8 @@ const server = http.createServer(async (req, res) => {
         }
         // dj = prepped for export; listen = playback only, and Prep leaves it alone
         if (b.kind !== undefined) {
-          const kind = b.kind === 'listen' ? 'listen' : 'dj';
+          // a new playlist is for listening; a DJ set is a deliberate choice
+        const kind = b.kind === 'dj' ? 'dj' : 'listen';
           db.prepare('UPDATE playlists SET kind=?, updated_at=? WHERE id=?').run(kind, now(), id);
         }
         json(res, 200, { ok: true });

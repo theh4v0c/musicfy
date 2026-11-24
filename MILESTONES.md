@@ -6,6 +6,16 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · A new playlist is for listening (`v479`)
+
+- `POST /api/playlists` defaults `kind` to `listen`; `dj` is only set when asked for.
+  All other creators (A&R commit, weekly recommendations, Spotify import, history mirror,
+  WNL import, ask-playlist) write `listen` explicitly, so the SQLite column default on an
+  existing database cannot quietly make them DJ sets.
+- Both "New playlist" entry points send `kind: 'listen'` and say so: "Listening playlist
+  created — switch it to DJ set when you want it prepped."
+- Schema default changed for fresh installs. Existing playlists keep the role they have;
+  the test suite now asserts the default.
 ### 2026-11-24 · The cover is square on every phone; the heart does not open it (`v478`)
 
 - The now-playing cover is a `div` with a background image, sized by max-width/max-height.

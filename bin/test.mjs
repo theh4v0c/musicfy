@@ -19,6 +19,8 @@ const del = (p) => j(p, { method: 'DELETE' });
 console.log('playlist lifecycle');
 const created = await post('/api/playlists', { name: 'selftest ' + Date.now() });
 ok('create playlist', created.status === 200 && created.body && created.body.id, JSON.stringify(created.body).slice(0, 80));
+ok('a new playlist is listening by default', ((await j('/api/playlists')).body || []).find((x) => x.id === created.body?.id)?.kind === 'listen', 'kind=' + ((await j('/api/playlists')).body || []).find((x) => x.id === created.body?.id)?.kind);
+
 const pid = created.body && created.body.id;
 const tracks = await j('/api/tracks');
 const t = (tracks.body || []).find((x) => !x.ladder);
