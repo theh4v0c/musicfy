@@ -558,10 +558,16 @@ setInterval(() => { probeRungs().catch(() => {}); }, 15 * 60 * 1000);
 
 // ---------- static asset serving ----------
 const gzipCache = new Map();
-function gzipBody(file, body) {
-  const key = `${file}:${body.length}`;
-  if (!gzipCache.has(key)) gzipCache.set(key, zlib.gzipSync(body, { level: 6 }));
-  return gzipCache.get(key);
+// keyed by content hash, never by length: a rename that keeps the byte count identical
+// used to serve the previous build to every gzip client until the process restarted
+function gzipBody(key, body) {
+  let hit = gzipCache.get(key);
+  if (!hit) {
+    if (gzipCache.size > 40) gzipCache.clear();
+    hit = zlib.gzipSync(body, { level: 6 });
+    gzipCache.set(key, hit);
+  }
+  return hit;
 }
 function sendStatic(req, res, body, type) {
   // revalidate every load (ETag): a year-long "immutable" cache is how a stale app.js
@@ -574,7 +580,7 @@ function sendStatic(req, res, body, type) {
   const acceptsGzip = /gzip/.test(req.headers['accept-encoding'] || '');
   const headers = { 'content-type': type, 'cache-control': 'no-cache', etag, vary: 'Accept-Encoding' };
   if (acceptsGzip) {
-    const gz = gzipBody(type + body.length, body);
+    const gz = gzipBody(etag, body);
     headers['content-encoding'] = 'gzip';
     headers['content-length'] = gz.length;
     res.writeHead(200, headers);
@@ -619,9 +625,16 @@ function sessionSummary(hours = 12) {
 /* the seed for 'what follows': the last track you played, when it has a tempo. If it
    does not, the session's average tempo stands in and the key is left out — better than
    naming a track that is not the last one you played. */
+// 1,105 of 1,415 tracks have no genre, so 'unknown' has to mean 'allowed'. A track that
+// says it is metal next to a house record is a different thing, not a candidate.
+function sameFamily(a, b) {
+  if (!a || !b) return true;
+  return a === b;
+}
+
 function mixSeed() {
   try {
-    const last = db.prepare(`SELECT t.id, t.title, t.artist, t.bpm, t.key, t.key_scale
+    const last = db.prepare(`SELECT t.id, t.title, t.artist, t.bpm, t.key, t.key_scale, t.genre_family
       FROM listens l JOIN tracks t ON t.id=l.track_id ORDER BY l.played_at DESC LIMIT 1`).get();
     if (last && last.bpm) return { ...last, exact: true };
     const s = sessionSummary();
@@ -629,24 +642,48 @@ function mixSeed() {
     return null;
   } catch { return null; }
 }
-function mixCandidates(seed, limit = 40, excludeIds = []) {
+function mixCandidates(seed, limit = 25, excludeIds = []) {
   if (!seed || !Number(seed.bpm)) return [];
-  const lo = Number(seed.bpm) * 0.96, hi = Number(seed.bpm) * 1.04;
-  const rows = db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.bpm, t.key, t.key_scale, t.duration, t.has_art,
-      (SELECT COUNT(*) FROM files f WHERE f.track_id=t.id AND f.tier='owned') owned
-    FROM tracks t WHERE t.bpm BETWEEN ? AND ? AND t.id <> ?`).all(lo, hi, seed.id);
-  const seedC = camelotOf(seed.key, seed.key_scale);
   const skip = new Set(excludeIds.map(Number));
-  return rows
-    .filter((r) => r.owned && !skip.has(r.id))
-    .filter((r) => {
-      const c = camelotOf(r.key, r.key_scale);
-      if (!seedC || !c) return true;             // tempo only when a key is unknown
-      const dn = Math.min((c.n - seedC.n + 12) % 12, (seedC.n - c.n + 12) % 12);
-      return c.n === seedC.n || (dn === 1 && c.minor === seedC.minor);
-    })
-    .sort((a, b) => Math.abs(a.bpm - seed.bpm) - Math.abs(b.bpm - seed.bpm))
-    .slice(0, limit);
+  const seedC = camelotOf(seed.key, seed.key_scale);
+  const near = (pct) => db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.bpm, t.key, t.key_scale, t.genre_family, t.duration, t.has_art,
+      (SELECT COUNT(*) FROM files f WHERE f.track_id=t.id AND f.tier='owned') owned
+    FROM tracks t WHERE t.bpm BETWEEN ? AND ? AND t.id <> ?`)
+    .all(Number(seed.bpm) * (1 - pct), Number(seed.bpm) * (1 + pct), seed.id)
+    .filter((r) => r.owned && !skip.has(r.id) && sameFamily(seed.genre_family, r.genre_family));
+  // known-same-family first, then closest tempo: a 118 BPM track that says it is house beats
+  // an unanalysed 118 BPM one, and both beat anything the genre column calls something else
+  const famRank = (r) => (seed.genre_family && r.genre_family === seed.genre_family ? 0 : 1);
+  const byTempo = (a, b) => famRank(a) - famRank(b)
+    || Math.abs(a.bpm - seed.bpm) - Math.abs(b.bpm - seed.bpm)
+    || String(a.title).localeCompare(String(b.title));
+
+  // three tiers, filled in order: same or adjacent key at the same tempo, then anything at
+  // the same tempo, then a wider tempo window. With 357 of 1415 tracks analysed a strict
+  // harmonic filter answers with one track or none, which is not a set anybody plays.
+  const atTempo = near(0.04).sort(byTempo);
+  const harmonic = seedC
+    ? atTempo.filter((r) => {
+        const c = camelotOf(r.key, r.key_scale);
+        if (!c) return false;
+        const d = Math.min((c.n - seedC.n + 12) % 12, (seedC.n - c.n + 12) % 12);
+        return c.n === seedC.n || (d === 1 && c.minor === seedC.minor);
+      })
+    : atTempo;
+  const out = [];
+  const seen = new Set();
+  const add = (rows, tier) => {
+    for (const r of rows) {
+      if (out.length >= limit) return;
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      out.push({ ...r, tier });
+    }
+  };
+  add(harmonic, 'key');
+  add(atTempo, 'tempo');
+  add(near(0.08).sort(byTempo), 'near');
+  return out;
 }
 
 // ---------- transcoding queue ----------
@@ -2709,10 +2746,9 @@ const server = http.createServer(async (req, res) => {
         if (seed && seed.bpm) {
           const recent = db.prepare(`SELECT track_id FROM listens WHERE played_at >= ?`).all(nowTs - 60 * 60).map((r) => r.track_id);
           const list = mixCandidates(seed, 25, recent);
-          compatible = {
-            count: list.length, bpm: Math.round(seed.bpm), key: seed.key || null, key_scale: seed.key_scale || null,
-            seed: { id: seed.id, title: seed.title, artist: seed.artist }, exact: !!seed.exact,
-          };
+          // the count is not shown anywhere: what matters is that there is a set at all
+          compatible = { ok: list.length > 0, bpm: Math.round(seed.bpm), key: seed.key || null, key_scale: seed.key_scale || null,
+            seed: { id: seed.id, title: seed.title, artist: seed.artist }, exact: !!seed.exact };
         }
       } catch {}
 
@@ -3887,7 +3923,8 @@ const server = http.createServer(async (req, res) => {
     const mRadio = u.pathname.match(/^\/api\/radio\/(\d+)$/);
     if (mRadio) {
       const tid = Number(mRadio[1]);
-      const seed = db.prepare('SELECT artist, title FROM tracks WHERE id=?').get(tid);
+      const seed = db.prepare('SELECT artist, title, genre_family FROM tracks WHERE id=?').get(tid);
+      const fam = seed && seed.genre_family;
       const out = [];
       const have0 = new Set();
       // 1. history neighbours: artists you actually played next to this artist, weighted
@@ -3900,7 +3937,10 @@ const server = http.createServer(async (req, res) => {
             LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
             LEFT JOIN resolutions r ON r.track_id=t.id
             WHERE t.id != ? AND lower(t.artist)=lower(?) LIMIT 3`).all(tid, r.rel);
-          for (const row of rows) { if (!have0.has(row.id)) { out.push(row); have0.add(row.id); } }
+          for (const row of rows) {
+            if (have0.has(row.id) || !sameFamily(fam, row.genre_family)) continue;
+            out.push(row); have0.add(row.id);
+          }
         }
       }
       // 2. same artist from your catalog
@@ -3908,7 +3948,8 @@ const server = http.createServer(async (req, res) => {
         out.push(...db.prepare(`SELECT t.*, (f.id IS NOT NULL) AS owned, (t.src_id IS NOT NULL AND t.src_id != '') AS streamable, f.bitrate, r.rung, r.quality FROM tracks t
           LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
           LEFT JOIN resolutions r ON r.track_id=t.id
-          WHERE t.id != ? AND t.artist = ? LIMIT 12`).all(tid, seed.artist));
+          WHERE t.id != ? AND t.artist = ? LIMIT 12`).all(tid, seed.artist)
+          .filter((r) => sameFamily(fam, r.genre_family)));
         for (const row of out) have0.add(row.id);
         if (out.length > 24) out.length = 24;
       }
@@ -3921,7 +3962,7 @@ const server = http.createServer(async (req, res) => {
         const row = db.prepare(`SELECT t.*, (f.id IS NOT NULL) AS owned, (t.src_id IS NOT NULL AND t.src_id != '') AS streamable, f.bitrate, r.rung, r.quality FROM tracks t
           LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
           LEFT JOIN resolutions r ON r.track_id=t.id WHERE t.id=?`).get(s.id);
-        if (row) { out.push(row); have.add(s.id); }
+        if (row && sameFamily(fam, row.genre_family)) { out.push(row); have.add(s.id); }
       }
       if (!out.length) {
         out.push(...db.prepare(`SELECT t.*, (f.id IS NOT NULL) AS owned, (t.src_id IS NOT NULL AND t.src_id != '') AS streamable, f.bitrate, r.rung, r.quality FROM tracks t
@@ -3929,6 +3970,9 @@ const server = http.createServer(async (req, res) => {
           LEFT JOIN resolutions r ON r.track_id=t.id
           WHERE t.id != ? ORDER BY RANDOM() LIMIT 15`).all(tid));
       }
+      // known family first. 'Tim Green' the house producer and 'Tim Green' the Death guitarist
+      // are one string, so the genre column is the only thing that separates their neighbours
+      if (fam) out.sort((a, b) => (a.genre_family === fam ? 0 : 1) - (b.genre_family === fam ? 0 : 1));
       return json(res, 200, out);
     }
 
