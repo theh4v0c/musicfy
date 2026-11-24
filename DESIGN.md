@@ -47,12 +47,19 @@ Two consequences worth stating plainly:
 | `--fg-soft` | `rgba(245,244,240,.62)` | secondary text, ghost button label |
 | `--fg-mute` | `rgba(245,244,240,.52)` | meta, kickers, inactive icons |
 | `--acc` | `#ff5c39` | the one accent: the primary action, the playing row |
+| `--on-acc` | `#140a07` | text and icons **on** an accent fill (6.36:1) |
 | `--acc-soft` | `rgba(255,92,57,.14)` | accent wash behind a playing row |
 | `--ok` | `#3fc57d` | success, ready |
 | `--liked` | `#ff4d6d` | liked hearts only |
 
 Rules: one accent colour. Accent fills the primary action only — never two filled
 actions in one row. Text is `--fg`, `--fg-soft` or `--fg-mute`; there is no fourth grey.
+Text on an accent fill is `--on-acc`, never white: white on `#ff5c39` is 3.07:1 and fails
+AA at interface sizes.
+
+The twelve harmonic key hues are a documented exception: they name musical keys, not the
+brand, and live only on `.keychip`. They are not a second accent and must not be reused
+for actions.
 
 ### 3.1 The brand lockup
 
@@ -90,19 +97,20 @@ The interface is one native sans (`system-ui`). No web fonts, no monospace stack
 
 ## 5. Controls
 
-Three roles. Every interactive control in the app is one of them.
+Three visual roles, plus one touch minimum. Every interactive control is one of them.
 
 | role | what it is | height | type | padding | radius | classes |
 |---|---|---|---|---|---|---|
 | **action** | a button or a chip that does something | 36px | 13px / 600 | 16px sides | pill | `.btn`, `.btn-primary`, `.btn-ghost`, `.action-chip` |
 | **tab** | a filter that changes the list in place | 30px | 12px | 12px sides | pill | `.mode-tab`, `.view-switch` |
 | **icon** | a square icon control | 30×30 | 18px glyph | — | 8px | `.icon-btn` |
+| **touch** | minimum tap area on `(pointer: coarse)` | 44×44 | — | — | — | hit area, not a visible shape |
 
 Anatomy rules:
 
 - Height is set with `min-height` from the token and the sides with `padding: 0 <pad>`.
   Never vertical padding — it changes the height.
-- The primary action is `--acc` filled with white text and a transparent 1px border;
+- The primary action is `--acc` filled with `--on-acc` text and a transparent 1px border;
   the secondary is transparent with a `--line` border. Both carry the same border width
   so they measure identically.
 - An action is a pill. A container is not. If a control needs a subtitle, it is a
@@ -118,13 +126,21 @@ States:
 |---|---|
 | hover (pointer) | `--bg-elev2` for ghosts and icons; accent brightens for filled; border to `--fg-mute` |
 | active | `transform: translateY(1px)` (see `.pressed`) |
-| focus-visible | 1px accent outline, never removed |
+| focus-visible | 2px accent outline, never removed |
+| focus-within | a reveal or hover state also appears when a child has keyboard focus |
 | disabled | `opacity: .45`, `cursor: default`, no hover change |
 | playing | accent text + `--acc-soft` row wash |
 
-Touch: on `(pointer: coarse)`, icon controls may grow to 44×44 and small targets
-(26–30px play discs, 9px tags) get their hit area extended with a pseudo-element —
-never by making the visible control bigger than its role.
+Touch: on `(pointer: coarse)`, icon controls grow to 44×44 (top bar, player controls) and
+small targets (row play discs, like, more, card play) get a 44×44 hit area from an
+absolutely positioned pseudo-element. The visible disc keeps its designed size.
+
+### 5.3 Sliders
+
+A progress bar is a slider, not a div: `role="slider"`, `tabindex="0"`,
+`aria-valuemin/max/now`, `aria-valuetext` as `current / duration`, and keyboard support
+(←/→ ±5 s, Shift ±30 s, Home, End). Focus uses the global focus-visible ring. The same
+rules apply to the full player and the phone bar.
 
 ### 5.1 Settings sections
 
@@ -174,6 +190,8 @@ and the title under it. A rail scrolls sideways; it does not wrap.
 - Top bar: 64px desktop, 56px phone, one 30px icon control per side.
 - The view is the only scroller. Page padding 26/28/48 desktop, 18/16/130 phone — the
   130 clears the mini player and the bottom bar.
+- The home masthead does one job: greet and offer Flow. On-deck picks and the quick
+  counters belong below the first content rail, so music starts in the top third.
 - Bottom bar 60px + safe-area; the mini player floats at 64px from the bottom.
 - Breakpoints, and only these three: **920** (shell switches to phone/tablet), **760**
   (dense phone rules), **1281** (wide table columns). A new breakpoint is a design
@@ -201,6 +219,8 @@ Nothing animates on load. `prefers-reduced-motion` turns the bloom and drift off
   "in your library".
 - Empty states say what will fill them ("Play something and it lands here"), never
   "No data".
+- Titles and metadata are selectable text. Controls, rows and drag surfaces are not:
+  `user-select: none` is scoped to those, never to `body`.
 
 ## 11. Forbidden
 
@@ -226,7 +246,7 @@ These are real defects from this project, not hypotheticals:
 node bin/design-check.mjs          # tokens ↔ CSS ↔ built pages, exits non-zero on drift
 NODE_PATH=… node bin/design-audit.mjs   # the measurement table, every view, 1440 and 390
 bash bin/smoke.sh                  # API behaviour
-node bin/test.mjs                  # 34 API tests
+node bin/test.mjs                  # 50 API tests
 ```
 
 `design-check` is the gate. It checks that every `--r-*`, `--ctl-*`, `--fs-*` variable

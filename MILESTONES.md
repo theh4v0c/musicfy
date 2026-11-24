@@ -6,6 +6,48 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · UI/UX correctness pass: readable, operable, content first (`v476`)
+
+Response to the external audit. Correctness and the first screen; no redesign.
+
+**M1 — correct**
+- `--on-acc` (`#140a07`, 6.36:1) is the ink on every accent fill: primary buttons, the
+  active filter, card play discs, Flow, crate analyse, export hovers. White on `#ff5c39`
+  was 3.07:1. `.mode-tab.on` lost the white-overlay gradient that made it 2.5:1.
+- The two progress bars are real sliders: `role="slider"`, focusable, `aria-valuemin/max/
+  now/valuetext`, ←/→ ±5 s, Shift ±30 s, Home/End. Verified: ArrowRight moved 2→7 s,
+  End to 4:35 with ARIA updated.
+- Hover reveals now also open on focus: `.pcard:focus-within`, `.trow:focus-within` for
+  like/more; focus on a card play button makes it visible.
+- Coarse pointers: icon controls take `--h-touch` (44px); row discs, like/more and chips
+  get a 44px hit area from a pseudo-element without changing their visible shape.
+- `aria-current="page"` on the active sidebar and phone-bar item.
+- `user-select` is scoped: controls and drag surfaces are not selectable; titles and
+  metadata are copyable again.
+- The topbar pill reads `1,594 TRACKS · 18.9 GB` (DESIGN §10), and it is only on Library
+  and Settings, not on Home.
+
+**M2 — first screen**
+- On-deck picks and the quick counters moved below the first rail. The masthead is
+  greeting + note + Flow only.
+- Measured: desktop 329→173px, phone 325→192px. First card 487→331 and 467→334.
+  Music starts at 37% / 40% of the viewport instead of 54% / 55%.
+
+**M3 — contract**
+- `design/tokens.json`: `color.on-acc` and `control.touch`; DESIGN.md records both, the
+  slider and selection rules, the 12-key hue exception, and the corrected home layout.
+- `design-check` now computes on-accent contrast and fails below 4.5:1.
+- Removed the duplicated `.cat-card` block, the duplicated `.genrechip:hover` and
+  `.mast-resume b`, the two conflicting `.plhead-actions` declarations and the dead
+  gradient `.mode-tab` block.
+- DESIGN.md's duplicate `.mast` container row and its stale "34 API tests" are fixed.
+
+Not in this pass (recorded in Planned): the 25 literal font sizes, 30 off-palette hex
+values, style-layer refactor, display typeface, and motion cuts.
+
+Verification: design-check 37/37 + `--dom` all roles, unit 10/10, `bin/test.mjs` 50/50,
+smoke green, screenshots at 1440×900 and 390×844 with no horizontal scroll.
+
 ### 2026-11-24 · audit pass 3: the filter that did not filter, and the follow-up that swallowed a new request (`v474`)
 
 The audit was right on the three P1s, including one that was my own previous "fix":
@@ -418,6 +460,19 @@ undo, teaching that is permanent, visible and deletable)
 - `node --test bin/unit.mjs` is the start of a real test suite.
 
 ## Planned
+
+### v0.4 UI/UX correctness pass — delivered (v476)
+
+Source: external audit of 2026-11-24. Scope is correctness and the first screen, not a
+redesign.
+
+- **M1 correct**: done (v475).
+- **M2 first screen**: done; mast 173/192px, first card 331/334.
+- **M3 contract**: done for the new tokens, contrast and the duplicate blocks. Font-size/
+  colour enforcement remains a later cleanup — the 25 sizes and 30 off-palette hexes are
+  untouched.
+
+Restore point: tag `restore-pre-ux-20261124-1707`.
 
 ### v0.2 Guided Ask — delivered
 

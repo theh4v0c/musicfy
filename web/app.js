@@ -679,7 +679,11 @@ async function startRadio(t) {
 /* ============ navigation ============ */
 function setNav(v) {
   state.view = v;
-  document.querySelectorAll('[data-nav]').forEach(b => b.classList.toggle('on', b.dataset.nav === v));
+  document.querySelectorAll('[data-nav]').forEach(b => {
+    const on = b.dataset.nav === v;
+    b.classList.toggle('on', on);
+    if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
   // the library size is only useful where you manage the library; everywhere else it is noise
   const pill = $('pill'); if (pill) pill.hidden = !(v === 'library' || v === 'settings');
 }
@@ -1063,10 +1067,13 @@ async function renderHome() {
           <button class="mast-resume" id="mast-resume" hidden></button>
         </div>
       </div>
-      <div class="mast-picks" id="mast-picks" hidden></div>
-      <div class="mast-tiles" id="quick"></div>
     </section>
     <div id="rotation-slot"></div>
+    <!-- the masthead greets and offers Flow; these belong to the page, after the first rail -->
+    <div class="home-context">
+      <div class="mast-picks" id="mast-picks" hidden></div>
+      <div class="mast-tiles" id="quick"></div>
+    </div>
     <div id="home-lazy">
       <div id="discover-home"></div>
       <div class="sec-title">Recently played <small id="recent-hint"></small></div>
@@ -2469,7 +2476,7 @@ async function renderSongs(push = true) {
   const statsEl = $('songs-stats');
   if (statsEl) {
     api('/api/stats').then((s) => {
-      statsEl.textContent = `${s.tracks} tracks · ${(s.owned_bytes / 1073741824).toFixed(1)} GB on disk`;
+      statsEl.textContent = `${Number(s.tracks).toLocaleString()} tracks · ${(s.owned_bytes / 1073741824).toFixed(1)} GB on disk`;
     }).catch(() => { statsEl.textContent = `${all.length} tracks`; });
   }
 
@@ -2734,7 +2741,7 @@ async function renderSettings() {
   Promise.all([api('/api/stats', { nocache: true }), api('/api/analyze/status', { nocache: true })]).then(([st, an]) => {
     const f = document.getElementById('set-facts');
     if (!f) return;
-    f.innerHTML = `<div><b>${st.tracks}</b> tracks</div><div><b>${(st.owned_bytes / 1e9).toFixed(2)} GB</b> on disk</div><div><b>${st.listens}</b> plays recorded</div>`
+    f.innerHTML = `<div><b>${Number(st.tracks).toLocaleString()}</b> tracks</div><div><b>${(st.owned_bytes / 1e9).toFixed(2)} GB</b> on disk</div><div><b>${Number(st.listens).toLocaleString()}</b> plays recorded</div>`
       + `<div><b>${an.current}</b> current · <b>${an.outdated}</b> without sections · analyser v${an.version}</div>`;
   }).catch(() => {});
   // the exclusion field, shown back as the terms the app will actually use
@@ -4465,7 +4472,7 @@ function paintPill() {
   const el = $('pill');
   if (!el) return;
   api('/api/stats', { nocache: true }).then((s) => {
-    el.textContent = `${s.tracks} TRACKS · ${(s.owned_bytes / 1073741824).toFixed(1)}G`;
+    el.textContent = `${Number(s.tracks).toLocaleString()} TRACKS · ${(s.owned_bytes / 1073741824).toFixed(1)} GB`;
   }).catch(() => { el.textContent = ''; });
 }
 
@@ -5277,6 +5284,7 @@ audio.addEventListener('timeupdate', () => {
   const pct = `${(audio.currentTime / audio.duration) * 100}%`;
   $('bar-fill').style.width = pct; $('np-bar-fill').style.width = pct;
   $('t-cur').textContent = fmt(audio.currentTime); $('np-cur').textContent = fmt(audio.currentTime);
+  paintSeekAria();
   // keep two tracks of runway on the queue, while there is still audio playing to hide
   // the request behind
   if (state.qi >= state.queue.length - 2 && audio.duration - audio.currentTime > 20) maybeExtendQueue();
@@ -5335,8 +5343,34 @@ const seek = (barEl) => (e) => {
   const r = barEl.getBoundingClientRect();
   audio.currentTime = ((e.clientX - r.left) / r.width) * (audio.duration || 0);
 };
-$('bar').onclick = seek($('bar'));
-$('np-bar').onclick = seek($('np-bar'));
+const bindSeekSlider = (barEl) => {
+  if (!barEl) return;
+  barEl.onclick = seek(barEl);
+  barEl.onkeydown = (e) => {
+    if (!audio.duration) return;
+    const step = e.shiftKey ? 30 : 5;
+    if (e.key === 'ArrowRight') audio.currentTime = Math.min(audio.duration, audio.currentTime + step);
+    else if (e.key === 'ArrowLeft') audio.currentTime = Math.max(0, audio.currentTime - step);
+    else if (e.key === 'Home') audio.currentTime = 0;
+    else if (e.key === 'End') audio.currentTime = Math.max(0, audio.duration - 1);
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+};
+bindSeekSlider($('bar'));
+bindSeekSlider($('np-bar'));
+function paintSeekAria() {
+  const dur = Number(audio.duration) || 0;
+  const now = Math.min(Number(audio.currentTime) || 0, dur || Infinity);
+  for (const id of ['bar', 'np-bar']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    el.setAttribute('aria-valuemax', String(Math.round(dur)));
+    el.setAttribute('aria-valuenow', String(Math.round(now)));
+    el.setAttribute('aria-valuetext', `${fmt(now)} / ${fmt(dur)}`);
+  }
+}
 /* iOS Safari ignores audio.volume (always 1). Keep the slider for desktop and Android,
    and on Apple platforms surface the truth: use the hardware buttons. */
 const IOS_VOLUME_LOCKED = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);

@@ -53,6 +53,7 @@ expect.push(
   ['--fs-tab', tokens.control.tab.font],
   ['--pad-tab', tokens.control.tab.padding],
   ['--h-icon', tokens.control.icon.size],
+  ['--h-touch', tokens.control.touch.size],
   ['--fs-icon', tokens.control.icon.font],
   ['--r-icon', tokens.radius[tokens.control.icon.radius]],
   ['--fs-section', tokens.type.section],
@@ -64,6 +65,26 @@ expect.push(
   ['--brand-track', tokens.brand.tracking],
   ['--brand-gradient', tokens.brand.gradient],
 );
+
+/* ---- 2b. filled controls must be readable ---- */
+const rgbOf = (hex) => {
+  const h = String(hex).replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  return [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
+};
+const luminance = (rgb) => {
+  const f = (c) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  const [r, g, b] = rgb.map(f);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrast = (a, b) => {
+  const la = luminance(rgbOf(a)); const lb = luminance(rgbOf(b));
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+};
+if (tokens.color.acc && tokens.color['on-acc']) {
+  const ratio = contrast(tokens.color['on-acc'], tokens.color.acc);
+  if (ratio < 4.5) problems.push(`--on-acc on --acc is ${ratio.toFixed(2)}:1 — needs 4.5:1`);
+}
 
 const missing = [];
 for (const [name, want] of expect) {
