@@ -2575,17 +2575,11 @@ async function renderSettings() {
 
   const saveBtn = document.getElementById('set-save');
   const saveMsg = document.getElementById('set-msg');
-  const markDirty = () => {
-    if (!saveBtn) return;
-    saveBtn.classList.add('dirty');
-    if (saveMsg) saveMsg.textContent = 'Unsaved changes';
-  };
-  v.querySelectorAll('input, select, textarea').forEach((el) => {
-    el.addEventListener('input', markDirty);
-    el.addEventListener('change', markDirty);
-  });
 
-  document.getElementById('set-save').onclick = async () => {
+  /* The save button covers everything on the page, so the message has to be about what
+     actually changed. It used to say "picks updated" whenever the exclusion field was
+     non-empty, which is a sentence about a setting nobody touched. */
+  const readForm = () => {
     const body = {
       display_name: document.getElementById('set-name').value.trim(),
       email: document.getElementById('set-email').value.trim(),
@@ -2609,6 +2603,44 @@ async function renderSettings() {
     };
     const key = document.getElementById('set-llm-key').value.trim();
     if (key) body.llm_api_key = key;
+    return body;
+  };
+  let baseline = { ...s };
+  const same = (a, b) => {
+    if (typeof a === 'boolean' || typeof b === 'boolean') return Boolean(a) === Boolean(b);
+    if (typeof a === 'number' || typeof b === 'number') return Number(a ?? 0) === Number(b ?? 0);
+    return String(a ?? '') === String(b ?? '');
+  };
+  const changedKeys = () => Object.keys(readForm()).filter((k) => !same(readForm()[k], baseline[k]));
+  const LABELS = {
+    display_name: 'name', email: 'email', timezone: 'time zone', city: 'city',
+    llm_base_url: 'model endpoint', llm_model: 'model', llm_api_key: 'API key',
+    download_root: 'download folder', preferred_format: 'format',
+    normalize_loudness: 'loudness switch', target_loudness: 'target level',
+    fade_on_play_ms: 'fade', autoplay_next: 'autoplay', prefetch_ahead: 'buffer',
+    taste_genres: 'genres', taste_artists: 'artists', taste_context: 'listening context',
+    taste_avoid: 'pick exclusions',
+  };
+  const paintDirty = () => {
+    if (!saveBtn) return;
+    const n = changedKeys().length;
+    saveBtn.classList.toggle('dirty', n > 0);
+    // a green "Saved" must not sit there while the form has unsaved edits
+    if (n > 0) { saveBtn.classList.remove('saved'); saveBtn.textContent = 'Save settings'; }
+    if (saveMsg) {
+      saveMsg.textContent = n ? 'Unsaved changes' : '';
+      saveMsg.dataset.tone = n ? 'warn' : '';
+    }
+  };
+  v.querySelectorAll('input, select, textarea').forEach((el) => {
+    el.addEventListener('input', paintDirty);
+    el.addEventListener('change', paintDirty);
+  });
+  paintDirty();
+
+  document.getElementById('set-save').onclick = async () => {
+    const body = readForm();
+    const changed = Object.keys(body).filter((k) => !same(body[k], baseline[k]));
     try {
       const r = await api('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       const saved = r.settings || {};
@@ -2625,7 +2657,7 @@ async function renderSettings() {
       if (saveBtn) {
         saveBtn.classList.remove('dirty');
         saveBtn.classList.add('saved');
-        saveBtn.textContent = notFound ? 'Saved (city not found)' : 'Saved';
+        saveBtn.textContent = notFound ? 'Saved' : (!changed.length ? 'No changes' : 'Saved');
         setTimeout(() => {
           if (!saveBtn) return;
           saveBtn.classList.remove('saved');
@@ -2633,11 +2665,14 @@ async function renderSettings() {
         }, 2800);
       }
       if (saveMsg) {
-        saveMsg.textContent = notFound
-          ? 'Saved, but that city was not found'
-          : `Saved — ${(body.taste_avoid || '').trim() ? 'picks use these exclusions now' : 'settings applied'}`;
+        if (notFound) saveMsg.textContent = 'Saved, but that city was not found';
+        else if (!changed.length) saveMsg.textContent = 'Nothing changed';
+        else if (changed.length === 1) saveMsg.textContent = `Saved · ${LABELS[changed[0]] || changed[0]}`;
+        else if (changed.length <= 3) saveMsg.textContent = `Saved · ${changed.map((k) => LABELS[k] || k).join(', ')}`;
+        else saveMsg.textContent = `Saved · ${changed.length} settings`;
         saveMsg.dataset.tone = 'ok';
       }
+      baseline = { ...baseline, ...body };
       paintAvoid();
       state.settings = { ...(state.settings || {}), ...body, ...saved };
       applyLoudnessGain(state.current);

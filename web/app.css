@@ -313,6 +313,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
 #set-save.dirty { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); }
 #set-save.saved, #set-save.saved:hover { background: var(--ok); color: #07130c; filter: none; }
 #set-msg[data-tone="ok"] { color: var(--ok); }
+#set-msg[data-tone="warn"] { color: var(--fg-soft); }
 #set-msg[data-tone="bad"] { color: #ff8b74; }
 /* actions that change the library read as a list, not as a row of lozenges */
 .set-tools { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
