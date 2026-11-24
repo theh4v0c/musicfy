@@ -531,26 +531,54 @@ function openAddPl(t) {
 }
 
 /* ============ likes toggle ============ */
-async function toggleLike(t) {
-  if (isLiked(t)) {
-    state.liked.delete(t.id); if (serverLiked) serverLiked.delete(t.id);
-    saveLiked(); toast('Removed from Liked Songs');
-    try { await api('/api/likes', { method: 'DELETE', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ track_id: t.id }) }); } catch {}
-  } else {
-    state.liked.add(t.id); if (serverLiked) serverLiked.add(t.id);
-    saveLiked(); toast('Added to Liked Songs');
-    try { await api('/api/likes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ track_id: t.id }) }); } catch {}
+/* Paint every heart that shows this track from one place, so the row, the bar and the
+   cover can never disagree about the same track. */
+function paintLike(t) {
+  if (!t || t.id == null) return;
+  const on = isLiked(t);
+  const icon = on ? IC.heartFull : IC.heart;
+  document.querySelectorAll(`.trow[data-tid="${t.id}"] .like`).forEach((b) => {
+    b.innerHTML = icon;
+    b.classList.toggle('on', on);
+  });
+  if (state.current && state.current.id === t.id) {
+    ['pb-like', 'np-like', 'mini-like'].forEach((id) => {
+      const el = $(id);
+      if (!el) return;
+      el.innerHTML = icon;
+      el.classList.toggle('on', on);
+    });
   }
-  document.querySelectorAll(`.trow[data-tid="${t.id}"] .like`).forEach(b => {
-    b.innerHTML = isLiked(t) ? IC.heartFull : IC.heart;
-    b.classList.toggle('on', isLiked(t));
-  });
-  ['pb-like', 'np-like', 'mini-like'].forEach((id) => {
-    if (state.current && state.current.id === t.id) {
-      $(id).innerHTML = isLiked(t) ? IC.heartFull : IC.heart;
-      $(id).classList.toggle('on', isLiked(t));
-    }
-  });
+}
+
+const likeInFlight = new Set();
+async function toggleLike(t) {
+  if (!t || t.id == null || likeInFlight.has(t.id)) return;
+  likeInFlight.add(t.id);
+  const wasLiked = isLiked(t);
+  if (wasLiked) { state.liked.delete(t.id); if (serverLiked) serverLiked.delete(t.id); }
+  else { state.liked.add(t.id); if (serverLiked) serverLiked.add(t.id); }
+  saveLiked();
+  paintLike(t);
+  toast(wasLiked ? 'Removed from Liked Songs' : 'Added to Liked Songs');
+  try {
+    await api('/api/likes', {
+      method: wasLiked ? 'DELETE' : 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ track_id: t.id }),
+    });
+  } catch {
+    // the server refused: put the heart back rather than keep a state the library does
+    // not have. This is the one that looked like "the like is on the wrong cover".
+    if (wasLiked) { state.liked.add(t.id); if (serverLiked) serverLiked.add(t.id); }
+    else { state.liked.delete(t.id); if (serverLiked) serverLiked.delete(t.id); }
+    saveLiked();
+    paintLike(t);
+    toast('Could not save that like');
+  } finally {
+    likeInFlight.delete(t.id);
+    paintLike(t);
+  }
 }
 
 /* ============ radio ============ */
@@ -1228,14 +1256,18 @@ function trackCard(t, list, origin) {
   c.className = 'tcard';
   c.innerHTML = `${artTag(t, 'tcard-art', 300)}
     <div class="tcard-name">${esc(t.title)}</div>
-    <div class="tcard-sub">${esc(t.artist || '')}</div>
+    <div class="tcard-sub">${t.artist ? `<button class="alink tcard-artist" type="button">${esc(t.artist)}</button>` : ''}</div>
     <button class="tcard-play" aria-label="Play ${esc(t.title)}">${IC.play}</button>`;
-  c.querySelector('.tcard-play').onclick = (e) => {
-    e.stopPropagation();
+  const play = (e) => {
+    if (e) e.stopPropagation();
     playList(list, list.indexOf(t), false, origin);
   };
+  c.querySelector('.tcard-play').onclick = play;
+  // a card is a record you can press, not a picture: clicking it plays it
+  c.onclick = (e) => { if (e.target.closest('.alink')) return; play(e); };
+  const cardArtist = c.querySelector('.tcard-artist');
+  if (cardArtist) cardArtist.onclick = (e) => { e.stopPropagation(); renderArtist(t.artist); };
   const at = () => { const r = c.getBoundingClientRect(); return { x: r.left + 12, y: r.bottom - 6 }; };
-  // a plain click does nothing on purpose: play from the hover button, menu from right click
   c.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); openCtx(t, e.clientX, e.clientY); };
   longPress(c, () => { const p = at(); openCtx(t, p.x, p.y); });
   return c;
@@ -3576,7 +3608,7 @@ function trow(t, i, list) {
   el.innerHTML = `
     <div class="tno"><span class="tno-num">${String(i + 1).padStart(2, '0')}</span><button class="tno-play" aria-label="Play">${IC.play}</button></div>
     ${artTag(t, 'tart', 96)}
-    <div class="tmeta"><div class="tt">${esc(t.title)}</div>${t.album ? `<div class="talbum-line">${t.artist ? `<span class="tal-artist">${esc(t.artist)}</span><span class="tal-sep"> &middot; </span>` : ''}<span class="alink">${esc(t.album)}</span></div>` : ''}${t.genre || t.genre_family ? `<button class="genrechip" data-kind="genre">${esc(t.genre_family || t.genre)}</button>` : ''}${t.bpm ? `<div class="tbpm">${Math.round(t.bpm)} BPM${t.key ? ` <button class="keychip key-${keyHueClass(t.key, t.key_scale)}" data-kind="key" title="Sort by key">${esc(t.key)}${t.key_scale === 'minor' ? 'm' : ''}</button>` : ''}</div>` : ''}</div>
+    <div class="tmeta"><div class="tt">${esc(t.title)}</div>${t.album ? `<div class="talbum-line">${t.artist ? `<span class="tal-artist alink" data-kind="artist">${esc(t.artist)}</span><span class="tal-sep"> &middot; </span>` : ''}<span class="alink">${esc(t.album)}</span></div>` : ''}${t.genre || t.genre_family ? `<button class="genrechip" data-kind="genre">${esc(t.genre_family || t.genre)}</button>` : ''}${t.bpm ? `<div class="tbpm">${Math.round(t.bpm)} BPM${t.key ? ` <button class="keychip key-${keyHueClass(t.key, t.key_scale)}" data-kind="key" title="Sort by key">${esc(t.key)}${t.key_scale === 'minor' ? 'm' : ''}</button>` : ''}</div>` : ''}</div>
     <div class="tartist"><span class="alink ${t.artist ? '' : 'muted'}" data-kind="artist">${esc(t.artist || 'unknown artist')}</span></div>
     <div class="talbum"><span class="alink" data-kind="album">${esc(t.album || '')}</span></div>
     <div class="tadded">${esc(added)}</div>
@@ -3635,8 +3667,10 @@ function trow(t, i, list) {
   } else {
     moreBtn.onclick = (e) => { e.stopPropagation(); const r = e.target.getBoundingClientRect(); openCtx(t, r.left - 180, r.bottom + 4); };
   }
-  const art = el.querySelector('.tartist .alink');
-  if (art && t.artist) art.onclick = (e) => { e.stopPropagation(); renderArtist(t.artist); };
+  el.querySelectorAll('.tal-artist, .tartist .alink').forEach((a) => {
+    if (!t.artist) return;
+    a.onclick = (e) => { e.stopPropagation(); renderArtist(t.artist); };
+  });
   const keyBtn = el.querySelector('.keychip');
   if (keyBtn) keyBtn.onclick = (e) => { e.stopPropagation(); state._keySort = (state._keySort || 0) + 1; sortSongsByKey(); };
   const albLinks = el.querySelectorAll('.talbum .alink, .talbum-line .alink');
@@ -4563,6 +4597,7 @@ function paintNowPlaying() {
   setArt('mini-art', artUrl(t, 96), t.title);
   $('np-title').textContent = t.title || '';
   $('np-artist').textContent = t.artist || '';
+  $('np-album').textContent = t.album || '';
   setArt('np-art', artUrl(t, 640), t.title);
   $('np-bg-img').src = artUrl(t, 640) || '';
   $('np-like').innerHTML = isLiked(t) ? IC.heartFull : IC.heart;
@@ -4758,10 +4793,18 @@ try {
   const saved = Number(localStorage.getItem('mf-volume') ?? 90);
   applyVolume(saved);
 } catch { applyVolume(90); }
-document.querySelectorAll('#vol, #np-vol').forEach((el) => {
-  el.disabled = false;
-  el.title = IOS_VOLUME_LOCKED ? 'iOS only honours the hardware volume buttons, but 0 mutes' : 'Volume';
-});
+document.querySelectorAll('#vol, #np-vol').forEach((el) => { el.disabled = false; el.title = 'Volume'; });
+if (IOS_VOLUME_LOCKED) {
+  // iOS ignores audio.volume entirely. A slider that moves and changes nothing is worse
+  // than no slider: keep the one control that does work, mute.
+  document.querySelectorAll('#vol, #np-vol').forEach((el) => {
+    el.hidden = true;
+    const row = el.closest('.np-volume, .pb-right, .pb-progress');
+    if (row) row.classList.add('volume-locked');
+  });
+  const npRow = document.querySelector('.np-volume');
+  if (npRow) npRow.title = 'This device sets volume with its own buttons; tap the speaker to mute';
+}
 /* no inline instructions: the slider mutes at zero, the buttons stay where they are */
 
 $('toggle').onclick = togglePlay;
@@ -4824,7 +4867,13 @@ longPress(document.querySelector('.pb-left'), () => {
   const r = document.querySelector('.pb-left').getBoundingClientRect();
   currentCtx(r.left + 20, Math.max(80, r.top - 260));
 });
-$('np-artist').onclick = () => { const c = state.current; if (c && c.artist) renderArtist(c.artist); };
+/* every link inside the sheet closes it. Navigating underneath a full-screen cover is
+   the same as doing nothing: you tap the artist and the artist page opens out of sight. */
+const npArtist = () => { const c = state.current; if (c && c.artist) { $('np').hidden = true; renderArtist(c.artist); } };
+const npAlbum = () => { const c = state.current; if (c && c.album) { $('np').hidden = true; renderAlbum(c.album); } };
+$('np-artist').onclick = npArtist;
+$('np-album').onclick = npAlbum;
+$('np-add').onclick = () => { if (state.current && state.current.id) openAddPlIds([state.current.id]); };
 $('mini').onclick = (e) => { if (!e.target.closest('button')) $('np').hidden = false; };
 $('mini').oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); currentCtx(e.clientX, e.clientY); };
 longPress($('mini'), () => {

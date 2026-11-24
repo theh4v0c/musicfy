@@ -356,6 +356,13 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .talbum { font-size: 12.5px; color: var(--fg-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .alink { cursor: pointer; }
 .alink:hover { color: var(--acc); }
+/* an artist name is a link in the shape of the text around it, not a button */
+/* 'font: inherit' here reset the size of every styled link inside a button: it beat
+   .np-artist's own font-size on specificity, so 15px rendered as 16px. Family only. */
+button.alink { padding: 0; border: 0; background: none; font-family: inherit; color: inherit; text-align: left; }
+.tcard-artist { display: block; width: 100%; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 920px) { .tcard-artist { max-width: 128px; } }
+.volume-locked .vol { display: none; }
 .th { cursor: pointer; user-select: none; }
 .th.sorted::after { content: "\2191"; margin-left: 4px; color: var(--acc); }
 .th.sorted.desc::after { content: "\2193"; margin-left: 4px; color: var(--acc); }
@@ -816,7 +823,20 @@ main.main { transition: margin-right .18s ease; }
 .np-info { position: relative; display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
 .np-info-text { flex: 1; min-width: 0; }
 .np-title { font-size: 24px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.np-artist { color: var(--fg-soft); font-size: 15px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-artist { display: block; width: 100%; padding: 0; border: 0; background: none; text-align: left; color: var(--fg-soft);
+  font-family: inherit; font-size: 15px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.np-artist:active { color: var(--fg); }
+.np-album { display: block; width: 100%; padding: 0; border: 0; background: none; text-align: left; color: var(--fg-mute);
+  font-family: inherit; font-size: var(--fs-meta); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.np-album:empty { display: none; }
+.np-album:active { color: var(--fg-soft); }
+/* the add control is an icon control like any other; on a phone it gets the 44px target */
+.np-add { flex: none; }
+@media (pointer: coarse) {
+  /* the two controls beside the title are the same target and the same weight */
+  .np-add, .np-like { width: 44px; height: 44px; display: grid; place-items: center; }
+}
+@media (hover: none) { .icon-btn:hover { background: none; } }
 .np-controls .ctl { flex: none; }
 .np-like { background: none; border: none; font-size: 24px; color: var(--fg-mute); }
 .np-like.on { color: var(--liked); }

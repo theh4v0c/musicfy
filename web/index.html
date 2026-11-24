@@ -8,7 +8,7 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.svg">
 <title>MUSICFY</title>
-<link rel="stylesheet" href="/app.css?v=418">
+<link rel="stylesheet" href="/app.css?v=422">
 </head>
 <body>
 <div id="app">
@@ -153,9 +153,13 @@
     <div class="np-info">
       <div class="np-info-text">
         <div class="np-title" id="np-title"></div>
-        <div class="np-artist" id="np-artist"></div>
+        <button class="np-artist alink" id="np-artist"></button>
+        <button class="np-album alink" id="np-album"></button>
         <div class="pb-status np-status" id="np-status" role="status" aria-live="polite" hidden></div>
       </div>
+      <button class="icon-btn np-add" id="np-add" aria-label="Add to a playlist">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+      </button>
       <button class="np-like" id="np-like" aria-label="Like this track">&#9825;</button>
     </div>
     <div class="np-badge" id="np-badge" hidden></div>
