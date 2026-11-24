@@ -140,6 +140,18 @@ Every surface that picks music filters through it: home picks (ON DECK), `/api/r
 `/api/flow`, `/api/radio` (the home rotation), `/api/mix/next`, and `mood.select` for
 briefs. Saving settings invalidates the picks cache, so the change is immediate.
 
+## Playlist artwork
+
+A playlist cover can come from three places: a generated tile, an uploaded image
+(`POST /api/playlists/:id/cover`), or **a track's artwork**
+(`POST /api/playlists/:id/cover-from-track` `{trackId}`). The last one is a file copy —
+both are already 600px JPEGs — so it is instant and lossless.
+
+Two ways in: the track's row menu ("Use this cover for a playlist", then pick the
+playlist) and the playlist menu ("Use a track's cover", then pick from its tracks, shown
+with thumbnails). The client bumps `state.artV` so the header image URL changes with
+`?v=` and the browser does not serve the old cover from cache.
+
 ## Loudness
 
 Two different things, and only one of them works on a phone.

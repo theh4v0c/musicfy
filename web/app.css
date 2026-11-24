@@ -255,6 +255,11 @@ main.main { grid-area: main; display: flex; flex-direction: column; overflow: hi
 .trow:hover { background: var(--bg-elev); }
 .trow.selected { background: var(--bg-elev2); outline: 1px solid rgba(255,255,255,.12); }
 .trow.playing { background: var(--acc-soft); }
+/* a cover picker row: the artwork is the label */
+.ctx-cover { display: flex !important; align-items: center; gap: 9px; }
+.ctx-cover-art { width: 26px; height: 26px; border-radius: var(--r-xs); background-size: cover; background-position: center; background-color: var(--bg-elev2); flex: none; }
+.ctx-cover-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* a row that just arrived says so for a moment */
 .trow.flash { animation: row-flash 2.4s ease-out; }
 @keyframes row-flash { 0% { background: var(--acc-soft); box-shadow: inset 2px 0 0 var(--acc); } 100% { background: transparent; box-shadow: inset 2px 0 0 transparent; } }

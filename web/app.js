@@ -213,6 +213,7 @@ function openCtx(t, x, y) {
     <button data-act="like">${liked ? IC.heart + ' Remove from Liked Songs' : IC.heartFull + ' Save to Liked Songs'}</button>
     ${hasAudio(t) ? '' : '<button data-act="dl">Download this track</button>'}
     ${hasAudio(t) ? '<button data-act="cover">Change cover</button>' : ''}
+    ${t.has_art ? '<button data-act="cover-pl">Use this cover for a playlist</button>' : ''}
     ${(hasAudio(t) && Number(t.bitrate || 0) > 0 && Number(t.bitrate) < 180000) ? '<button data-act="upgrade">Find higher quality</button>' : ''}
     ${hasAudio(t) ? '<button data-act="tofile">Download to device</button>' : ''}
     ${hasAudio(t) ? `<button data-act="analyze">${t.bpm ? 'Re-analyze' : 'Analyze'} BPM &amp; key</button>` : ''}
@@ -406,6 +407,7 @@ $('ctx').addEventListener('click', async (e) => {
       toast('Removed from playlist'); refreshView();
     } catch { toast('Remove failed'); }
   }
+  if (act === 'cover-pl') { openCoverToPlaylist(t); return; }
   if (act === 'normalize') {
     try {
       const r = await api('/api/normalize', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: [t.id], target: Number((state.settings || {}).target_loudness) || -12 }) });
@@ -788,6 +790,7 @@ function openPlaylistMenu(p, x, y) {
     <button data-act="pl-play">Play</button>
     <button data-act="pl-rename">Rename</button>
     <button data-act="pl-cover">Change cover</button>
+    <button data-act="pl-cover-track">Use a track's cover</button>
     <button data-act="pl-repair">Fix metadata (crate)</button>
     <button data-act="pl-fixcovers">Fix album covers (crate)</button>
     <button data-act="pl-upgrade">Find higher quality (crate)</button>
@@ -806,6 +809,7 @@ function openPlaylistMenu(p, x, y) {
     closeCtx(true); m.onclick = null;
     if (act === 'pl-play') { playPlaylist(p.id); return; }
     if (act === 'pl-cover') { uploadPlaylistCover(p.id); return; }
+    if (act === 'pl-cover-track') { openCoverPicker(p.id); return; }
     if (act === 'pl-repair') {
       try { const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/repair`, { method: 'POST' }); toast(`Fixing metadata for ${r.count} tracks in the background`, 7000); setTimeout(() => { bustCache(); state.allTracks = null; }, 6000); } catch { toast('Could not start metadata repair', 4000); }
       return;
@@ -5180,6 +5184,56 @@ document.addEventListener('click', (e) => {
 });
 
 /* selection bar actions live on the inline bar, see renderSelectionBar */
+
+/* put a track's artwork on a playlist, chosen from the playlists themselves */
+function openCoverToPlaylist(t) {
+  markCtxOpen();
+  const m = $('ctx');
+  m.innerHTML = `<div class="ctx-title">Cover of “${esc(String(t.title || '').slice(0, 34))}” goes to</div>` +
+    state.playlists.map((p) => `<button data-pl="${esc(p.id)}">${esc(p.name)}</button>`).join('');
+  m.classList.add('open');
+  m.style.left = '50%'; m.style.top = '45%'; m.style.transform = 'translate(-50%,-50%)';
+  m.onclick = async (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    closeCtx(true); m.style.transform = ''; m.onclick = null;
+    try {
+      await api(`/api/playlists/${encodeURIComponent(b.dataset.pl)}/cover-from-track`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ trackId: t.id }),
+      });
+      state.artV = Date.now();
+      await loadPlaylists();
+      refreshView();
+      toast(`Cover set from “${t.title}”`, 4000);
+    } catch (err) { toast('Could not use that cover', 4000); }
+  };
+}
+
+/* or from the playlist side: pick one of its tracks */
+async function openCoverPicker(pid) {
+  let list = [];
+  try { list = await api(`/api/playlists/${encodeURIComponent(pid)}`); } catch {}
+  const withArt = (list || []).filter((x) => x.has_art).slice(0, 60);
+  if (!withArt.length) { toast('No track in this crate has artwork yet', 5000); return; }
+  markCtxOpen();
+  const m = $('ctx');
+  m.innerHTML = `<div class="ctx-title">Use a track's cover</div>` +
+    withArt.map((x) => `<button data-tid="${x.id}" class="ctx-cover"><span class="ctx-cover-art" style="background-image:url('/api/cover/${x.id}?s=80&v=${state.artV || 0}')"></span><span class="ctx-cover-name">${esc(String(x.title || '').slice(0, 30))}</span></button>`).join('');
+  m.classList.add('open');
+  m.style.left = '50%'; m.style.top = '45%'; m.style.transform = 'translate(-50%,-50%)';
+  m.onclick = async (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    closeCtx(true); m.style.transform = ''; m.onclick = null;
+    try {
+      await api(`/api/playlists/${encodeURIComponent(pid)}/cover-from-track`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ trackId: Number(b.dataset.tid) }),
+      });
+      state.artV = Date.now();
+      await loadPlaylists();
+      refreshView();
+      toast('Playlist cover updated', 4000);
+    } catch { toast('Could not use that cover', 4000); }
+  };
+}
 
 /* add many tracks to a playlist, with a picker */
 function openAddPlIds(ids) {

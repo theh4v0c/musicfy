@@ -2100,6 +2100,28 @@ const server = http.createServer(async (req, res) => {
     }
 
     // replace the artwork of one playlist
+    // a playlist takes a track's artwork: both are already 600px jpgs on disk, so this
+    // is a copy, not a re-encode
+    const mPlCoverT = u.pathname.match(/^\/api\/playlists\/([^/]+)\/cover-from-track$/);
+    if (mPlCoverT && req.method === 'POST') {
+      const pid = decodeURIComponent(mPlCoverT[1]);
+      let body = '';
+      req.on('data', (c) => { body += c; });
+      req.on('end', () => {
+        let tid = 0;
+        try { tid = Number(JSON.parse(body || '{}').trackId) || 0; } catch {}
+        if (!tid) return json(res, 400, { error: 'trackId required' });
+        if (!db.prepare('SELECT id FROM playlists WHERE id=?').get(pid)) return json(res, 404, { error: 'no such playlist' });
+        const src = coverFile(tid);
+        if (!fs.existsSync(src)) return json(res, 404, { error: 'that track has no cover' });
+        try {
+          fs.copyFileSync(src, plCoverFile(pid));
+          return json(res, 200, { ok: true, track: tid });
+        } catch (e) { return json(res, 500, { error: e.message }); }
+      });
+      return;
+    }
+
     const mPlCover = u.pathname.match(/^\/api\/playlists\/([^/]+)\/cover$/);
     if (mPlCover && req.method === 'POST') {
       const pid = decodeURIComponent(mPlCover[1]);
