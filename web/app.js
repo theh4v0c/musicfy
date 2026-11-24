@@ -1667,7 +1667,7 @@ async function renderLibrary() {
       else toast(r.note || 'nothing to import');
     } catch { toast('import failed'); }
   };
-  $('lib-upload').onclick = () => pickFile('audio/*', uploadTrack);
+  $('lib-upload').onclick = () => pickFile('audio/*', (f) => uploadFiles([f]));
   $('lib-newpl').onclick = async () => {
     const name = prompt('New playlist name:'); if (!name) return;
     await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
@@ -4891,16 +4891,20 @@ async function uploadFiles(files) {
   const total = files.length;
   let ok = 0;
   let failed = 0;
+  let why = '';
   const t = toastPersistent(`Uploading ${total} file${total > 1 ? 's' : ''}…`);
   for (let i = 0; i < total; i += 1) {
     const f = files[i];
     t.update(`Uploading ${i + 1} of ${total}: ${f.name.slice(0, 34)}`);
-    try { await uploadTrack(f); ok += 1; }
-    catch (e) { failed += 1; }
+    try { await uploadTrack(f); ok += 1; } catch (e) { failed += 1; why = e.message || 'upload failed'; }
   }
   state.allTracks = null;
   bustCache();
-  t.done(failed ? `Added ${ok}, ${failed} failed` : `Added ${ok} track${ok > 1 ? 's' : ''}`, 8000);
+  // a failure with no reason is the same thing as nothing happening: say what the server said
+  t.done(failed
+    ? (total === 1 ? `Upload failed: ${why}` : `Added ${ok}, ${failed} failed — ${why}`)
+    : `Added ${ok} track${ok > 1 ? 's' : ''}`, 8000);
+  await loadPlaylists().catch(() => {});
   refreshView();
 }
 
