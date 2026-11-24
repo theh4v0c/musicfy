@@ -4497,6 +4497,12 @@ setInterval(() => {
   } catch (e) { console.error('[jobs] reaper failed:', e.message); }
 }, 60000);
 
+// A locked phone stops reading for tens of seconds and then asks for the next range on
+// the socket it was holding. Node closes idle keep-alive sockets after five seconds, and
+// that close is what a car hears as "the track stopped until I picked up the phone".
+server.keepAliveTimeout = 75_000;
+server.headersTimeout = 80_000;
+
 server.listen(PORT, '0.0.0.0', () => log('boot', `core listening on ${PORT}`));
 console.log(`MUSICFY core on :${PORT}`);
 warmCovers().catch(e => log('error', `cover warm: ${e.message}`));

@@ -65,40 +65,10 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // saved audio only. Normal streams never touch the worker: a proxied byte stream costs
-  // a copy of every byte and dies with the worker when the phone locks, which is exactly
-  // the "plays only while unlocked" failure. Saved tracks ask for this path instead.
-  if (url.pathname.startsWith('/offline-audio/')) {
-    const id = Number(url.pathname.split('/').pop());
-    e.respondWith(AUDIO_KEYS().then(async (c) => {
-      const hit = await c.match(offlineKey(id));
-      // not saved after all: let the server answer, range included
-      if (!hit) return fetch('/api/stream/' + id + url.search, { headers: req.headers });
-      const range = req.headers.get('range');
-      // the media element always asks for a byte range: answer it properly or seeking
-      // inside a saved track jumps back to the start
-      if (!range) return hit;
-      const m = range.match(/bytes=(\d*)-(\d*)/);
-      if (!m) return hit;
-      const buf = await hit.arrayBuffer();
-      const size = buf.byteLength;
-      const start = m[1] ? Number(m[1]) : 0;
-      const end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
-      if (!(start < size) || start > end) return new Response(null, { status: 416, headers: { 'content-range': `bytes */${size}` } });
-      return new Response(buf.slice(start, end + 1), {
-        status: 206,
-        headers: {
-          'content-type': hit.headers.get('content-type') || 'audio/mpeg',
-          'accept-ranges': 'bytes',
-          'content-length': String(end - start + 1),
-          'content-range': `bytes ${start}-${end}/${size}`,
-          'cache-control': 'private, max-age=86400',
-        },
-      });
-    }));
-    return;
-  }
-
+  // audio never passes through the worker. iOS suspends the worker when the screen
+  // locks, and a response the worker owns dies with it: that is a track that stops at
+  // 2:10 and resumes the moment you unlock the phone. Saved audio is read straight from
+  // Cache Storage by the page instead, as a blob, with no worker in the path.
   // app shell: network first, cached index when offline
   if (req.mode === 'navigate') {
     e.respondWith(fetch(req).catch(() => caches.match('/index.html')));

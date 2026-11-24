@@ -4295,6 +4295,12 @@ $('dl-btn').onclick = (e) => { e.stopPropagation(); $('dl-drawer').hidden ? open
 $('dl-close').onclick = closeDownloads;
 
 /* ============ preload ============ */
+function isIOS() {
+  const p = navigator.platform || '';
+  if (/iP(hone|ad|od)/.test(p)) return true;
+  return p === 'MacIntel' && navigator.maxTouchPoints > 1;
+}
+
 // fetch the next track ahead of time and keep the bytes in memory; works the same
 // on iPhone, Android and desktop because it avoids the resolver round trip at play time
 const preload = new Map();
@@ -4316,6 +4322,12 @@ function prefetchTrack(t) {
   try {
     if (t.streamable && !t.owned) {
       fetch(`/api/prewarm/${t.id}`).catch(() => {});   // resolver warm, bytes cannot cross origin
+      preload.set(t.id, { el: null, at: Date.now() });
+    } else if (isIOS()) {
+      // iOS keeps one audio session. A second media element loading in the background is
+      // how the track that was playing loses its session when the screen goes dark, so on
+      // iOS the warm-up is a plain ranged fetch: DNS, TLS and the file's first pages.
+      fetch(streamUrl(t), { headers: { Range: 'bytes=0-65535' } }).catch(() => {});
       preload.set(t.id, { el: null, at: Date.now() });
     } else {
       const el = new Audio();
@@ -4387,9 +4399,35 @@ async function playPlaylist(pid, shuffled = false) {
 // a saved track plays from the offline copy; everything else goes straight to the server
 function streamUrl(t, bust) {
   if (!t || !t.id) return '';
-  const offline = state.offlineIds && state.offlineIds.has(t.id);
-  const base = offline ? `/offline-audio/${t.id}` : `/api/stream/${t.id}`;
+  // always the server path: the service worker is not allowed anywhere near audio,
+  // because iOS kills it on lock and takes the stream down with it
+  const base = `/api/stream/${t.id}`;
   return bust ? `${base}?r=${Date.now()}` : base;
+}
+
+/* A saved track is bytes in Cache Storage. Reading them is a page operation the worker
+   does not mediate, so the audio element holds a blob it owns and the lock screen cannot
+   take it away. */
+const savedBlobs = new Map();
+async function savedAudioUrl(id) {
+  if (savedBlobs.has(id)) return savedBlobs.get(id);
+  try {
+    const c = await caches.open('mf-audio-v2');
+    const hit = await c.match('/offline/' + id);
+    if (!hit) return null;
+    const url = URL.createObjectURL(await hit.blob());
+    savedBlobs.set(id, url);
+    return url;
+  } catch { return null; }
+}
+
+// no network, but the track was saved: play the copy on the device
+async function offlineSrcIfNeeded(t, src) {
+  if (!t || !t.id) return src;
+  const saved = state.offlineIds && state.offlineIds.has(t.id);
+  if (!saved) return src;
+  if (navigator.onLine !== false) return src;
+  return (await savedAudioUrl(t.id)) || src;
 }
 
 function trackPlayable(t) {
@@ -4415,7 +4453,7 @@ async function playAt(i, opts = {}) {
   saveQueue();
   const t = state.current;
   applyLoudnessGain(t);
-  audio.src = streamUrl(t);
+  audio.src = await offlineSrcIfNeeded(t, streamUrl(t));
   try { audio.volume = targetVolume(); } catch {}
   prefetchedFor = null;
   try { await audio.play(); } catch {}
