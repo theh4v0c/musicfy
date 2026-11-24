@@ -235,6 +235,12 @@ toast that vanishes is not an answer.
 | Remove duplicate files | keeps the best copy per track, deletes the rest | files removed · tracks affected |
 | Clear cache | localStorage + Cache Storage | page cache size |
 
+Crate actions report the same way. **Fix metadata (crate)** runs a catalogue lookup per
+track; it is a job with progress (`Fixing metadata 3/13`) and a result, e.g. "Metadata: 13
+checked — 4 changed (album 3 · year 1), 9 already correct". It used to print one "started"
+toast and log the outcome to the server, so an action that changed nothing and an action
+that failed looked identical from the outside.
+
 Genre pass specifics: a tag string like "Oxia, Robag Wruhme" is not an artist, so it is
 split and each name is tried until one answers. A lookup that fails is not cached as a
 missing answer any more. Progress is per artist, not per batch, because a batch of 200 is

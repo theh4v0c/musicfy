@@ -167,6 +167,9 @@ let picksCache = { at: 0, data: null };
 const genreJob = { running: false, startedAt: null, finishedAt: null, passes: 0, checked: 0, tagged: 0, families: 0, last: null, error: null };
 // live progress for a crate prep, so the card can say what is happening
 const crateJobs = new Map();
+// crate metadata repair is a catalogue lookup per track: it takes minutes, so it is a
+// job with visible progress and a result, not a fire-and-forget log line
+const repairJobs = new Map();
 
 // metadata to write into a track's file: Traktor PRIV + standard ID3. MP3 only.
 function trackTagMeta(db, tid) {
@@ -3421,10 +3424,39 @@ const server = http.createServer(async (req, res) => {
     }
 
     const mPlRepair = u.pathname.match(/^\/api\/playlists\/([^/]+)\/repair$/);
+    if (mPlRepair && req.method === 'GET') {
+      const j = repairJobs.get(decodeURIComponent(mPlRepair[1]));
+      return json(res, 200, j || { running: false, total: 0, done: 0, fixed: 0, same: 0, failed: 0, fields: {} });
+    }
     if (mPlRepair && req.method === 'POST') {
-      const ids = playlistTrackIds(decodeURIComponent(mPlRepair[1]));
-      (async () => { const r = await repairTracks(ids); console.log('[crate repair]', r); })();
-      return json(res, 202, { started: true, count: ids.length });
+      const pid = decodeURIComponent(mPlRepair[1]);
+      const current = repairJobs.get(pid);
+      if (current && current.running) {
+        return json(res, 202, { started: false, count: current.total, job: current, note: 'this playlist is already being repaired' });
+      }
+      const ids = playlistTrackIds(pid);
+      if (!ids.length) return json(res, 200, { started: false, count: 0, note: 'this playlist is empty' });
+      const job = { running: true, total: ids.length, done: 0, fixed: 0, same: 0, failed: 0, fields: {}, at: Date.now(), finishedAt: 0 };
+      repairJobs.set(pid, job);
+      (async () => {
+        for (const id of ids) {
+          try {
+            const p = await repair.propose(db, id);
+            if (p && p.changed) {
+              const r = repair.apply(db, id, p.after);
+              if (r && r.error) { job.failed += 1; }
+              else if (r && r.changed) {
+                job.fixed += 1;
+                for (const k of Object.keys(p.after)) job.fields[k] = (job.fields[k] || 0) + 1;
+              } else job.same += 1;
+            } else job.same += 1;
+          } catch { job.failed += 1; }
+          job.done += 1;
+        }
+        job.running = false; job.finishedAt = Date.now();
+        console.log('[crate repair]', pid, JSON.stringify({ checked: job.done, fixed: job.fixed, same: job.same, failed: job.failed }));
+      })();
+      return json(res, 202, { started: true, count: ids.length, job });
     }
     const mPlCovers = u.pathname.match(/^\/api\/playlists\/([^/]+)\/covers$/);
     if (mPlCovers && req.method === 'POST') {

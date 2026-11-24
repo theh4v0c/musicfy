@@ -802,7 +802,32 @@ function openPlaylistMenu(p, x, y) {
     if (act === 'pl-cover') { uploadPlaylistCover(p.id); return; }
     if (act === 'pl-cover-track') { openCoverPicker(p.id); return; }
     if (act === 'pl-repair') {
-      try { const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/repair`, { method: 'POST' }); toast(`Fixing metadata for ${r.count} tracks in the background`, 7000); setTimeout(() => { bustCache(); state.allTracks = null; }, 6000); } catch { toast('Could not start metadata repair', 4000); }
+      // a catalogue lookup per track: show the work and then say what it did
+      const url = `/api/playlists/${encodeURIComponent(p.id)}/repair`;
+      const pill = progressPill('Checking metadata…');
+      try {
+        const r = await api(url, { method: 'POST' });
+        if (!r.started && r.note) { pill.done(); toast(r.note, 5000); return; }
+        let j = r.job || { running: true, total: r.count, done: 0 };
+        for (let i = 0; i < 300 && j.running; i += 1) {
+          pill.update(`Fixing metadata ${j.done || 0}/${j.total || r.count}`);
+          await new Promise((res) => setTimeout(res, 1200));
+          j = await api(url, { nocache: true }).catch(() => j);
+        }
+        pill.done();
+        const parts = [];
+        if (j.fixed) {
+          const bits = Object.entries(j.fields || {}).filter(([, n]) => n).map(([k, n]) => `${k} ${n}`);
+          parts.push(`${j.fixed} changed${bits.length ? ` (${bits.join(' · ')})` : ''}`);
+        }
+        if (j.same) parts.push(`${j.same} already correct`);
+        if (j.failed) parts.push(`${j.failed} could not be changed`);
+        toast(`Metadata: ${j.done || j.total} checked — ${parts.join(', ') || 'nothing to do'}`, 9000);
+        if (j.fixed) { bustCache(); state.allTracks = null; setTimeout(() => { try { refreshView(); } catch {} }, 600); }
+      } catch (e) {
+        pill.done();
+        toast(`Metadata repair failed (${e.message || 'request'})`, 6000);
+      }
       return;
     }
     if (act === 'pl-fixcovers') {

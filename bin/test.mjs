@@ -65,6 +65,10 @@ const short = await j('/api/search/ladder?q=a');
 ok('one character query rejected', short.status === 400, String(short.status));
 // oversized upload is checked by hand: sending 70MB from a test run is not worth the time
 
+console.log('crate repair feedback');
+const rj = await j('/api/playlists/__none__/repair');
+ok('repair reports a job shape', rj.status === 200 && rj.body && rj.body.running === false && 'done' in rj.body && 'total' in rj.body, JSON.stringify(rj.body));
+
 console.log('analysis version');
 const an = await j('/api/analyze/status');
 ok('analysis reports its version', Number(an.body?.version) >= 2, JSON.stringify(an.body));

@@ -6,6 +6,26 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · a crate action that reports what it did (`v465`)
+
+**Fix metadata (crate) was a fire-and-forget job**
+- The menu item posted, toasted "Fixing metadata for N tracks in the background", and the
+  server logged the outcome. A run that changed nothing and a run that failed both looked
+  like nothing happening, which is exactly how it was reported.
+- The route is now a job: `POST /api/playlists/:id/repair` starts it, `GET` returns
+  `{running, total, done, fixed, same, failed, fields}`. The work is a catalogue lookup
+  per track, so it can take a minute on a forty-track set.
+- The client polls it with the progress pill ("Fixing metadata 3/13") and ends with a
+  sentence: "Metadata: 13 checked — 4 changed (album 3 · year 1), 9 already correct", or
+  "13 checked — 13 already correct" when there was nothing to fix. A failed request shows
+  its status instead of a generic message.
+- A second click while it is running says so ("this playlist is already being repaired")
+  and polls the same job.
+
+Verified in the browser against a real set: the pill moved and the final toast read
+"Metadata: 13 checked — 13 already correct" (the catalogue had nothing to add). Tests
+39 -> 40 with the job-shape assertion.
+
 ### 2026-11-24 · "analysed" was not a yes/no, and not every playlist is a crate (`v463`)
 
 **Analysis has a version, so "latest" is answerable**
