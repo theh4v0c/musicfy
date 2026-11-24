@@ -6,6 +6,25 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · Children's uploads are classified, so the rotation can skip them (`v485`)
+
+The children's tracks in the library were YouTube uploads with no genre, so
+`genre_family` was NULL: the taste filter could not see them, and "Your rotation" was
+built from the last Sprunki track.
+
+- `genre.looksChildren()` recognises children's music from the genre column (`child`,
+  `children`, `kids`, `toddler`, `nursery`, `preschool`) **and** from the usual brands when
+  there is no genre: Sprunki, Incredibox, Horror Skunx, Cocomelon, Baby Shark, Kiboomers,
+  Super Simple Songs, Mother Goose, Sesame Street, Paw Patrol, Peppa Pig, Bluey, Daniel
+  Tiger, nursery rhymes, kids songs. MGMT's "Kids" is explicitly not matched.
+- `reclassify()` now scans every row, not only rows with genre text, and tags those as
+  `children`. Boot logged 11 newly classified; the library's children family went 28 → 39.
+- Because every taste filter already excludes that family, the rotation seed moved from
+  Sprunki to the last non-children track (Gojira) and the row filled from there — no new
+  client-side list to maintain. The setting still restores children's plays when turned on.
+
+Unit 12/12, API 55/55, design-check and smoke green.
+
 ### 2026-11-24 · Children's music stays out of the taste profile (`v484`)
 
 The library has children's tracks for a daughter; their plays were shaping top family,

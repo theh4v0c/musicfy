@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const H = require('../core/harmonic.js');
 const A = require('../core/agent.js');
+const G = require('../core/genre.js');
 
 const MINOR = { 1: 'G#', 2: 'D#', 3: 'A#', 4: 'F', 5: 'C', 6: 'G', 7: 'D', 8: 'A', 9: 'E', 10: 'B', 11: 'F#', 12: 'C#' };
 const MAJOR = { 1: 'B', 2: 'F#', 3: 'C#', 4: 'G#', 5: 'D#', 6: 'A#', 7: 'F', 8: 'C', 9: 'G', 10: 'D', 11: 'A', 12: 'E' };
@@ -117,4 +118,12 @@ test('a curly apostrophe is the same instruction', () => {
   assert.equal(A.cleanQuery('I don’t have it'), "I don't have it");
   assert.equal(A.planLocally('5 Gespona tracks I don’t have').intent, 'build_playlist');
   assert.equal(A.isFollowUp('make it darker'), true);
+});
+
+test('children’s music is recognised without a genre', () => {
+  assert.equal(G.looksChildren({ title: 'Sprunki (Get Funky)', artist: 'ANGRYHED' }), true);
+  assert.equal(G.looksChildren({ title: 'Friend Like You (Sped Up)', artist: 'Horror Skunx', album: 'Horror Skunx' }), true);
+  assert.equal(G.looksChildren({ title: 'Kids', artist: 'MGMT', album: 'Oracular Spectacular' }), false);
+  assert.equal(G.looksChildren({ genre: "Children's Music" }), true);
+  assert.equal(G.looksChildren({ genre: 'Techno' }), false);
 });

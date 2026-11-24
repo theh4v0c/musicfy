@@ -77,11 +77,29 @@ function familyOfString(genre) {
 /* Recompute families from the genre text already stored, without the network. Quiet
    rows whose family is missing or no longer matches are corrected; everything else is
    left exactly as it is. */
+/* Children's music from YouTube arrives with no genre at all: "Sprunki", "Incredibox",
+   "Horror Skunx". A family is the only thing the taste layer can filter on, so recognise
+   the brands as well as the genre text. Generic words like "kids" are only accepted in
+   the genre column: MGMT's "Kids" is not a children's record. */
+const CHILD_BRANDS = /\b(sprunki|incredibox|horror skunx|cocomelon|baby ?shark|kiboomers|super simple songs|mother goose|sesame street|paw patrol|peppa pig|bluey|daniel tiger|nursery rhymes?|kids songs?)\b/i;
+const CHILD_GENRE = /\b(child|children|kids?|toddler|nursery|preschool)\b/i;
+function looksChildren(t) {
+  if (!t) return false;
+  if (String(t.genre_family || '').toLowerCase() === 'children') return true;
+  if (CHILD_GENRE.test(String(t.genre || ''))) return true;
+  return CHILD_BRANDS.test(`${t.title || ''} ${t.artist || ''} ${t.album || ''}`);
+}
+
 function reclassify(db) {
   let changed = 0;
-  const rows = db.prepare("SELECT id, genre, genre_family FROM tracks WHERE genre IS NOT NULL AND genre != ''").all();
+  // every row, not only ones with genre text: a children's track may have no tags at all
+  const rows = db.prepare("SELECT id, title, artist, album, genre, genre_family FROM tracks").all();
   const upd = db.prepare('UPDATE tracks SET genre_family=? WHERE id=?');
   for (const r of rows) {
+    if (looksChildren(r)) {
+      if (r.genre_family !== 'children') { upd.run('children', r.id); changed += 1; }
+      continue;
+    }
     const fam = familyOfString(r.genre);
     // only ever fills a gap or corrects a wrong family; a genre we cannot classify must
     // not erase a family that came from the artist's tags
@@ -199,4 +217,4 @@ async function fillTracks(db, { limit = 100, onProgress = null } = {}) {
   return { artistsChecked: looked, tagged, families, remainingArtists: remaining };
 }
 
-module.exports = { fillTracks, fetchArtistTags, familyOf, familyOfString, genreOf, reclassify, restoreFromCache, FAMILIES };
+module.exports = { fillTracks, fetchArtistTags, familyOf, familyOfString, genreOf, reclassify, restoreFromCache, looksChildren, FAMILIES };
