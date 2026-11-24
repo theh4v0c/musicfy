@@ -48,7 +48,12 @@ function planLocally(text) {
   const t = String(text || '').toLowerCase();
   const countMatch = t.match(/(\d{1,3})\s*(?:[a-z-]+\s+){0,4}(?:songs?|tracks?|items?)/i);
   const count = countMatch ? Math.min(Number(countMatch[1]), 100) : 20;
-  const wantsPlaylist = /\b(playlist|set|mix|selection)\b/.test(t) || /\bcreate\b/.test(t)
+  // "build me 20 tracks of dark techno" is a draft request, not a library report. The
+  // verb list was missing every synonym of create except 'create', so the most natural
+  // way to ask for a set fell through to report_library and answered with a count.
+  const wantsPlaylist = /\b(playlist|set|mix|selection|lineup)\b/.test(t)
+    || /\b(create|build|make|curate|put together|throw together|assemble)\b/.test(t)
+    || /\b(give me|i need|i want|can you get|can i get)\b/.test(t)
     || /\b(something|anything)\b/.test(t) || /\bmusic for\b/.test(t);
   const wantsDownload = /\bdownload\b/.test(t);
   if (/\balbum\b/.test(t) && wantsDownload) {

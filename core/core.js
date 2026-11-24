@@ -1535,10 +1535,10 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // --- body cap: uploads get 64 MB, every other write gets 4 MB ---
+  // --- body cap: an upload is streamed to disk and is not capped. Every other write is. ---
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     const isUpload = u.pathname === '/api/upload/track' || /\/cover$/.test(u.pathname);
-    const cap = isUpload ? 64 * 1024 * 1024 : 4 * 1024 * 1024;
+    const cap = isUpload ? Infinity : 4 * 1024 * 1024;
     let bytes = 0;
     req.on('data', (c) => {
       bytes += c.length;
@@ -2047,12 +2047,23 @@ const server = http.createServer(async (req, res) => {
       const raw = String(u.searchParams.get('name') || 'upload.mp3');
       const name = raw.replace(/[^\w.\- ()\[\]]+/g, '_').slice(-160);
       if (!/\.(mp3|flac|m4a|ogg|opus|wav|aiff?)$/i.test(name)) return json(res, 400, { error: 'unsupported file type' });
-      const buf = await readBody(req);
-      if (!buf.length) return json(res, 400, { error: 'empty upload' });
       const dir = path.join(OWNED, 'upload');
       fs.mkdirSync(dir, { recursive: true });
       const dest = path.join(dir, name);
-      fs.writeFileSync(dest, buf);
+      const part = `${dest}.part`;
+      // streamed, not buffered: a 60MB wav used to be 60MB of RAM on a Raspberry Pi
+      const written = await new Promise((resolve, reject) => {
+        let n = 0;
+        const out = fs.createWriteStream(part);
+        req.on('data', (c) => { n += c.length; });
+        req.on('aborted', () => reject(new Error('upload aborted')));
+        req.on('error', reject);
+        out.on('error', reject);
+        out.on('finish', () => resolve(n));
+        req.pipe(out);
+      });
+      if (!written) { try { fs.unlinkSync(part); } catch {} return json(res, 400, { error: 'empty upload' }); }
+      fs.renameSync(part, dest);
       const meta = await probe(dest);
       const tid = upsertTrack({
         title: meta.title || name.replace(/\.[^.]+$/, ''),
