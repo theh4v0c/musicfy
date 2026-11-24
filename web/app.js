@@ -3129,12 +3129,12 @@ async function renderAskAi() {
   state.view = 'askai'; state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'A&R';
   const v = $('view');
-  v.innerHTML = `${heroBanner('ASSISTANT', 'A&R', 'Finds, builds and plays from your library — and says why.')}<div class="search-wrap">
-      <input class="search" id="ai-q" placeholder="Ask, build or teach: 20 dark techno at 130 · no Imagine Dragons" autocomplete="off">
+  v.innerHTML = `${heroBanner('ASSISTANT', 'A&R', 'Finds, builds and fetches — in your library, and outside it.')}<div class="search-wrap">
+      <input class="search" id="ai-q" placeholder="Ask, build or teach: 20 dark techno I don't have · no Imagine Dragons" autocomplete="off">
       <div class="ask-hint">
+        <button class="ask-ex">10 ambient tracks I don't have</button>
+        <button class="ask-ex">build a crate of 10 tracks by Aphex Twin</button>
         <button class="ask-ex">how much of my library has audio</button>
-        <button class="ask-ex">find techno tracks I never played</button>
-        <button class="ask-ex">create a playlist of 10 ambient tracks</button>
         <button class="ask-ex">tracks in Dm between 120 and 130 bpm</button>
       </div>
       <div class="ladder-state" id="ai-state"></div>

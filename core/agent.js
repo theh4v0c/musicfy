@@ -337,38 +337,46 @@ function ownedIdFor(db, dupKey) {
 // related artists of the tracks we picked, so online candidates follow taste, not a keyword
 async function onlineFill(db, localPicks, need, queryText) {
   if (need <= 0) return [];
-  let seeds = [...new Set(localPicks.map((t) => t.artist).filter(Boolean))].slice(0, 3);
-  let direct = null;
-  if (!seeds.length && queryText) {
-    direct = await deezer.artistSearch(queryText).catch(() => null);
-    if (direct) seeds = [direct.name];
-  }
-  if (!seeds.length) {
-    seeds = db.prepare(`SELECT artist FROM tracks WHERE artist IS NOT NULL AND artist != ''
-      GROUP BY artist ORDER BY COUNT(*) DESC LIMIT 3`).all().map((r) => r.artist);
-  }
   const inLib = new Set(db.prepare('SELECT dup_key FROM tracks').all().map((r) => r.dup_key));
   const seen = new Set();
   const seenTitle = new Set();
   const out = [];
-  const add = (t) => {
-    if (!t || !t.title || !t.artist || !t.duration || t.duration < 90) return;
-    const key = dupOf(t.artist.name, t.title);
-    if (inLib.has(key) || seen.has(key)) return;
+  const keep = (t) => {
+    if (!t || !t.title || !t.artist) return false;
+    if (t.duration && t.duration < 90) return false;
+    const key = dupOf(t.artist, t.title);
+    if (inLib.has(key) || seen.has(key)) return false;
     const titleKey = String(t.title).toLowerCase().replace(/\(.*?\)|\[.*?\]/g, ' ')
       .replace(/\b(remaster(?:ed)?|version|edit)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
-    if (seenTitle.has(titleKey)) return;
+    if (seenTitle.has(titleKey)) return false;
     seenTitle.add(titleKey);
     seen.add(key);
-    out.push({
-      title: t.title, artist: t.artist.name, album: (t.album && t.album.title) || '',
-      duration: t.duration, key, source: 'online', owned: false,
-      cover: (t.album && t.album.cover_medium) || null, preview: t.preview || null,
-    });
+    return true;
   };
-  if (direct) {
-    const top = await deezer.artistTop(direct.id, Math.max(need, 5)).catch(() => ({ data: [] }));
-    for (const t of (top.data || [])) { if (out.length >= need) break; add(t); }
+  const push = ({ title, artist, album, duration, cover, preview }) => {
+    if (out.length >= need || !keep({ title, artist, duration })) return;
+    out.push({ title, artist, album: album || '', duration: duration || null, source: 'online', owned: false,
+      cover: cover || null, preview: preview || null, key: dupOf(artist, title) });
+  };
+
+  /* The query comes first, and it goes to the catalogue that needs no key. The old order
+     asked Deezer to name an artist from the sentence; when that failed it silently fell
+     back to the most-played artists in the library, so "ambient I don't have" answered
+     with the user's own metal. A fallback must never pretend to be an answer. */
+  if (queryText) {
+    const cat = await identity.catalog(queryText, { songs: Math.max(need * 3, 25), albums: 0, artists: 0 }).catch(() => ({ songs: [] }));
+    for (const t of (cat.songs || [])) { if (out.length >= need) break; push(t); }
+    if (out.length < need) {
+      const songs = await identity.artistSongs(queryText, Math.max(need * 2, 20)).catch(() => []);
+      for (const t of songs) { if (out.length >= need) break; push(t); }
+    }
+  }
+
+  // related artists of what was picked keeps an unqualified request on taste
+  let seeds = [...new Set((localPicks || []).map((t) => t.artist).filter(Boolean))].slice(0, 3);
+  if (!seeds.length && queryText) {
+    const direct = await deezer.artistSearch(queryText).catch(() => null);
+    if (direct) seeds = [direct.name];
   }
   for (const seed of seeds) {
     if (out.length >= need) break;
@@ -380,8 +388,20 @@ async function onlineFill(db, localPicks, need, queryText) {
       const top = await deezer.artistTop(r.id, 5).catch(() => ({ data: [] }));
       for (const t of (top.data || [])) {
         if (out.length >= need) break;
-        add(t);
+        push({ title: t.title, artist: t.artist && t.artist.name, album: (t.album && t.album.title) || '',
+          duration: t.duration, cover: (t.album && t.album.cover_medium) || null, preview: t.preview || null });
       }
+    }
+  }
+
+  // a request with no subject at all ("surprise me") may start from what is played most
+  if (!out.length && !queryText) {
+    const top = db.prepare(`SELECT artist FROM tracks WHERE artist IS NOT NULL AND artist != ''
+      GROUP BY artist ORDER BY COUNT(*) DESC LIMIT 3`).all().map((r) => r.artist);
+    for (const seed of top) {
+      if (out.length >= need) break;
+      const songs = await identity.artistSongs(seed, 8).catch(() => []);
+      for (const t of songs) { if (out.length >= need) break; push(t); }
     }
   }
   return out;
@@ -494,7 +514,14 @@ async function propose(db, plan) {
 
     const onlyLocal = /\b(only|just|from)\s+(my|the)\s+library\b|\bno new\b/i.test(q);
     const wantsNew = /\b(new|discover|online|unreleased|not in my library|find more|don'?t limit)\b/i.test(q);
-    const discovery = onlyLocal ? 0 : wantsNew ? 1 : 0.25;
+    // "something I don't have" is a request for music that is NOT here. Without this the
+    // answer was the user's own shelf, which is the opposite of what was asked.
+    const outsideOnly = /\b(?:not in (?:my|the) library|outside (?:my|the) library|don'?t have|do not have|i don'?t own|unheard|new to me|discover)\b/i.test(q);
+    const discovery = onlyLocal ? 0 : (wantsNew || outsideOnly) ? 1 : 0.25;
+    // catalogue queries must not carry the instruction words
+    const searchQ = q
+      .replace(/\b(i|we|you|do|does|don'?t|do not|not|have|has|own|my|the|outside|in|library|unheard|discover|new|to|me|from|with|some|any|that|which|are|is|and|or|of|for|please|create|make|build|playlist|crate|set|tracks?|songs?)\b/gi, ' ')
+      .replace(/\s+/g, ' ').trim();
     let local = [];
     if (brief) {
       // the brief names people and things: match those, not the sentence
@@ -511,7 +538,8 @@ async function propose(db, plan) {
         return byArtist || byTheme;
       }).sort((a, b) => (b.owned || 0) - (a.owned || 0)).slice(0, count);
     }
-    if (!local.length) local = picked.tracks;
+    if (outsideOnly) local = [];
+    else if (!local.length) local = picked.tracks;
     // a brief goes outside unless the request says to stay in the library
     const allowExternal = !onlyLocal && (brief || plan.args.allowExternal !== false);
     // a brief that says "don't limit yourself" must leave room outside: 20 local tracks
@@ -524,11 +552,13 @@ async function propose(db, plan) {
       online = allowExternal ? await briefFill(db, { artists, themes, need: Math.max(0, count - local.length) }) : [];
     } else {
       targetOnline = onlyLocal ? 0 : Math.max(Math.round(count * discovery), count - local.length);
-      if (targetOnline > 0 && local.length > count - targetOnline) local = local.slice(0, Math.max(0, count - targetOnline));
-      online = await onlineFill(db, local, Math.min(targetOnline, Math.max(0, count - local.length)), picked.ctx.text.join(' '));
+      if (outsideOnly) targetOnline = count;
+      if (targetOnline > 0 && !outsideOnly && local.length > count - targetOnline) local = local.slice(0, Math.max(0, count - targetOnline));
+      online = await onlineFill(db, outsideOnly ? [] : local, Math.min(targetOnline, Math.max(0, count - local.length)), searchQ || picked.ctx.text.join(' '));
     }
-    // if the network gave us less than we hoped, top up from the rest of the local picks
-    if (local.length + online.length < count) {
+    // if the network gave us less than we hoped, top up from the rest of the local picks —
+    // unless the request was explicitly for music that is not here
+    if (!outsideOnly && local.length + online.length < count) {
       const rest = picked.tracks.filter((t) => !local.includes(t)).slice(0, count - local.length - online.length);
       local = [...local, ...rest];
     }
@@ -560,7 +590,9 @@ async function propose(db, plan) {
     // 'include some I don't have' is an instruction, not a search term
     const FILLER = /^(include|including|some|any|ones|tracks|songs|track|song|that|which|i|dont|don't|have|has|not|no|in|my|library|new|find|more|from|the|a|an|and|or|with|of|for|to|please|create|make|build|playlist|crate|set)$/i;
     const sourceName = picked.ctx.text.filter((w) => !FILLER.test(w)).join(' ');
-    if (!brief) {
+    if (outsideOnly) {
+      reasonBits = [`None of these are in your library.`, `${online.length} found in the catalogue${sourceName ? ` for “${sourceName}”` : ''}.`, online.length ? 'Confirm and I will fetch them.' : ''];
+    } else if (!brief) {
       reasonBits.push(online.length ? (local.length ? `${online.length} new from artists around your rotation.` : `${online.length} new from ${sourceName ? `“${sourceName}”` : 'the catalogue'}.`) : (targetOnline ? 'Nothing new turned up this time.' : 'All from your library.'));
     }
     return {

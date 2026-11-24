@@ -156,6 +156,13 @@ builds and acts.
 
 - **Answers** come from `/api/agent` for instructions and `/api/ask` for plain library
   questions; the reply names the intent and whether it was planned locally or by the model.
+- **Outside the library is a first-class outcome.** A request that names an artist, or says
+  "I don't have" / "not in my library" / "outside", is answered from the catalogue
+  (iTunes, no key needed), and comes back as a draft titled *Outside your library* with
+  *Create + download N*. Confirming creates the playlist and queues the audio. When the
+  catalogue is down the answer says so; it never substitutes the most-played artists from
+  the library and calls them a found result (that was the bug behind "ambient I don't
+  have" returning metal).
 - **Play N / Queue N** on any answer. Both act at once — playback is cheap and reversible
   — and a queue can be taken back with Undo on the same card.
 - **Teaching**: a message that starts with no / don't play / never play / avoid is not a
