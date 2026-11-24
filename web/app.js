@@ -2362,9 +2362,24 @@ async function importSpotifyTrack() {
   toast('Looking up the track', 4000);
   try {
     const r = await api('/api/mirror/track', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url }) });
-    state.allTracks = null;
-    toast(`Added ${r.title}`, 5000);
-    renderSongs(false);
+    // the list is cached for 90 seconds; without this the track exists on the server and
+    // is invisible in Songs and in search, which is exactly what "impossible to find" was
+    bustCache();
+    await renderSongs(false);
+    // put the row on screen instead of leaving the person to hunt for it
+    const q = document.getElementById('songs-q');
+    if (q) { q.value = r.title || ''; q.oninput({ target: q }); }
+    const row = document.querySelector(`.trow[data-tid="${r.track}"]`);
+    if (row) {
+      row.scrollIntoView({ block: 'center' });
+      row.classList.add('flash');
+      setTimeout(() => row.classList.remove('flash'), 2600);
+    }
+    toast(r.existing ? `“${r.title}” was already in your library` : `Imported “${r.title}”`, 5000);
+    // an imported track has no audio yet: start it through the row's own download path,
+    // which reports progress in place
+    const dl = row && row.querySelector('.tmore.tdl');
+    if (dl) dl.click();
   } catch { toast('Could not find that track', 5000); }
 }
 

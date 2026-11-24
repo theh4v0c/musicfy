@@ -2156,6 +2156,7 @@ const server = http.createServer(async (req, res) => {
           if (/^[A-Za-z0-9]{16,30}$/.test(target)) target = `https://open.spotify.com/track/${target}`;
           const info = await spotify.resolve(target);
           if (!info || info.kind !== 'track') return json(res, 404, { error: 'not a spotify track' });
+          const before = db.prepare('SELECT id FROM tracks WHERE spotify_id=?').get(info.id);
           const tid = upsertTrack({
             title: info.title, artist: (info.artists || []).join(', '),
             album: info.album || '', duration: info.durationMs ? info.durationMs / 1000 : null,
@@ -2166,7 +2167,7 @@ const server = http.createServer(async (req, res) => {
             const pos = db.prepare('SELECT COALESCE(MAX(position),-1)+1 p FROM playlist_tracks WHERE playlist_id=?').get(pid).p;
             db.prepare('INSERT OR IGNORE INTO playlist_tracks (playlist_id,track_id,position,added_at) VALUES (?,?,?,?)').run(pid, tid, pos, now());
           }
-          return json(res, 200, { track: tid, title: info.title, playlist: pid, added: !!pid });
+          return json(res, 200, { track: tid, title: info.title, playlist: pid, added: !!pid, existing: !!before });
         } catch (e) { return json(res, 502, { error: e.message }); }
       });
       return;

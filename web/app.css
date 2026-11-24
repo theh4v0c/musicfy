@@ -255,6 +255,10 @@ main.main { grid-area: main; display: flex; flex-direction: column; overflow: hi
 .trow:hover { background: var(--bg-elev); }
 .trow.selected { background: var(--bg-elev2); outline: 1px solid rgba(255,255,255,.12); }
 .trow.playing { background: var(--acc-soft); }
+/* a row that just arrived says so for a moment */
+.trow.flash { animation: row-flash 2.4s ease-out; }
+@keyframes row-flash { 0% { background: var(--acc-soft); box-shadow: inset 2px 0 0 var(--acc); } 100% { background: transparent; box-shadow: inset 2px 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .trow.flash { animation: none; background: var(--acc-soft); } }
 .trow.playing .tt, .trow.playing .tno-num { color: var(--acc); }
 .tno { position: relative; font-family: var(--mono); font-size: 11px; color: var(--fg-mute); text-align: center; height: 20px; }
 .tno-num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
