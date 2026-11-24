@@ -14,6 +14,7 @@ const state = {
   sort: { key: 'pos', dir: 1 },
   selectedIds: new Set(),
   anchorId: null,
+  arLast: null,          // the last A&R plan, for "make it darker" within a session
   artV: 0,
   longSets: false,
   artistName: null, albumName: null,
@@ -3234,9 +3235,13 @@ async function runAssistant(text, out, stateEl, box) {
       || /^\s*\d{1,3}\s+\S+/i.test(text);
     try {
       if (agentish) {
-        const a = await api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: text }), nocache: true });
+        // the server can merge a short follow-up into the previous plan; only the client
+        // knows what that plan was, and only for this session
+        const a = await api('/api/agent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ q: text, previous: state.arLast || undefined }), nocache: true });
+        if (a.plan) state.arLast = { question: a.question || text, plan: a.plan };
         stateEl.classList.remove('thinking');
-        stateEl.textContent = `${String(a.plan.intent).replace(/_/g, ' ')} · ${a.source === 'llm' ? 'planned by model' : 'planned locally'}`;
+        const src = String(a.source || 'rules');
+        stateEl.textContent = `${String(a.plan.intent).replace(/_/g, ' ')} · ${/llm/.test(src) ? 'model' : 'local'}${/follow/.test(src) ? ' · follow-up' : ''}${/outside/.test(src) ? ' · outside' : ''}`;
         if (!a.action) {
           const said = document.createElement('div');
           said.className = 'ai-said';

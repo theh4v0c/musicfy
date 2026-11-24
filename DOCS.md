@@ -157,6 +157,37 @@ for the first ten**, and at most two after that; the first credited name is what
 rule: three picks, three artists. Without it a fifteen-track recommendation was four
 artists, which reads as a discography rather than a recommendation.
 
+## What A&R remembers
+
+The model is **stateless**. Every request sends the sentence and the JSON schema; no chat
+history, no library rows, no profile. Nothing is fine-tuned, and no provider-side memory is
+used. That is deliberate: the model only decides what kind of request it is, and the app
+executes it deterministically.
+
+What persists, and where:
+
+| memory | where | survives a model/provider switch |
+|---|---|---|
+| "never play X" exclusions | `data/settings.json` → `taste_avoid`, written by a teaching sentence | yes |
+| taste fields (genres, artists, context), name, city, timezone, key format | `data/settings.json` | yes |
+| listening history, likes, playlists, analysis | `data/musicfy.db` | yes |
+| the last A&R plan ("make it darker") | the page, in memory | only for the session |
+| a draft (playlist proposal) | server memory, 15 minutes | no |
+
+Exclusions are applied after planning, by `core/exclude.js`, to picks, Flow, radio, the
+mix, recommendations, mood selection and now also to catalogue fills — a taught term
+cannot come back as a new download unless the request itself names the term. The model is
+never told your preferences, so changing model or provider cannot drop them; only the
+quality of parsing a complicated sentence changes. Basic verbs are planned by the local
+rules regardless of the provider.
+
+What is **not** stored: the sentences you type, any free-text fact ("remember that I
+like…"), and conversations. The only durable way to teach a preference is an exclusion
+("no Imagine Dragons") or the Taste fields in Settings.
+
+`data/settings.json` is not inside the nightly database snapshot; a full backup is the
+`data/` directory, not only `musicfy.db`.
+
 ## The A&R
 
 One destination (`askai`, labelled A&R in the sidebar and the phone bar). It answers,

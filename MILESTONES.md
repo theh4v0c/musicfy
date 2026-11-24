@@ -6,6 +6,22 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · A&R keeps the last draft; exclusions reach the catalogue (`v473`)
+
+Two gaps in "memory":
+
+- the server already merged a short follow-up into the previous plan, but the client never
+  sent one, so "make it darker" was a new text search. The page now keeps the last plan
+  for the session and sends it; the server answers `follow-up`/`follow-up+llm` and the
+  draft keeps its count and subject ("Techno darker").
+- taught exclusions filtered the library through mood, but not the catalogue fill, so a
+  banned artist or genre could return as a new download. A&R filters both local and online
+  results with `taste_avoid`, unless the request itself names the term.
+
+`DOCS.md` now states what is remembered and where: model stateless; exclusions, taste,
+history and playlists in the app's data; the last plan only for the session; drafts 15
+minutes; no transcript. That is also why a different model or provider cannot erase it.
+
 ### 2026-11-24 · uploads refuse duplicates instead of stacking them (`v472`)
 
 Uploading the same track twice used to give one track row and **two owned files**. The

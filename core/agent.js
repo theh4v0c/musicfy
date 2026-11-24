@@ -5,6 +5,20 @@ const identity = require('./identity');
 const queryEngine = require('./query');
 const mood = require('./mood');
 const deezer = require('./deezer');
+const exclude = require('./exclude');
+const fs = require('node:fs');
+const nodePath = require('node:path');
+const paths = require('./paths');
+
+/* What "never play X" means here too: mood filters the library for the request, but the
+   catalogue fill was never filtered, so a taught exclusion could come back as a new
+   download. A term named in the request still overrides the ban for that request. */
+function bannedTerms() {
+  try {
+    const s = JSON.parse(fs.readFileSync(nodePath.join(paths.DATA, 'settings.json'), 'utf8'));
+    return exclude.parse(s.taste_avoid || '');
+  } catch { return []; }
+}
 
 const INTENTS = ['build_playlist', 'search_tracks', 'artist_albums', 'download_album', 'download_missing', 'report_library'];
 
@@ -347,7 +361,7 @@ function listName(query) {
   const n = String(query || '')
     .replace(/[^\w\s'-]/g, ' ')
     .replace(/\b\d+\b/g, ' ')
-    .replace(/\b(create|make|build|please|a|an|the|playlist|of|with|for|me|tracks?|songs?|items?|top|rated|best|rating|at|around|about|bpm|by|like|i|my|library|outside|unheard|discover|don'?t|do|not|have|own)\b/gi, ' ')
+    .replace(/\b(create|make|build|please|a|an|the|playlist|of|with|for|me|tracks?|songs?|items?|top|rated|best|rating|at|around|about|bpm|by|like|i|my|library|outside|unheard|discover|don'?t|do|not|have|own|it|from|that|this)\b/gi, ' ')
     .replace(/\s+/g, ' ').trim();
   if (!n) return 'Made by request';
   return (n.charAt(0).toUpperCase() + n.slice(1)).slice(0, 60);
@@ -725,6 +739,12 @@ async function propose(db, plan) {
     if (wantedArtist && online.length) {
       const needle = wantedArtist.toLowerCase();
       online = online.filter((t) => String(t.artist || '').toLowerCase().includes(needle));
+    }
+    // the taught exclusions apply to the catalogue too, unless this request names the term
+    const avoidNow = bannedTerms().filter((w) => !q.toLowerCase().includes(w));
+    if (avoidNow.length) {
+      local = local.filter((t) => !exclude.matches(avoidNow, t));
+      online = online.filter((t) => !exclude.matches(avoidNow, t));
     }
     // if the network gave us less than we hoped, top up from the rest of the local picks —
     // unless the request was explicitly for music that is not here
