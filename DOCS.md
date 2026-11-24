@@ -154,17 +154,14 @@ with thumbnails). The client bumps `state.artV` so the header image URL changes 
 
 ## Loudness
 
-Two different things, and only one of them works on a phone.
+One mechanism only: **runtime gain**. With `normalize_loudness` on, the player sets
+`audio.volume` per track from the LUFS measured during analysis, towards
+`target_loudness` (default -12). It only ever attenuates — never boosts, never touches a
+file, and therefore cannot change a track's dynamics.
 
-**Runtime gain** (`normalize_loudness`, `target_loudness`): the player sets `audio.volume`
-per track, using the LUFS measured during analysis. It never boosts, only attenuates.
-iOS ignores `audio.volume` completely, so this is a desktop and Android feature.
-
-**File normalisation** (`POST /api/normalize`): measures each file with ffmpeg's EBU R128
-meter and rewrites it with a two-pass `loudnorm` to the target (default -12 LUFS, TP
--1.5). Files already within 1 dB are skipped; lossy files are re-encoded once in the same
-codec at high bitrate. Works everywhere, including an iPhone and a CDJ. Progress is in
-`GET /api/normalize`; Settings shows it, and a single track can be done from its row menu.
+iOS ignores `audio.volume` completely, so this is a desktop and Android feature. There is
+deliberately **no file-rewriting path**: re-encoding a track to hit a loudness number
+compresses its peaks, and that is not something a library should do behind your back.
 
 ## DJ export
 

@@ -217,7 +217,6 @@ function openCtx(t, x, y) {
     ${(hasAudio(t) && Number(t.bitrate || 0) > 0 && Number(t.bitrate) < 180000) ? '<button data-act="upgrade">Find higher quality</button>' : ''}
     ${hasAudio(t) ? '<button data-act="tofile">Download to device</button>' : ''}
     ${hasAudio(t) ? `<button data-act="analyze">${t.bpm ? 'Re-analyze' : 'Analyze'} BPM &amp; key</button>` : ''}
-    ${hasAudio(t) ? '<button data-act="normalize">Normalize this track\'s file</button>' : ''}
     ${hasAudio(t) ? '<button data-act="tags">Write Traktor tags</button>' : ''}
     ${hasAudio(t) ? `<button data-act="offline">${state.offlineIds && state.offlineIds.has(t.id) ? 'Remove from offline' : 'Save for offline'}</button>` : ''}
     <button data-act="addpl">Add to playlist</button>
@@ -408,14 +407,6 @@ $('ctx').addEventListener('click', async (e) => {
     } catch { toast('Remove failed'); }
   }
   if (act === 'cover-pl') { openCoverToPlaylist(t); return; }
-  if (act === 'normalize') {
-    try {
-      const r = await api('/api/normalize', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: [t.id], target: Number((state.settings || {}).target_loudness) || -12 }) });
-      if (r.error) toast('Normalization already running', 4000);
-      else toast(`Normalizing “${t.title}”`, 5000);
-    } catch { toast('Could not start normalization', 4000); }
-    return;
-  }
   if (act === 'deltrack') {
     // the menu knows about the selection: right-clicking one of twelve selected tracks
     // means the twelve, not the one under the cursor
@@ -2517,9 +2508,7 @@ async function renderSettings() {
       <section class="set-card">
         <h2>Playback</h2>
         <label class="set-check"><input type="checkbox" id="set-normalize"${s.normalize_loudness ? ' checked' : ''}> Normalize loudness</label>
-        <p class="set-note">Turns loud tracks down towards a common level, using the loudness measured during analysis. It never boosts, so it cannot add distortion. This is a runtime gain, and <b>iOS ignores per-track volume entirely</b> — on a phone or in a car it does nothing. The button below fixes the file itself, which works everywhere.</p>
-        <div class="set-tools"><button class="btn btn-ghost" id="set-norm-files" type="button">Normalize the files to the target level</button></div>
-        <p class="set-note" id="set-norm-state">Not run yet. Files already within 1 dB of the target are skipped.</p>
+        <p class="set-note">Turns loud tracks down towards a common level, using the loudness measured during analysis. It only ever attenuates — it cannot add distortion and it never rewrites a file. <b>iOS ignores per-track volume</b>, so on a phone or in a car this does nothing.</p>
         <label class="set-check"><input type="checkbox" id="set-fade"${s.fade_on_play_ms ? ' checked' : ''}> Fade tracks in and out</label>
         <label>Fade length
           <select id="set-fadems">
@@ -2686,48 +2675,6 @@ async function renderSettings() {
       if (saveMsg) { saveMsg.textContent = 'Could not save'; saveMsg.dataset.tone = 'bad'; }
     }
   };
-  // file-level normalisation: the only version that works on an iPhone and in a car
-  const normBtn = document.getElementById('set-norm-files');
-  const normEl = document.getElementById('set-norm-state');
-  const paintNorm = (st) => {
-    if (!normEl || !st) return;
-    if (st.running) {
-      normEl.textContent = `Normalizing ${st.done + st.failed + st.skipped} of ${st.total}${st.last && st.last.title ? ` · ${String(st.last.title).slice(0, 40)}` : ''}`;
-      normEl.dataset.tone = 'ok';
-    } else if (st.total) {
-      normEl.textContent = `Done: ${st.done} rewritten, ${st.skipped} already on target, ${st.failed} failed${st.last && st.last.error ? ` (last error: ${st.last.error})` : ''}`;
-      normEl.dataset.tone = st.failed ? 'bad' : 'ok';
-    }
-  };
-  const pollNorm = async () => {
-    for (let i = 0; i < 600; i += 1) {
-      await new Promise((r) => setTimeout(r, 2000));
-      try {
-        const st = await api('/api/normalize', { nocache: true });
-        paintNorm(st);
-        if (!st.running) return;
-      } catch { return; }
-    }
-  };
-  if (normBtn) {
-    normBtn.onclick = async () => {
-      const target = Number(document.getElementById('set-target') ? document.getElementById('set-target').value.replace(/[^\d.-]/g, '') : -12) || -12;
-      const ok = confirm(`Rewrite audio files to ${target} dB? Lossy files are re-encoded once, losslessly analysed first. Files already within 1 dB are skipped. This cannot be undone.`);
-      if (!ok) return;
-      normBtn.disabled = true;
-      try {
-        const r = await api('/api/normalize', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ target }) });
-        if (r.error) { if (normEl) normEl.textContent = 'Already running'; return; }
-        if (normEl) { normEl.textContent = `Started: ${r.started} files`; normEl.dataset.tone = 'ok'; }
-        await pollNorm();
-        bustCache();
-      } catch (e) {
-        if (normEl) { normEl.textContent = `Could not start: ${e.message || 'unknown'}`; normEl.dataset.tone = 'bad'; }
-      } finally { normBtn.disabled = false; }
-    };
-    api('/api/normalize', { nocache: true }).then((st) => { if (st && st.total) { paintNorm(st); if (st.running) pollNorm(); } }).catch(() => {});
-  }
-
   const cb = document.getElementById('set-clearbuf');
   if (cb) cb.onclick = async () => {
     try { for (const id of [...preload.keys()]) releasePreload(id); } catch {}
