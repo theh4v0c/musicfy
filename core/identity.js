@@ -1,11 +1,13 @@
 'use strict';
+const paths = require('./paths');
+const nodePath = require('node:path');
 // Canonical identity from the iTunes search API: free, no key, no account, and it
 // returns exact duration, album, year and a coarse genre. MusicBrainz stays as the
 // ISRC source but it rate limits hard, so it is optional here.
 const https = require('node:https');
 const fs = require('node:fs');
 
-const CACHE = '/opt/musicfy/data/identity-cache.json';
+const CACHE = nodePath.join(paths.DATA, 'identity-cache.json');
 let cache = null;
 let lastCall = 0;
 

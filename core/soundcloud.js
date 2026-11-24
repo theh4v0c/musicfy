@@ -1,4 +1,6 @@
 'use strict';
+const paths = require('./paths');
+const nodePath = require('node:path');
 // SoundCloud, the way scdl does it: scrape a public client_id from the site, use the
 // public API, and take the artist's original file when downloads are enabled.
 // No account, no payment. Falls back to the best transcoding otherwise.
@@ -6,7 +8,7 @@ const https = require('node:https');
 const fs = require('node:fs');
 
 const API = 'https://api-v2.soundcloud.com';
-const CACHE = '/opt/musicfy/data/sc-client.json';
+const CACHE = nodePath.join(paths.DATA, 'sc-client.json');
 let clientId = null;
 let clientAt = 0;
 
@@ -85,7 +87,7 @@ async function getClientId() {
     try { await req('https://api.soundcloud.com/'); } catch {}
     const { execFileSync } = require('node:child_process');
     try {
-      execFileSync('/opt/musicfy/ytdlp-venv/bin/yt-dlp',
+      execFileSync(paths.YTDLP,
         ['--no-warnings', '--print', 'id', 'https://api.soundcloud.com/tracks/3419282'],
         { timeout: 60000, stdio: 'ignore' });
     } catch {}
@@ -143,7 +145,7 @@ async function progressiveUrl(url) {
 
 // original file downloads need an OAuth token from a free SoundCloud session.
 // No plan is required, but the endpoint rejects anonymous requests with 401.
-const TOKEN_FILE = '/opt/musicfy/data/soundcloud.json';
+const TOKEN_FILE = nodePath.join(paths.DATA, 'soundcloud.json');
 function authHeaders() {
   try {
     const j = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));

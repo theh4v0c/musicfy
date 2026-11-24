@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 
-const DB = process.env.MUSICFY_DB || '/opt/musicfy/data/musicfy.db';
+const DB = paths.DB;
 const dir = process.argv[2];
 const reset = process.argv.includes('--reset');
 if (!dir || !fs.existsSync(dir)) { console.error('usage: import-history.js <dir> [--reset]'); process.exit(1); }

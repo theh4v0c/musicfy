@@ -1,4 +1,6 @@
 'use strict';
+const paths = require('./paths');
+const nodePath = require('node:path');
 const exclude = require('./exclude');
 // Turns a plain request into a scored selection from the local library.
 // No model: style and mood are keyword presets, the ranking is numbers we already store.
@@ -139,7 +141,7 @@ function select(db, query, count) {
 
   let avoid = [];
   try {
-    const s = JSON.parse(fs.readFileSync('/opt/musicfy/data/settings.json', 'utf8'));
+    const s = JSON.parse(fs.readFileSync(nodePath.join(paths.DATA, 'settings.json'), 'utf8'));
     avoid = exclude.parse(s.taste_avoid || '');
   } catch {}
   // asking for a banned thing by name overrides the ban for that request

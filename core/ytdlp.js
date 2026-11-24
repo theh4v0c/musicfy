@@ -1,8 +1,10 @@
 // MUSICFY ladder: yt-dlp rung. No accounts, no registration, sovereign.
 'use strict';
+const paths = require('./paths');
+const nodePath = require('node:path');
 const { execFile } = require('node:child_process');
 
-const YTDLP = '/opt/musicfy/ytdlp-venv/bin/yt-dlp';
+const YTDLP = paths.YTDLP;
 
 // ytsearch -> normalized candidates
 function searchYoutube(seed, { limit = 8 } = {}) {

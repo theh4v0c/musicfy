@@ -1,10 +1,12 @@
 'use strict';
+const paths = require('./paths');
+const nodePath = require('node:path');
 // Genre comes from MusicBrainz artist tags, not from guessing. Free, no account,
 // one request per artist, cached on disk so the library only costs one pass.
 const https = require('node:https');
 const fs = require('node:fs');
 
-const CACHE = '/opt/musicfy/data/genre-cache.json';
+const CACHE = nodePath.join(paths.DATA, 'genre-cache.json');
 const UA = 'MUSICFY/1.0 ( self-hosted music )';
 let cache = null;
 let lastCall = 0;

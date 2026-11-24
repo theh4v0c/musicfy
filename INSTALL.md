@@ -152,8 +152,27 @@ None of this is hidden in the app; it is the honest distance between "works on m
   Unset = no auth (current LAN behaviour).
 - **`MUSICFY_ORIGINS`** — comma-separated extra origins allowed to make writes
   (needed when a proxy rewrites `Host`, e.g. `https://musicfy.example.com`).
-- **`MUSICFY_BIND`** — optional bind host; set `127.0.0.1` when a local reverse proxy
-  is the only client.
+- **`MUSICFY_BIND`** — bind host, default `0.0.0.0`. Set `127.0.0.1` when a reverse proxy
+  on the same machine is the only client; the server warns at boot when it is listening on
+  every interface without a token.
+
+## Where things live (env)
+
+Nothing in the code spells an absolute path. An installation says where its parts are:
+
+| variable | default | what it is |
+|---|---|---|
+| `MUSICFY_HOME` | `/opt/musicfy` | root for data, logs, backups, venvs |
+| `MUSICFY_DATA` | `$MUSICFY_HOME/data` | database, settings, caches, covers |
+| `MUSICFY_OWNED` | `$MUSICFY_HOME/owned` | the audio library (may be another mount) |
+| `MUSICFY_DB` | `$MUSICFY_DATA/musicfy.db` | the SQLite file |
+| `MUSICFY_BIN` | `$MUSICFY_HOME/ytdlp-venv/bin` | where the downloader lives |
+| `MUSICFY_YTDLP` | `$MUSICFY_BIN/yt-dlp` | the downloader binary |
+| `MUSICFY_PYTHON` | `$MUSICFY_HOME/essentia-venv/bin/python` | the analyser interpreter |
+| `MUSICFY_BACKUP_DIR` | `$MUSICFY_HOME/backups` | nightly snapshots |
+| `MUSICFY_PORT` | `8710` | listen port |
+
+A second machine needs only those variables; it inherits behaviour, not your paths.
 
 Built-in defences: writes require a same-origin `Origin`; request bodies are capped
 (4 MB, 64 MB uploads); the generic streamer refuses loopback/private/metadata URLs;

@@ -1,11 +1,13 @@
 'use strict';
+const paths = require('./paths');
+const nodePath = require('node:path');
 // Turns a sentence into query filters through the WNL LLM endpoint.
 // The model never sees the library: it only produces a structured request.
 const https = require('node:https');
 const fs = require('node:fs');
 const { URL } = require('node:url');
 
-const CONFIG = '/opt/musicfy/data/llm.json';
+const CONFIG = nodePath.join(paths.DATA, 'llm.json');
 
 function config() {
   try {
@@ -94,7 +96,7 @@ function askRaw(prompt, timeoutMs = 10000) {
 
 // write the model endpoint from the Settings page
 function saveConfig(patch) {
-  const file = '/opt/musicfy/data/llm.json';
+  const file = CONFIG;
   let c = {};
   try { c = JSON.parse(require('node:fs').readFileSync(file, 'utf8')); } catch {}
   for (const k of ['base_url', 'api_key', 'model']) {

@@ -25,7 +25,6 @@ CREATE TABLE IF NOT EXISTS tracks (
   spotify_id  TEXT,
   isrc        TEXT,
   bpm         REAL,                      -- essentia, null until analysis
-  key_sig     TEXT,
   mood        TEXT,
   has_art     INTEGER DEFAULT 0,
   added_at    INTEGER NOT NULL,

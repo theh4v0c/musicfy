@@ -1,11 +1,13 @@
 'use strict';
+const paths = require('./paths');
+const nodePath = require('node:path');
 // Queue and run the Python analyser, one process per batch, a couple in parallel.
 // Results land in the tracks table so the UI can show BPM and key.
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 
-const PY = '/opt/musicfy/essentia-venv/bin/python';
-const SCRIPT = '/opt/musicfy/core/analyze.py';
+const PY = paths.ESSENTIA_PY;
+const SCRIPT = nodePath.join(__dirname, 'analyze.py');
 
 function ensureColumns(db) {
   for (const col of ['bpm REAL', 'key TEXT', 'key_scale TEXT', 'key_confidence REAL', 'loudness REAL', 'energy REAL', 'analyzed_at INTEGER', 'beat_grid TEXT', 'sections TEXT', 'energy10 REAL']) {

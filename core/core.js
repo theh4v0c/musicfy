@@ -32,15 +32,21 @@ const tagwrite = require('./tagwrite');
 const transcode = require('./transcode');
 const { DatabaseSync } = require('node:sqlite');
 
-const ROOT = process.env.MUSICFY_HOME || '/opt/musicfy';
+// every path comes from ./paths, which reads what the installation set
+const paths = require('./paths');
+const ROOT = paths.ROOT;
 // the audio library can live on another mount; never assume it is under ROOT
-const OWNED = process.env.MUSICFY_OWNED || path.join(ROOT, 'owned');
-const DB_PATH = process.env.MUSICFY_DB || path.join(ROOT, 'data', 'musicfy.db');
-const PORT = Number(process.env.MUSICFY_PORT || 8710);
+const OWNED = paths.OWNED;
+const DB_PATH = paths.DB;
+const PORT = paths.PORT;
+const BIND = paths.BIND;
+const SETTINGS_FILE = path.join(paths.DATA, 'settings.json');
 const WNL = process.env.WNL_URL || '';
 const WEB = path.join(__dirname, '..', 'web');
-const COVER_DIR = path.join(ROOT, 'data', 'covers');
+const COVER_DIR = path.join(paths.DATA, 'covers');
 fs.mkdirSync(COVER_DIR, { recursive: true });
+fs.mkdirSync(paths.DATA, { recursive: true });
+fs.mkdirSync(paths.LOGS, { recursive: true });
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 const db = new DatabaseSync(DB_PATH);
@@ -479,7 +485,7 @@ function searchDownloadFallback(b, dir, finish, ingestDownloaded) {
     '--max-downloads', '1', '--match-filter', 'duration > 2',
     '--extractor-args', 'youtube:player_client=android',
     '-o', path.join(dir, '%(title)s.%(ext)s'), `ytsearch3:${query}`];
-  execFile('/opt/musicfy/ytdlp-venv/bin/yt-dlp', args,
+  execFile(paths.YTDLP, args,
     { timeout: 10 * 60 * 1000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (!err) return ingestDownloaded();
       const tail = String(stderr || '').split('\n').filter(Boolean).slice(-3).join(' | ').slice(0, 300);
@@ -490,7 +496,7 @@ function searchDownloadFallback(b, dir, finish, ingestDownloaded) {
 function soundcloudFallbackDownload(b, dir, finish, ingestDownloaded, setProgress) {
   const run = (url) => {
     setProgress(5);
-    execFile('/opt/musicfy/ytdlp-venv/bin/yt-dlp',
+    execFile(paths.YTDLP,
       ['--no-warnings', '--print', '%(duration)s', '-f', 'bestaudio/best', url],
       { timeout: 90000, maxBuffer: 1024 * 1024 }, (probeErr, probeOut) => {
         const probed = Number(String(probeOut || '').trim().split('\n')[0]) || 0;
@@ -498,13 +504,13 @@ function soundcloudFallbackDownload(b, dir, finish, ingestDownloaded, setProgres
         if (probed && expected && probed < expected * 0.6 && probed < 60) {
           return finish('error', `soundcloud preview only (${Math.round(probed)}s)`);
         }
-        execFile('/opt/musicfy/ytdlp-venv/bin/yt-dlp',
+        execFile(paths.YTDLP,
           ['--no-warnings', '-f', 'hls_aac_160k/hls_aac_96k/hls_mp3_128/bestaudio',
             '-x', '--audio-format', 'm4a',
             '-o', path.join(dir, '%(title)s.%(ext)s'), url],
           { timeout: 15 * 60 * 1000, maxBuffer: 4 * 1024 * 1024 }, (err) => {
             if (!err) return ingestDownloaded();
-            execFile('/opt/musicfy/ytdlp-venv/bin/yt-dlp',
+            execFile(paths.YTDLP,
               ['--no-warnings', '-f', 'bestaudio/best', '-x', '--audio-format', 'm4a',
                 '-o', path.join(dir, '%(title)s.%(ext)s'), url],
               { timeout: 30 * 60 * 1000, maxBuffer: 4 * 1024 * 1024 }, (err2) => {
@@ -527,7 +533,7 @@ function soundcloudFallbackDownload(b, dir, finish, ingestDownloaded, setProgres
 // the free-text "keep out of picks" field, parsed once per call into real terms
 function tasteAvoid() {
   try {
-    const s = JSON.parse(fs.readFileSync('/opt/musicfy/data/settings.json', 'utf8'));
+    const s = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
     return exclude.parse(s.taste_avoid || '');
   } catch { return []; }
 }
@@ -795,7 +801,7 @@ const LADDER_TTL = Number(process.env.MUSICFY_LADDER_TTL || 5 * 60 * 1000);
 const ladderCache = new Map();
 
 // 4. schema version, so column changes stop being invisible
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 function currentVersion() {
   try {
     const row = db.prepare('SELECT value FROM meta WHERE key=?').get('schema_version');
@@ -837,6 +843,24 @@ function migrate() {
         INSERT INTO tracks_fts(rowid, title, artist, album) VALUES (new.id, new.title, COALESCE(new.artist,''), COALESCE(new.album,''));
       END`);
     }],
+    [3, () => {
+      // analysis columns belong to the schema, not to the Python analyser's first touch.
+      // Without this a fresh install answers 500 on /api/tracks until something happens
+      // to call /api/analyze/status. Idempotent: a DB that has them is untouched.
+      for (const sql of [
+        'ALTER TABLE tracks ADD COLUMN key TEXT',
+        'ALTER TABLE tracks ADD COLUMN key_scale TEXT',
+        'ALTER TABLE tracks ADD COLUMN key_confidence REAL',
+        'ALTER TABLE tracks ADD COLUMN beat_grid TEXT',
+        'ALTER TABLE tracks ADD COLUMN analyzed_at INTEGER',
+        'ALTER TABLE tracks ADD COLUMN sections TEXT',
+        'ALTER TABLE tracks ADD COLUMN energy10 REAL',
+        'ALTER TABLE tracks ADD COLUMN track_no INTEGER',
+        'ALTER TABLE tracks ADD COLUMN dup_key TEXT',
+      ]) { try { db.exec(sql); } catch {} }
+      try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS tracks_dup_key ON tracks(dup_key)'); } catch {}
+      try { db.exec('ALTER TABLE tracks DROP COLUMN key_sig'); } catch {}
+    }],
   ];
   for (const [version, run] of steps) {
     if (at >= version) continue;
@@ -848,11 +872,12 @@ function migrate() {
 
 // 5. dependencies must fail loudly at boot, not silently mid download
 function checkDependencies() {
-  const bins = [['/usr/bin/ffprobe', 'ffprobe'], ['/usr/bin/ffmpeg', 'ffmpeg'], ['/opt/musicfy/ytdlp-venv/bin/yt-dlp', 'yt-dlp']];
+  const onPath = (name) => String(process.env.PATH || '').split(':').filter(Boolean)
+    .some((d) => { try { return fs.existsSync(path.join(d, name)); } catch { return false; } });
+  const bins = [['ffprobe', 'ffprobe'], ['ffmpeg', 'ffmpeg'], [paths.YTDLP, 'yt-dlp']];
   for (const [full, name] of bins) {
-    if (!fs.existsSync(full) && !fs.existsSync(`/usr/bin/${name}`) && !fs.existsSync(`/usr/local/bin/${name}`)) {
-      console.error('[deps] MISSING', name);
-    }
+    const ok = path.isAbsolute(full) ? fs.existsSync(full) : onPath(name);
+    if (!ok) console.error('[deps] MISSING', name, '— install it, or point PATH / MUSICFY_YTDLP at it');
   }
 }
 
@@ -1040,7 +1065,7 @@ const BOOTED_AT = Math.floor(Date.now() / 1000);
 // 'best' keeps whatever the source serves instead of transcoding to a lossy copy
 function downloadFormat() {
   try {
-    const s = JSON.parse(fs.readFileSync('/opt/musicfy/data/settings.json', 'utf8'));
+    const s = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
     return s.preferred_format || 'best';
   } catch { return 'best'; }
 }
@@ -1276,7 +1301,7 @@ function startLadderDownload(jobId, b, onDone) {
     // cover, and downloading it only to reject it left the track without audio
     const NO_COVER = 'duration > 2 & title !~= "(?i)(cover|karaoke|tutorial|lesson|backing track|\\btabs?\\b)"';
     const trySource = (source, next) => {
-      const child = spawn('/opt/musicfy/ytdlp-venv/bin/yt-dlp', [
+      const child = spawn(paths.YTDLP, [
         '--no-warnings', '--newline', ...audioArgs(),
         '--max-downloads', '1', '--match-filter', NO_COVER,
         '-o', path.join(dir, '%(title)s.%(ext)s'), source,
@@ -1295,7 +1320,7 @@ function startLadderDownload(jobId, b, onDone) {
     const yt = String(b.url || '').includes('watch')
       ? b.url
       : `https://www.youtube.com/watch?v=${b.id}`;
-    const child = spawn('/opt/musicfy/ytdlp-venv/bin/yt-dlp', [
+    const child = spawn(paths.YTDLP, [
       '--no-warnings', '--newline', ...audioArgs(),
       '--concurrent-fragments', '4', '--retries', '3', '--fragment-retries', '3',
       '-o', path.join(dir, '%(title)s.%(ext)s'), yt,
@@ -1311,7 +1336,7 @@ function startLadderDownload(jobId, b, onDone) {
         if (index >= clients.length) {
           // last resort: let yt-dlp search and take the first that works
           const query = `ytsearch1:${[b.artist, b.title].filter(Boolean).join(' ')}`;
-          const retry = spawn('/opt/musicfy/ytdlp-venv/bin/yt-dlp', [
+          const retry = spawn(paths.YTDLP, [
             '--no-warnings', '--newline', '-x', '--audio-format', 'mp3', '--audio-quality', '0',
             '--match-filter', 'duration > 2',
             '--extractor-args', 'youtube:player_client=android',
@@ -1328,7 +1353,7 @@ function startLadderDownload(jobId, b, onDone) {
           });
           return;
         }
-        const attempt = spawn('/opt/musicfy/ytdlp-venv/bin/yt-dlp', [
+        const attempt = spawn(paths.YTDLP, [
           '--no-warnings', '--newline', '-x', '--audio-format', 'mp3', '--audio-quality', '0',
           '--extractor-args', `youtube:player_client=${clients[index]}`,
           '-o', path.join(dir, '%(title)s.%(ext)s'), yt,
@@ -1378,7 +1403,7 @@ function startLadderDownload(jobId, b, onDone) {
       return soundcloudFallbackDownload(b, dir, finish, ingestDownloaded, setProgress);
     }).catch(() => soundcloudFallbackDownload(b, dir, finish, ingestDownloaded, setProgress));
   } else if ((b.rung === 'bandcamp' || b.rung === 'generic') && (b.url || b.id)) {
-    execFile('/opt/musicfy/ytdlp-venv/bin/yt-dlp',
+    execFile(paths.YTDLP,
       ['--no-warnings', '-x', '--audio-format', 'mp3', '--audio-quality', '0',
         '-o', path.join(dir, '%(title)s.%(ext)s'), b.url || b.id],
       { timeout: 15 * 60 * 1000, maxBuffer: 4 * 1024 * 1024 }, (err) => {
@@ -1854,7 +1879,7 @@ const server = http.createServer(async (req, res) => {
       // start (or join) the fetch, then feed the client from the growing file
       if (!scStreamJobs.has(key)) {
         const tpl = path.join(dir, key + '.%(ext)s');
-        const child = spawn('/opt/musicfy/ytdlp-venv/bin/yt-dlp',
+        const child = spawn(paths.YTDLP,
           ['--no-warnings', '-x', '--audio-format', 'mp3', '--audio-quality', '0', '-o', tpl, target],
           { stdio: ['ignore', 'ignore', 'ignore'] });
         const job = new Promise((resolve) => child.on('close', resolve));
@@ -2134,7 +2159,7 @@ const server = http.createServer(async (req, res) => {
 
     // rescan the history folder for newly delivered exports
     if (u.pathname === '/api/history/scan' && req.method === 'POST') {
-      const HISTORY_DIR = '/opt/musicfy/data/history';
+      const HISTORY_DIR = path.join(paths.DATA, 'history');
       try {
         const out = await new Promise((resolve, reject) => {
           execFile(process.execPath, [path.join(__dirname, 'import-history.js'), HISTORY_DIR],
@@ -2546,7 +2571,7 @@ const server = http.createServer(async (req, res) => {
 
     // settings: model endpoint, keys, profile
     if (u.pathname === '/api/settings') {
-      const file = '/opt/musicfy/data/settings.json';
+      const file = SETTINGS_FILE;
       if (req.method === 'GET') {
         let s = {};
         try { s = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
@@ -2598,7 +2623,7 @@ const server = http.createServer(async (req, res) => {
               } catch {}
             }
           }
-          fs.mkdirSync('/opt/musicfy/data', { recursive: true });
+          fs.mkdirSync(paths.DATA, { recursive: true });
           fs.writeFileSync(file, JSON.stringify(s, null, 2), { mode: 0o600 });
           // auto-download threshold lives in the DB settings table, not settings.json
           if (b.auto_download_plays !== undefined) setSetting('auto_download_plays', Math.max(0, Math.min(50, Number(b.auto_download_plays) || 0)));
@@ -2698,7 +2723,7 @@ const server = http.createServer(async (req, res) => {
     // personalised greeting: name from settings, time of day, live weather
     if (u.pathname === '/api/greeting') {
       let s = {};
-      try { s = JSON.parse(fs.readFileSync('/opt/musicfy/data/settings.json', 'utf8')); } catch {}
+      try { s = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); } catch {}
       const rawName = String(s.display_name || '').trim().split(/\s+/)[0] || '';
       const name = rawName ? rawName.charAt(0).toUpperCase() + rawName.slice(1).toLowerCase() : '';
       const tz = s.timezone || 'UTC';
@@ -3677,7 +3702,7 @@ const server = http.createServer(async (req, res) => {
           fs.mkdirSync('/tmp/musicfy-sc', { recursive: true });
           const job = new Promise((resolve, reject) => {
             const tpl = path.join('/tmp/musicfy-sc', key + '.%(ext)s');
-            const child = spawn('/opt/musicfy/ytdlp-venv/bin/yt-dlp', [
+            const child = spawn(paths.YTDLP, [
               '--no-warnings', '-x', '--audio-format', 'mp3', '--audio-quality', '0', '-o', tpl, target,
             ], { stdio: ['ignore', 'ignore', 'pipe'] });
             child.stderr.on('data', () => {});
@@ -3773,7 +3798,7 @@ const server = http.createServer(async (req, res) => {
         try {
           const b = JSON.parse(body || '{}');
           if (!b.token) return json(res, 400, { error: 'token required' });
-          const f = '/opt/musicfy/data/soundcloud.json';
+          const f = path.join(paths.DATA, 'soundcloud.json');
           fs.writeFileSync(f, JSON.stringify({ token: b.token }, null, 2), { mode: 0o600 });
           return json(res, 200, { ok: true });
         } catch (e) { return json(res, 400, { error: e.message }); }
@@ -4573,6 +4598,12 @@ setInterval(() => {
 server.keepAliveTimeout = 75_000;
 server.headersTimeout = 80_000;
 
-server.listen(PORT, '0.0.0.0', () => log('boot', `core listening on ${PORT}`));
+server.listen(PORT, BIND, () => {
+  log('boot', `core listening on ${BIND}:${PORT}`);
+  const open = BIND === '0.0.0.0' || BIND === '::';
+  if (open && !process.env.MUSICFY_TOKEN) {
+    console.error('[auth] open bind with no MUSICFY_TOKEN — anyone on this network can read and change the library');
+  }
+});
 console.log(`MUSICFY core on :${PORT}`);
 warmCovers().catch(e => log('error', `cover warm: ${e.message}`));
