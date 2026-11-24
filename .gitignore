@@ -13,8 +13,13 @@ data/
 *.log
 node_modules/
 
-# secrets
-llm.json
-soundcloud.json
-settings.json
-tokens.json
+# secrets live under data/ — design/tokens.json is the design contract and is tracked
+data/llm.json
+data/soundcloud.json
+data/sc-client.json
+data/settings.json
+data/tokens.json
+
+# python bytecode
+__pycache__/
+*.pyc
