@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS files (
   bitrate     INTEGER,
   size        INTEGER,
   mtime       INTEGER,
+  sha256      TEXT,                      -- identical bytes are the same file, whatever it is called
   added_at    INTEGER NOT NULL
 );
 

@@ -838,7 +838,7 @@ const LADDER_TTL = Number(process.env.MUSICFY_LADDER_TTL || 5 * 60 * 1000);
 const ladderCache = new Map();
 
 // 4. schema version, so column changes stop being invisible
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 function currentVersion() {
   try {
     const row = db.prepare('SELECT value FROM meta WHERE key=?').get('schema_version');
@@ -906,6 +906,12 @@ function migrate() {
       // label what the old analyser produced so "outdated" is a fact, not a guess
       db.exec("UPDATE tracks SET analysis_version=2 WHERE analysis_version=0 AND sections IS NOT NULL AND sections != ''");
       db.exec("UPDATE tracks SET analysis_version=1 WHERE analysis_version=0 AND analyzed_at IS NOT NULL");
+    }],
+    [5, () => {
+      // an upload with no tags still has bytes: the hash is what makes two identical files
+      // one file, even when the names differ
+      try { db.exec('ALTER TABLE files ADD COLUMN sha256 TEXT'); } catch {}
+      try { db.exec('CREATE INDEX IF NOT EXISTS idx_files_sha ON files(sha256)'); } catch {}
     }],
   ];
   for (const [version, run] of steps) {
@@ -2188,10 +2194,11 @@ const server = http.createServer(async (req, res) => {
       }
       const part = `${dest}.part`;
       // streamed, not buffered: a 60MB wav used to be 60MB of RAM on a Raspberry Pi
+      const sha = createHash('sha256');
       const written = await new Promise((resolve, reject) => {
         let n = 0;
         const out = fs.createWriteStream(part);
-        req.on('data', (c) => { n += c.length; });
+        req.on('data', (c) => { n += c.length; sha.update(c); });
         req.on('aborted', () => reject(new Error('upload aborted')));
         req.on('error', reject);
         out.on('error', reject);
@@ -2201,6 +2208,42 @@ const server = http.createServer(async (req, res) => {
       if (!written) { try { fs.unlinkSync(part); } catch {} return json(res, 400, { error: 'empty upload' }); }
       fs.renameSync(part, dest);
       const meta = await probe(dest);
+      /* A file that is already here is not a second track. The row is found by the same
+         identity the rest of the app uses (artist + title); if the copy on disk is at
+         least as good, the upload is refused and the bytes are deleted. A genuinely
+         better copy replaces the old file, the way a download upgrade does. */
+      const digest = sha.digest('hex');
+      // the same bytes are the same file, whatever the tag or the name says
+      const sameBytes = db.prepare(`SELECT t.id, t.title, t.artist, f.path FROM files f
+        JOIN tracks t ON t.id=f.track_id WHERE f.tier='owned' AND f.sha256=? LIMIT 1`).get(digest);
+      if (sameBytes) {
+        try { fs.rmSync(dest, { force: true }); } catch {}
+        return json(res, 409, {
+          duplicate: true, reason: 'identical file', track: sameBytes.id,
+          title: sameBytes.title, artist: sameBytes.artist || '', existing: path.basename(sameBytes.path),
+        });
+      }
+      const incomingQuality = fileQuality(path.extname(dest), meta.bitrate);
+      const dupKey = dupKeyOf(meta.artist || '', meta.title || name.replace(/\.[^.]+$/, ''));
+      const existing = db.prepare(`SELECT t.id, t.title, t.artist, f.id file_id, f.path, f.bitrate
+        FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned'
+        WHERE t.dup_key=? ORDER BY f.bitrate DESC LIMIT 1`).get(dupKey);
+      let replaced = false;
+      if (existing && existing.path) {
+        const currentQuality = fileQuality(path.extname(existing.path), existing.bitrate);
+        if (incomingQuality <= currentQuality) {
+          try { fs.rmSync(dest, { force: true }); } catch {}
+          return json(res, 409, {
+            duplicate: true, track: existing.id,
+            title: existing.title || meta.title, artist: existing.artist || meta.artist || '',
+            existing: path.basename(existing.path),
+          });
+        }
+        // better copy: remove the file it supersedes, not the track or its history
+        try { fs.rmSync(existing.path, { force: true }); } catch {}
+        db.prepare('DELETE FROM files WHERE id=?').run(existing.file_id);
+        replaced = true;
+      }
       const tid = upsertTrack({
         title: meta.title || name.replace(/\.[^.]+$/, ''),
         artist: meta.artist || '',
@@ -2211,11 +2254,12 @@ const server = http.createServer(async (req, res) => {
         format: (name.split('.').pop() || 'mp3').toLowerCase(),
       });
       upsertFile({ track_id: tid, path: dest, tier: 'owned', bitrate: meta.bitrate, size: meta.size, mtime: meta.mtime });
+      db.prepare('UPDATE files SET sha256=? WHERE path=?').run(digest, dest);
       db.prepare('INSERT OR REPLACE INTO resolutions (track_id,rung,quality,resolved_at) VALUES (?,?,?,?)')
         .run(tid, 'upload', meta.bitrate ? `${Math.round(meta.bitrate / 1000)}k` : null, now());
       const art = await extractCover(tid, dest).catch(() => false);
       db.prepare('UPDATE tracks SET has_art=? WHERE id=?').run(art ? 1 : 0, tid);
-      return json(res, 200, { track: tid, title: meta.title || name, has_art: !!art });
+      return json(res, 200, { track: tid, title: meta.title || name, has_art: !!art, replaced });
     }
 
     // replace the cover of one owned track

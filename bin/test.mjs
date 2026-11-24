@@ -77,6 +77,26 @@ const prompts = sug.body?.prompts || [];
 ok('A&R suggestions include an outside-library prompt', prompts.length >= 3 && prompts.some((p) => /i (?:do not|don't) have/i.test(p)), JSON.stringify(prompts));
 ok('A&R suggestions also keep a library prompt', prompts.some((p) => /not played|never played|bpm|added this week/i.test(p)), JSON.stringify(prompts));
 
+console.log('upload duplicates');
+// a minimal silent WAV, so the upload path is exercised without shipping a fixture
+const wav = (() => {
+  const samples = 8000, data = samples * 2;
+  const b = Buffer.alloc(44 + data);
+  b.write('RIFF', 0); b.writeUInt32LE(36 + data, 4); b.write('WAVE', 8);
+  b.write('fmt ', 12); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(8000, 24); b.writeUInt32LE(16000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34);
+  b.write('data', 36); b.writeUInt32LE(data, 40);
+  return b;
+})();
+const upName = `selftest-dup-${Date.now()}.wav`;
+const up1 = await fetch(`${BASE}/api/upload/track?name=${upName}`, { method: 'POST', body: wav });
+const up1b = await up1.json();
+ok('a file uploads once', up1.status === 200 && !!up1b.track, JSON.stringify(up1b));
+const up2 = await fetch(`${BASE}/api/upload/track?name=${upName.replace('.wav', ' (2).wav')}`, { method: 'POST', body: wav });
+const up2b = await up2.json();
+ok('the same track is refused as a duplicate', up2.status === 409 && up2b.duplicate === true, `${up2.status} ${JSON.stringify(up2b)}`);
+if (up1b.track) await post('/api/tracks/delete', { ids: [up1b.track] });
+
 console.log('analysis version');
 const an = await j('/api/analyze/status');
 ok('analysis reports its version', Number(an.body?.version) >= 2, JSON.stringify(an.body));

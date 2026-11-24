@@ -5524,7 +5524,14 @@ function openAddPlIds(ids) {
 async function uploadTrack(file) {
   const r = await fetch(`/api/upload/track?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file });
   const d = await r.json();
-  if (!r.ok || !d.track) throw new Error(d.error || 'upload failed');
+  if (!r.ok || !d.track) {
+    const e = new Error(d.error || 'upload failed');
+    // a duplicate is a result, not a failure: keep the fields the summary needs
+    e.duplicate = !!d.duplicate;
+    e.title = d.title || '';
+    e.artist = d.artist || '';
+    throw e;
+  }
   return d;
 }
 
@@ -5532,19 +5539,32 @@ async function uploadFiles(files) {
   const total = files.length;
   let ok = 0;
   let failed = 0;
+  let duplicates = 0;
+  let replaced = 0;
   let why = '';
-  const t = toastPersistent(`Uploading ${total} file${total > 1 ? 's' : ''}…`);
+  const dups = [];
+  const t = toastPersistent(`Uploading ${total} file${total > 1 ? 's' : ''} — duplicates are skipped…`);
   for (let i = 0; i < total; i += 1) {
     const f = files[i];
     t.update(`Uploading ${i + 1} of ${total}: ${f.name.slice(0, 34)}`);
-    try { await uploadTrack(f); ok += 1; } catch (e) { failed += 1; why = e.message || 'upload failed'; }
+    try {
+      const d = await uploadTrack(f);
+      ok += 1;
+      if (d.replaced) replaced += 1;
+    } catch (e) {
+      if (e.duplicate) { duplicates += 1; dups.push(e.artist ? `${e.artist} — ${e.title}` : (e.title || f.name)); }
+      else { failed += 1; why = e.message || 'upload failed'; }
+    }
   }
   state.allTracks = null;
   bustCache();
-  // a failure with no reason is the same thing as nothing happening: say what the server said
-  t.done(failed
-    ? (total === 1 ? `Upload failed: ${why}` : `Added ${ok}, ${failed} failed — ${why}`)
-    : `Added ${ok} track${ok > 1 ? 's' : ''}`, 8000);
+  // duplicates are skipped, not silently added: say how many and which ones
+  const bits = [];
+  if (ok) bits.push(`Added ${ok} track${ok === 1 ? '' : 's'}${replaced ? ` (${replaced} replaced a lower-quality copy)` : ''}`);
+  if (duplicates) bits.push(`${duplicates} already in your library${dups.length ? ` (${dups.slice(0, 2).join('; ')}${dups.length > 2 ? '…' : ''})` : ''}`);
+  if (failed) bits.push(`${failed} failed — ${why}`);
+  t.done(bits.join(' · ') || 'Nothing to upload', duplicates || failed ? 10000 : 8000);
+  if (duplicates && !ok) toast('Those tracks were not uploaded again. Use "Find higher quality" to replace a copy.', 9000);
   await loadPlaylists().catch(() => {});
   refreshView();
 }

@@ -242,6 +242,24 @@ iOS ignores `audio.volume` completely, so this is a desktop and Android feature.
 deliberately **no file-rewriting path**: re-encoding a track to hit a loudness number
 compresses its peaks, and that is not something a library should do behind your back.
 
+## Uploads and duplicates
+
+An upload is refused when the track is already here. Two checks, in this order:
+
+1. **Same bytes** — a SHA-256 is computed while the file streams in; an owned file with
+   the same digest is the same file, whatever it is called (`track.mp3` and
+   `track (2).mp3` included). This is the check that works for untagged WAVs.
+2. **Same artist and title** — the identity key the rest of the app uses. A different
+   encode of the same song is caught here.
+
+If the incoming copy is genuinely better (codec/bitrate, the same `fileQuality` rule the
+downloader uses), it replaces the old file: the old bytes and their `files` row are
+removed, the track, plays and analysis are kept. Otherwise the upload is deleted and the
+server answers `409 {duplicate:true, title, artist, existing}`. The uploader counts those
+and reports "2 already in your library (Artist — Title)" instead of "failed", with a hint
+that *Find higher quality* is the way to replace a copy. The whole batch is never blocked:
+the new tracks upload, the duplicates are skipped.
+
 ## Maintenance buttons
 
 Each button in Settings → Maintenance writes its result into the card, with numbers. A

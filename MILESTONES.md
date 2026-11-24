@@ -6,6 +6,30 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · uploads refuse duplicates instead of stacking them (`v472`)
+
+Uploading the same track twice used to give one track row and **two owned files**. The
+uploader said "Added 1 track" both times, and the duplicate only surfaced later in
+*Remove duplicate files*.
+
+- The upload route hashes the stream (SHA-256) and refuses bytes it already owns; that
+  catches `track.mp3` and `track (2).mp3`, and untagged WAVs where the title is just the
+  filename. A second check uses the app's identity key (artist + title) for a different
+  encode of the same song.
+- A genuinely better copy (codec/bitrate, same `fileQuality` rule as the downloader)
+  replaces the old file: old bytes and their file row go, the track, plays and analysis
+  stay. Otherwise the uploaded bytes are deleted and the server answers
+  `409 {duplicate:true, title, artist, existing}`.
+- The uploader reports duplicates separately from failures: "2 already in your library
+  (Artist — Title)" and a hint that *Find higher quality* is how to replace a copy. The
+  progress line says duplicates are skipped before it starts.
+- `files.sha256` (migration 5) and an index; downloads stay unhashed and are caught by
+  metadata when uploaded back.
+
+Verified on the live server: same file twice -> 409 and one file row; a 320k copy of the
+same track replacing a 128k one -> `replaced:true`, one row, old file deleted. Tests
+46 -> 48 (a generated WAV uploads once, the same bytes are refused).
+
 ### 2026-11-24 · "Albums by X" is answered by the catalogue (`v470`)
 
 **The report:** asking "Albums by fear factory" returned three local tracks and nothing
