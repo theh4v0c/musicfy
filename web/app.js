@@ -861,7 +861,7 @@ function rippleAt(el, x, y) {
   setTimeout(() => span.remove(), 700);
 }
 document.addEventListener('pointerdown', (e) => {
-  const el = e.target.closest('.btn, .flow-key, .mpick, .mtile, .tcard, .pcard, .qtile, .crate, .snav-btn, .bn-btn, .dl-act, .mode-tab, .ask-ex, .action-chip');
+  const el = e.target.closest('.btn, .mpick, .mtile, .tcard, .pcard, .qtile, .crate, .snav-btn, .bn-btn, .dl-act, .mode-tab, .ask-ex, .action-chip');
   if (el) rippleAt(el, e.clientX, e.clientY);
 }, { passive: true });
 
@@ -919,11 +919,8 @@ async function renderHome() {
           <h1 class="mast-title" id="mast-title">Loading…</h1>
           <p class="mast-sub" id="mast-sub"></p>
           <div class="mast-actions">
-            <button class="mast-more" id="mast-more" hidden>More like this</button>
-            <button class="flow-key" id="flow-btn" aria-label="Start Flow">
-              <span class="flow-key-k">${IC.play}</span>
-              <span class="flow-key-t"><b>Flow</b><i>endless mix from what you play</i></span>
-            </button>
+            <button class="btn btn-primary" id="mast-play">${IC.play}Play</button>
+            <button class="btn btn-ghost" id="flow-btn">Flow</button>
           </div>
         </div>
       </div>
@@ -952,28 +949,15 @@ async function renderHome() {
       }
       if (title) title.textContent = last.title;
       if (sub) sub.textContent = last.artist || '';
+      const play = document.getElementById('mast-play');
+      if (play) play.onclick = () => playList([{ id: last.id, title: last.title, artist: last.artist, has_art: last.has_art, owned: 1, rung: 'local' }], 0, false, 'Home');
     } else {
       if (kicker) kicker.textContent = 'START HERE';
       if (title) title.textContent = 'Your library';
       if (sub) sub.textContent = 'Flow builds a set from what you play.';
       if (art) { art.innerHTML = `<span class="ph">${IC.play}</span>`; art.onclick = null; }
-    }
-    const keep = document.getElementById('mast-more');
-    const mix = g.compatible;
-    if (keep) {
-      // the action speaks in verbs; it is there whenever there is a set to play
-      if (mix && mix.ok) {
-        keep.hidden = false;
-        keep.onclick = async () => {
-          keep.disabled = true;
-          try {
-            const r = await api('/api/mix/next', { nocache: true });
-            if (r.tracks && r.tracks.length) playList(r.tracks, 0, false, r.seed && r.seed.title ? `After ${r.seed.title}` : 'More like this');
-            else toast('Nothing compatible right now');
-          } catch { toast('Could not build that'); }
-          keep.disabled = false;
-        };
-      } else keep.hidden = true;
+      const play = document.getElementById('mast-play');
+      if (play) play.hidden = true;
     }
   }).catch(() => {
     const title = document.getElementById('mast-title');
@@ -1862,7 +1846,7 @@ async function renderSongs(push = true) {
   $('view-title').textContent = 'Songs';
   const v = $('view');
   v.innerHTML = `${heroBanner('CATALOGUE', 'Songs', 'Search, filter and play the whole library.')}<div class="songs-chips" id="songs-chips"></div>
-    <div class="lib-actions songs-head">
+    <div class="songs-head">
       <input class="search" id="songs-q" placeholder="Filter by title, artist or album" autocomplete="off">
       <div class="mode-tabs" id="songs-filter">
         <button class="mode-tab on" data-f="all">All</button>
@@ -2366,7 +2350,7 @@ async function renderSettings() {
             <option value="2"${String(s.prefetch_ahead) === '2' ? ' selected' : ''}>2 tracks</option>
           </select>
         </label>
-        <div class="lib-actions"><button class="btn btn-ghost" id="set-clearbuf" type="button">Clear buffer</button><span class="set-note">Frees preloaded audio and cached pages</span></div>
+        <div class="set-row"><button class="btn btn-ghost" id="set-clearbuf" type="button">Clear buffer</button><span class="set-note">Frees preloaded audio and cached pages</span></div>
       </section>
       <section class="set-card">
         <h2>Library</h2>
