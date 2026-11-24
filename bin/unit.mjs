@@ -112,3 +112,9 @@ test('the brief filter rejects a single-word coincidence', () => {
     title: 'The Robot Song', artist: 'Remember White', album: 'x', genre: 'Pop',
   }), true);
 });
+
+test('a curly apostrophe is the same instruction', () => {
+  assert.equal(A.cleanQuery('I don’t have it'), "I don't have it");
+  assert.equal(A.planLocally('5 Gespona tracks I don’t have').intent, 'build_playlist');
+  assert.equal(A.isFollowUp('make it darker'), true);
+});

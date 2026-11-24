@@ -3265,6 +3265,8 @@ async function teachExclusion(raw, out, stateEl, box) {
 }
 
 async function runAssistant(text, out, stateEl, box) {
+    // curly quotes from a phone keyboard are the same instruction
+    text = String(text || '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
     if (!text.trim()) return;
       closeInlinePreview();
     $('view').classList.add('asking');

@@ -22,12 +22,19 @@ function bannedTerms() {
 
 const INTENTS = ['build_playlist', 'search_tracks', 'artist_albums', 'download_album', 'download_missing', 'report_library'];
 
+/* Phone keyboards emit ’ ‘ “ ”. Every instruction regex here is written with ASCII
+   quotes, so "I don’t have" silently missed the outside request and answered with the
+   library. Normalise once, at the edge. */
+function cleanQuery(text) {
+  return String(text || '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+}
+
 const FOLLOW_RE = /^(more|fewer|less|another|add|remove|drop|make (?:it|them)|same|also|but|now|instead|plus|minus|swap|replace|darker|lighter|faster|slower|shorter|longer|no |without |only |just |and )/i;
 /* A follow-up is an instruction about the previous draft. "Short and not a genre word"
    was too generous: "10 aphex twin" is a new subject and inherited the previous genres. */
 const FOLLOW_MODIFIER = /^(?:(?:a|an|the|it|them|that|this|more|fewer|less|another|same|but|and|also|now|instead|plus|minus|only|just|no|without|darker|lighter|faster|slower|shorter|longer|louder|quieter|tracks?|songs?|ones?|please|ok|okay|one|two|three|four|five|six|seven|eight|nine|ten|twenty)\s*)+$/i;
 function isFollowUp(text) {
-  const t = String(text || '').trim();
+  const t = cleanQuery(text).trim();
   if (!t) return false;
   if (FOLLOW_RE.test(t)) return true;
   return FOLLOW_MODIFIER.test(t);
@@ -38,7 +45,7 @@ function isFollowUp(text) {
 function mergePlan(prev, text) {
   const plan = JSON.parse(JSON.stringify(prev && prev.plan ? prev.plan : {}));
   plan.args = plan.args || {};
-  const t = String(text || '').toLowerCase();
+  const t = cleanQuery(text).toLowerCase();
   const num = t.match(/\b(\d{1,3})\b/);
   const explicit = num && /\b(tracks?|songs?|items?|make it|give me|of them)\b/.test(t);
   const delta = num ? Number(num[1]) : 5;
@@ -56,11 +63,12 @@ function mergePlan(prev, text) {
     plan.args.artists = (plan.args.artists || []).filter((a) => !word.includes(String(a).toLowerCase()));
     plan.args.themes = (plan.args.themes || []).filter((th) => !word.includes(String(th).toLowerCase()));
   }
-  plan.args.query = `${prev && prev.question ? prev.question : ''} — ${text}`.trim();
+  plan.args.query = `${prev && prev.question ? cleanQuery(prev.question) : ''} — ${cleanQuery(text)}`.trim();
   return plan;
 }
 
 function planLocally(text) {
+  text = cleanQuery(text);
   const t = String(text || '').toLowerCase();
   const countMatch = t.match(/(\d{1,3})\s*(?:[a-z-]+\s+){0,4}(?:songs?|tracks?|items?)/i);
   // "10 aphex twin" asks for ten things even without the noun; a unit is not a request
@@ -958,5 +966,5 @@ function commit(db, proposal, deps) {
   return { spoken: 'Nothing to do.', data: {} };
 }
 
-module.exports = { planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan, relevanceGate, childAudience, artistAlbums, briefWords, briefMatches };
+module.exports = { planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan, relevanceGate, childAudience, artistAlbums, briefWords, briefMatches, cleanQuery };
 

@@ -6,6 +6,19 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · A curly apostrophe is still an instruction (`v483`)
+
+"5 Gespona tracks I don’t have" returned four local tracks and one new. The phone keyboard
+sent U+2019, and every instruction regex is written with ASCII `'`; "don’t have" never
+matched `don'?t`, so the outside-only request became a library request. The title also
+became "Gespona don t" because the stray mark survived into the name.
+
+- `agent.cleanQuery()` normalises ‘ ’ “ ” at the edge. The agent route, the ask route,
+  `planLocally`, `isFollowUp` and `mergePlan` all use it; the client normalises before
+  deciding between agent and library query.
+- Verified: the same sentence with a curly apostrophe now returns 0 local / 5 catalogue,
+  titled "Gespona"; a unit test covers the normal form and an API test asserts local = 0.
+
 ### 2026-11-24 · Prep says what it does, not what version it is (`v482`)
 
 - The hero was three sentences of implementation detail ("analyser v2, which adds

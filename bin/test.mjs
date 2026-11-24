@@ -115,6 +115,10 @@ console.log('home radio');
 const rad = await j(`/api/radio/${t ? t.id : 1}`);
 ok('radio fills a queue instead of one card', Array.isArray(rad.body) && rad.body.length >= 10, `n=${Array.isArray(rad.body) ? rad.body.length : '?'}`);
 
+console.log('typographic input');
+const curly = await post('/api/agent', { q: '2 tracks by Aphex Twin I don’t have' });
+ok('a curly apostrophe still means "outside my library"', curly.body?.action?.kind === 'playlist' && (curly.body.action.trackIds || []).length === 0, JSON.stringify(curly.body?.plan));
+
 console.log('analysis version');
 const an = await j('/api/analyze/status');
 ok('analysis reports its version', Number(an.body?.version) >= 2, JSON.stringify(an.body));

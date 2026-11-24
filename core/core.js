@@ -3125,7 +3125,7 @@ const server = http.createServer(async (req, res) => {
       req.on('end', async () => {
         let b = {};
         try { b = JSON.parse(body || '{}'); } catch {}
-        const q = String(b.q || '').trim();
+        const q = agent.cleanQuery(String(b.q || '')).trim();
         if (!q) return json(res, 400, { error: 'q required' });
         // a short "make it darker" points at the previous draft, not at the library
         const previous = (b.previous && b.previous.plan) ? b.previous : null;
@@ -3382,7 +3382,7 @@ const server = http.createServer(async (req, res) => {
       req.on('end', async () => {
         let b = {};
         try { b = JSON.parse(body || '{}'); } catch {}
-        const question = String(b.q || '').trim();
+        const question = agent.cleanQuery(String(b.q || '')).trim();
         if (!question) return json(res, 400, { error: 'q required' });
 
         // capability questions are answered directly: they are not a library search,
