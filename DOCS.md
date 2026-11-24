@@ -118,25 +118,11 @@ A track played twice downloads itself (`settings.auto_download_plays`, 0 disable
 
 ## Design truth
 
-There is one place that says what a control is, and one command that proves the pages
-agree with it.
-
-`web/app.css`, top of `:root`:
-
-| role | what it is | height | type | radius |
-|---|---|---|---|---|
-| action | a button or a chip that does something | 36px | 13px | pill |
-| tab | a filter that changes the list | 30px | 12px | pill |
-| icon | a square icon control | 30px | 18px | 8px |
-
-Type: section 19px, card title 14px, row title 14.5px, meta 11px, kicker 9.5px.
-Display type (the home mast, a playlist header) is outside the contract on purpose: it
-is a different container, not a different size of the same thing.
-
-`node bin/design-audit.mjs` (needs `NODE_PATH` pointing at a `node_modules` with
-playwright) loads every view at 1440 and 390, measures every control and every type
-role, and **exits non-zero when two views disagree**. That is the source of truth: a
-measurement, not a comment. Run it before touching CSS, and after.
+`DESIGN.md` + `design/tokens.json` are the interface contract: colour, radius scale,
+the three control roles, the type scale, containers, layout, motion, content rules and
+the list of forbidden patterns. `bin/design-check.mjs` enforces it (tokens ↔ CSS, then
+the built pages at 1440 and 390) and exits non-zero on drift. Run it before and after
+any visual change.
 
 ## Playback
 
