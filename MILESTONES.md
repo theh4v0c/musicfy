@@ -75,6 +75,26 @@ work; this file records what changed and why.
 - The earlier design churn (session card, mix headline, "where you left off" masthead,
   Play/Flow pills, mobile restyle) was reverted to `426851c` (`7062d85`).
 
+### 2026-11-24 · Mixed In Key research, section cues, branding, crate grid (`v436`)
+
+**From Mixed In Key** (REA + its SQLite collection + framework strings; open-source
+reference Paradox-455M/MixedInKey)
+- Cue points now come from **musical sections**, not every 16th downbeat. The analyser
+  finds boundaries with chroma + recurrence novelty, snaps them to downbeats, labels the
+  parts from RMS, and stores `sections` + `energy10` (`core/analyze.py`).
+- Rekordbox XML and Traktor NML use those boundaries, weighted to the parts that change,
+  capped at eight (`core/export.js`). SAOKO measured: cues at 0.95 / 29.93 / 34.74 /
+  46.81 / 53.92 / 101.94 / 111.83 / 131.03.
+- MIK's own format documented in `DOCS.md`: Camelot in the DB, musical key in tags,
+  comment "8A - Energy 7", 8-bar energy segments, cue at every section boundary.
+
+**Interface**
+- The app says its name where the sidebar cannot: a 11px letterspaced wordmark replaces
+  "Home" on a phone and on a collapsed rail, and the collapsed rail carries an "MF"
+  monogram.
+- A crate has the same list / grid / compact switch as every other list
+  (`mf-view-playlist`), so a set can be read by cover.
+
 ## Planned
 
 ### v0.2 Guided Ask — delivered

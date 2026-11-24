@@ -962,6 +962,7 @@ const VIEW_ICONS = {
 const VIEW_LABELS = { list: 'List', grid: 'Grid', compact: 'Compact' };
 const songView = () => { try { return localStorage.getItem('mf-view-songs') || 'list'; } catch { return 'list'; } };
 const libView = () => { try { return localStorage.getItem('mf-view-library') || 'grid'; } catch { return 'grid'; } };
+const plView = () => { try { return localStorage.getItem('mf-view-playlist') || 'list'; } catch { return 'list'; } };
 function viewSwitch(scope, current) {
   return `<div class="view-switch" data-scope="${esc(scope)}" role="group" aria-label="View">${['list', 'grid', 'compact']
     .map((v) => `<button class="vw${current === v ? ' on' : ''}" data-v="${v}" title="${VIEW_LABELS[v]}" aria-pressed="${current === v}">${VIEW_ICONS[v]}</button>`)
@@ -987,7 +988,8 @@ function heroBanner(kicker, title, sub) {
 
 async function renderHome() {
   setNav('home'); state.playlistId = null; renderSidebar();
-  $('view-title').textContent = 'Home';
+  // the name, where the sidebar is not on screen to carry it
+  $('view-title').innerHTML = '<span class="wordmark">MUSICFY</span><span class="view-name">Home</span>';
   const v = $('view');
   v.innerHTML = `
     <section class="mast">
@@ -1536,6 +1538,7 @@ async function openPlaylist(pid, push = true) {
           <button class="btn btn-ghost" id="pl-shuf">${IC.shuffle}&nbsp; Shuffle</button>
           <button class="btn btn-ghost" id="pl-harm" title="Order by harmonic key progression (Camelot)">Harmonic</button>
           <button class="btn btn-ghost" id="pl-upload">Upload tracks</button>
+          ${viewSwitch('playlist', plView())}
           <button class="icon-btn" id="pl-menu" title="Playlist options">${IC.dots}</button>
         </div>
       </div>
@@ -1557,9 +1560,15 @@ async function openPlaylist(pid, push = true) {
   if (!plnEl || !pldurEl) return; // navigated away
   state._currentList = list;
   plnEl.textContent = list.length;
+  paintPlMode();
   const totalS = list.reduce((a, t) => a + (t.duration || 0), 0);
   pldurEl.textContent = list.length ? `${Math.round(totalS / 60)} min` : '';
   state.sort = { key: 'pos', dir: 1 };
+  function paintPlMode() {
+    const mode = plView();
+    const head = document.getElementById('pl-thead');
+    if (head) head.style.display = mode === 'list' ? '' : 'none';
+  }
   const renderRows = () => {
     let sorted = [...list];
     if (state.sort.key !== 'pos') {
@@ -1570,6 +1579,14 @@ async function openPlaylist(pid, push = true) {
       });
     }
     const tl = $('tlist'); tl.innerHTML = '';
+    const mode = plView();
+    if (mode !== 'list') {
+      // the same card as every other shelf, so a crate can be read by cover
+      tl.className = `sg-grid${mode === 'compact' ? ' compact' : ''}`;
+      sorted.forEach((t) => { registerRow(t); tl.appendChild(trackCard(t, sorted, p.name)); });
+      return;
+    }
+    tl.className = '';
     sorted.forEach((t, i) => {
       registerRow(t);
       const row = trow(t, i, sorted);
@@ -1614,6 +1631,8 @@ async function openPlaylist(pid, push = true) {
     renderRows();
   });
   renderRows();
+  // list, grid or compact inside a crate, remembered like every other list
+  bindViewSwitch('playlist', () => { paintPlMode(); renderRows(); });
   const missing = list.filter((t) => !hasAudio(t));
   if (missing.length) {
     const dl = document.createElement('button');

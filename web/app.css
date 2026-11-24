@@ -1075,6 +1075,18 @@ main.main { transition: margin-right .18s ease; }
 #app.side-collapsed .slib-sort,
 #app.side-collapsed .slib-add { display: none; }
 #app.side-collapsed .brand-row { justify-content: center; padding: 20px 0 14px; }
+/* collapsed to an icon rail: the name becomes a monogram, so the app still says who it is */
+.brand-mini { display: none; font-weight: 700; font-size: 15px; letter-spacing: -.04em; color: var(--fg-soft); }
+#app.side-collapsed .brand-mini { display: block; }
+
+/* the wordmark replaces "Home" where the sidebar cannot say it: phone, and collapsed rail */
+.view-title .wordmark { display: none; font-size: 11px; font-weight: 700; letter-spacing: .22em; color: var(--fg-soft); }
+@media (max-width: 920px) {
+  .view-title .wordmark { display: inline; }
+  .view-title .view-name { display: none; }
+}
+#app.side-collapsed .view-title .wordmark { display: inline; }
+#app.side-collapsed .view-title .view-name { display: none; }
 #app.side-collapsed .snav-btn { justify-content: center; gap: 0; padding: 13px 0; font-size: 0; }
 #app.side-collapsed .snav-btn svg { width: 22px; height: 22px; }@media (max-width: 760px){ .side-icon { display: none; } }
 

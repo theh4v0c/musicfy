@@ -163,6 +163,47 @@ iOS ignores `audio.volume` completely, so this is a desktop and Android feature.
 deliberately **no file-rewriting path**: re-encoding a track to hit a loudness number
 compresses its peaks, and that is not something a library should do behind your back.
 
+## Mixed In Key interop, and what we took from it
+
+Mixed in Key 10.2.1 (`com.mixedinkey.application`) is a native app with separate
+frameworks for analysis, tags, data and "danceability". Its collection is SQLite at
+`~/Library/Application Support/Mixedinkey/Collection10.mikdb`:
+
+| table | what it holds |
+|---|---|
+| `ZSONG` | `ZKEY` in **Camelot** ("2A"), `ZTAGKEY` in **musical** notation ("D#m"), `ZSECONDKEY`, `ZTEMPO`, `ZENERGY` 1–10, `ZTAGENERGY`, `ZPITCH`, `ZVOLUME` (dB), `ZCLIPPEDPEAKCOUNT`, `ZBEATS` (NSKeyedArchiver beat times) |
+| `ZENERGYSEGMENT` | energy over time in **8-bar blocks** (`ZSTARTTIME`, `ZLENGTH`, `ZENERGY` 1–10) |
+| `ZKEYSEGMENT` | key changes inside a track, with confidence |
+| `ZCUEPOINT` | cue points with an energy level, at section boundaries |
+| `ZWAVEFORM` | stored waveform |
+
+Its tag convention, from the binary's own format string `%@ - Energy %ld`: the comment
+reads **"8A - Energy 7"**, alongside `INITIALKEY`, the iTunes freeform frames
+`----:com.apple.iTunes:energylevel` and `----:com.mixedinkey.mixedinkey:energy`, and the
+Vorbis comments `ENERGYLEVEL` / `INITIALKEY`. It exports Rekordbox XML (memory cues with
+`Num="-1"` **and** hot cues `Num=0..6`), Serato crates, Traktor NML, and it can write
+straight into the Rekordbox 6 database.
+
+### What MUSICFY took
+
+**Section cues.** Cues used to sit on every 16th downbeat, which is a grid, not music.
+`core/analyze.py` now finds sections the way the open-source reimplementation does
+(Paradox-455M/MixedInKey): beat-synchronous chroma, recurrence matrix, checkerboard
+novelty, gaussian smoothing, peak picking, **boundaries snapped to downbeats**, then
+labels from each section's RMS (intro / verse / chorus / build / breakdown / outro).
+The analyser is librosa, already in the analyser venv.
+
+Stored on the track as `sections` (JSON) and `energy10`. `core/export.js` builds cue
+points from the boundaries where the *part changes*, weighted towards chorus and build,
+capped at eight, with the beat grid as the fallback for unanalysed tracks.
+
+Measured on ROSALÍA — SAOKO: 13 sections, and the Rekordbox XML now carries cues at
+0.95 / 29.93 / 34.74 / 46.81 / 53.92 / 101.94 / 111.83 / 131.03 instead of an even grid.
+
+Not taken: rewriting files (removed on request), Serato crate export, importing MIK's
+own database (its rows identify files by security-scoped bookmark, so matching needs a
+bookmark-resolution step).
+
 ## DJ export
 
 Three artefacts come out of a crate. The formats were checked against real parsers, not

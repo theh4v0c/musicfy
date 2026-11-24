@@ -22,7 +22,7 @@ function fileUri(p) {
 
 function rowsFor(db, playlistId) {
   return db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.genre, t.bpm, t.key, t.key_scale,
-      t.duration, t.beat_grid, t.year, t.track_no, f.path, f.size, f.bitrate
+      t.duration, t.beat_grid, t.sections, t.year, t.track_no, f.path, f.size, f.bitrate
     FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
     LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
     WHERE pt.playlist_id=? ORDER BY pt.position`).all(playlistId);
@@ -33,8 +33,26 @@ function tonality(key, scale) {
   return `${key}${scale === 'minor' ? 'm' : ''}`;
 }
 
-// downbeats every 16 bars, capped at 8 memory cues
-function cues(beatGrid) {
+/* Cue points at musical section boundaries, the way Mixed In Key lays them out:
+   the start of the track, then the places where the part changes. Falls back to the
+   beat grid when a track has no section analysis. */
+function cues(beatGrid, sectionsJson) {
+  let sections = [];
+  try { sections = JSON.parse(sectionsJson || '[]'); } catch {}
+  if (Array.isArray(sections) && sections.length) {
+    const starts = sections.map((s) => ({ t: Number(s.start), type: s.type, e: Number(s.energy) || 0 }));
+    const head = starts[0] ? [{ t: starts[0].t, type: 'intro', e: 99 }] : [];
+    // a boundary earns a cue when the part changes, not when the label repeats
+    const changes = [];
+    for (let i = 1; i < starts.length; i += 1) {
+      if (starts[i].type !== starts[i - 1].type) changes.push({ ...starts[i], from: starts[i - 1].type });
+    }
+    // the drop or chorus that lifts the track beats a verse-to-verse boundary
+    const weight = (c) => (c.type === 'chorus' ? 3 : c.type === 'build' ? 2.5 : c.type === 'breakdown' ? 2 : c.type === 'outro' ? 1.5 : 1) + c.e / 10;
+    changes.sort((a, b) => weight(b) - weight(a));
+    const picked = [...head, ...changes.slice(0, 7)].map((c) => c.t).filter((t) => Number.isFinite(t));
+    return [...new Set(picked)].sort((a, b) => a - b).slice(0, 8);
+  }
   let db = [];
   try { db = JSON.parse(beatGrid || '[]'); } catch {}
   if (!Array.isArray(db) || !db.length) return [];
@@ -84,7 +102,7 @@ function rekordboxXml(db, playlistId, opts) {
     // one TEMPO node is correct for a constant grid (rekordbox emits more only on BPM changes)
     L.push(`      <TEMPO Inizio="0.000" Bpm="${fmtBpm(t.bpm)}" Metro="4/4" Battito="1"/>`);
     // auto-generated cues become hot cues A-H (Num 0..7), which CDJs can jump to
-    cues(t.beat_grid).forEach((start, k) => {
+    cues(t.beat_grid, t.sections).forEach((start, k) => {
       L.push(`      <POSITION_MARK Name="" Type="0" Start="${Number(start).toFixed(3)}" Num="${k}"/>`);
     });
     L.push('    </TRACK>');
@@ -134,7 +152,7 @@ function traktorNml(db, playlistId, opts) {
     L.push(`      <TEMPO BPM="${Number(t.bpm || 0).toFixed(6)}" BPM_QUALITY="100"/>`);
     // a grid marker first, then hot cues: Traktor needs TYPE 4 to keep the beat grid
     L.push(`      <CUE_V2 NAME="AutoGrid" DISPL_ORDER="0" TYPE="4" START="0.000" LEN="0.000" REPEATS="-1" HOTCUE="-1"/>`);
-    cues(t.beat_grid).forEach((start, k) => {
+    cues(t.beat_grid, t.sections).forEach((start, k) => {
       L.push(`      <CUE_V2 NAME="Auto ${k + 1}" DISPL_ORDER="0" TYPE="0" START="${Number(start).toFixed(3)}" LEN="0.000" REPEATS="-1" HOTCUE="${k}"/>`);
     });
     L.push('    </ENTRY>');
