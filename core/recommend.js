@@ -4,13 +4,16 @@
 // feature proximity (genre family, key, tempo). No model required, so it cannot drift.
 const { camelotOf, harmonicScore } = require('./harmonic');
 
-function build(db, { days = 30, limit = 40, excludePlaylisted = false, avoid = [] } = {}) {
+function build(db, { days = 30, limit = 40, excludePlaylisted = false, avoid = [], includeChildren = false } = {}) {
   const now = Math.floor(Date.now() / 1000);
   const since = now - days * 86400;
 
-  // 1. what is playing now
+  // 1. what is playing now. Children's music is played for a child, not chosen: unless
+  // the setting says otherwise it is not evidence about this listener's taste.
+  const childClause = includeChildren ? '' : "AND COALESCE(t.genre_family,'') != 'children'";
   const recent = db.prepare(`SELECT l.track_id id, COUNT(*) plays FROM listens l
-    WHERE l.played_at >= ? GROUP BY l.track_id`).all(since);
+    JOIN tracks t ON t.id=l.track_id
+    WHERE l.played_at >= ? ${childClause} GROUP BY l.track_id`).all(since);
   const recentWeight = new Map(recent.map((r) => [r.id, r.plays]));
 
   // 2. what used to play with it, from the historical co-listening graph
@@ -36,7 +39,8 @@ function build(db, { days = 30, limit = 40, excludePlaylisted = false, avoid = [
     FROM tracks t`).all();
 
   // taste profile from the last few weeks: dominant family, tempo band, key
-  const played = pool.filter((p) => recentWeight.has(p.id) && p.owned);
+  const played = pool.filter((p) => recentWeight.has(p.id) && p.owned
+    && (includeChildren || p.genre_family !== 'children'));
   const famCount = {};
   let bpmSum = 0, bpmN = 0;
   const keys = [];
@@ -58,6 +62,7 @@ function build(db, { days = 30, limit = 40, excludePlaylisted = false, avoid = [
   const scored = [];
   for (const p of pool) {
     if (!p.owned) continue;                                  // only recommend what can be played
+    if (!includeChildren && p.genre_family === 'children') continue;
     if (playlisted && playlisted.has(p.id)) continue;         // weekly list must surface something new
     // artist, album, title, genre and family, so "reggaeton" in a genre column counts
     if (avoidList.length && exclude.matches(avoidList, p)) continue;

@@ -1486,7 +1486,9 @@ function trackCard(t, list, origin) {
 async function drawRotation(rec) {
   const slot = $('rotation-slot');
   if (!slot || !rec || !rec.length) return;
-  const seedTrack = rec[0];
+  const includeChildren = !!(state.settings && state.settings.taste_include_children);
+  const seedTrack = includeChildren ? rec[0] : rec.find((t) => t.genre_family !== 'children');
+  if (!seedTrack) return;
   const list = await api(`/api/radio/${seedTrack.id}`).catch(() => []);
   if (!list.length) return;
   const row = document.createElement('div');
@@ -2696,6 +2698,8 @@ async function renderSettings() {
         <label>Keep out of picks<input id="set-taste-avoid" value="${esc(s.taste_avoid || '')}" placeholder="non pop, reggaeton, latin, emo, edm"></label>
         <div class="avoid-terms" id="set-avoid-terms" aria-live="polite"></div>
         <p class="set-note">Commas. "no" and "non" are ignored, so "non pop" means pop. Matched against genre, family, artist, album and title.</p>
+        <label class="set-check"><input type="checkbox" id="set-taste-children"${s.taste_include_children ? ' checked' : ''}> Let children's music shape recommendations</label>
+        <p class="set-note">Off: children's plays stay in your history but do not move your top genres, tempo, key, picks or rotation.</p>
       </section>
       <section class="set-card" data-tone="mute">
         <h2>Maintenance</h2>
@@ -2819,6 +2823,7 @@ async function renderSettings() {
       taste_artists: document.getElementById('set-taste-artists').value.trim(),
       taste_context: document.getElementById('set-taste-context').value.trim(),
       taste_avoid: document.getElementById('set-taste-avoid').value.trim(),
+      taste_include_children: document.getElementById('set-taste-children').checked,
     };
     const key = document.getElementById('set-llm-key').value.trim();
     if (key) body.llm_api_key = key;
@@ -2838,7 +2843,7 @@ async function renderSettings() {
     normalize_loudness: 'loudness switch', target_loudness: 'target level',
     autoplay_next: 'autoplay', prefetch_ahead: 'buffer',
     taste_genres: 'genres', taste_artists: 'artists', taste_context: 'listening context',
-    taste_avoid: 'pick exclusions',
+    taste_avoid: 'pick exclusions', taste_include_children: 'children in taste',
   };
   const paintDirty = () => {
     if (!saveBtn) return;

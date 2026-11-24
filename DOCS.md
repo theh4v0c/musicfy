@@ -157,6 +157,15 @@ for the first ten**, and at most two after that; the first credited name is what
 rule: three picks, three artists. Without it a fifteen-track recommendation was four
 artists, which reads as a discography rather than a recommendation.
 
+### Children's music is not evidence of taste
+
+`genre_family = 'children'` is excluded from the taste profile by default: recent-listening
+seeds, top family, average BPM, key, candidates, home picks, rotation seed, greeting facts,
+A&R suggestion artists and outside-discovery seeds. The plays stay in history and recently
+played; explicit requests ("children's songs for my daughter") still search and play them.
+Settings → Taste has the switch, `taste_include_children`, off by default. Turning it on
+puts those plays back into the profile.
+
 ## What A&R remembers
 
 The model is **stateless**. Every request sends the sentence and the JSON schema; no chat

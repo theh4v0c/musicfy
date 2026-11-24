@@ -559,6 +559,14 @@ function tasteAvoid() {
     return exclude.parse(s.taste_avoid || '');
   } catch { return []; }
 }
+/* Children's music is usually played for someone else. Off by default: those plays stay
+   in history, but they do not move the top family, tempo, key, picks or greeting facts. */
+function tasteIncludeChildren() {
+  try {
+    const s = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    return s.taste_include_children === true;
+  } catch { return false; }
+}
 
 // ---------- rung health ----------
 const rungHealth = { checkedAt: null, rungs: {} };
@@ -660,7 +668,9 @@ function sameFamily(a, b) {
 function mixSeed() {
   try {
     const last = db.prepare(`SELECT t.id, t.title, t.artist, t.bpm, t.key, t.key_scale, t.genre_family
-      FROM listens l JOIN tracks t ON t.id=l.track_id ORDER BY l.played_at DESC LIMIT 1`).get();
+      FROM listens l JOIN tracks t ON t.id=l.track_id
+      ${tasteIncludeChildren() ? '' : "WHERE COALESCE(t.genre_family,'') != 'children'"}
+      ORDER BY l.played_at DESC LIMIT 1`).get();
     if (last && last.bpm) return { ...last, exact: true };
     const s = sessionSummary();
     if (s && s.avgBpm) return { id: last ? last.id : 0, title: null, artist: null, bpm: s.avgBpm, key: null, key_scale: null, exact: false };
@@ -2784,7 +2794,7 @@ const server = http.createServer(async (req, res) => {
           for (const k of ['display_name', 'email', 'country', 'llm_base_url', 'llm_model', 'llm_api_key',
             'preferred_format', 'key_format', 'autoplay_next',
             'normalize_loudness', 'target_loudness', 'prefetch_ahead',
-            'taste_genres', 'taste_artists', 'taste_context', 'taste_avoid']) {
+            'taste_genres', 'taste_artists', 'taste_context', 'taste_avoid', 'taste_include_children']) {
             if (b[k] !== undefined) s[k] = b[k];
           }
           // a time zone must be a real IANA name or the greeting silently falls back to UTC
@@ -2845,8 +2855,10 @@ const server = http.createServer(async (req, res) => {
       const nowTs = Math.floor(Date.now() / 1000);
       const fresh = u.searchParams.get('fresh') === '1';
       if (!fresh && picksCache.at && Date.now() - picksCache.at < 45000) return json(res, 200, picksCache.data);
+      const includeChildren = tasteIncludeChildren();
+      const child = includeChildren ? '' : "AND COALESCE(t.genre_family,'') != 'children'";
       const last = db.prepare(`SELECT t.id, t.artist, t.title, t.bpm, t.key, t.key_scale
-        FROM listens l JOIN tracks t ON t.id=l.track_id ORDER BY l.played_at DESC LIMIT 1`).get();
+        FROM listens l JOIN tracks t ON t.id=l.track_id WHERE 1=1 ${child} ORDER BY l.played_at DESC LIMIT 1`).get();
       const owned = `JOIN files f ON f.track_id=t.id AND f.tier='owned'`;
       const banned = tasteAvoid();
       const picks = [];
@@ -2856,6 +2868,7 @@ const server = http.createServer(async (req, res) => {
       const add = (row, reason) => {
         if (!row || seen.has(row.id) || picks.length >= 3) return;
         if (exclude.matches(banned, row)) return;   // what "keep out of picks" means
+        if (!includeChildren && row.genre_family === 'children') return;
         // three picks by one artist is not a recommendation, it is a discography
         const a = artistKey(row.artist);
         if (a && picks.some((p) => artistKey(p.artist) === a)) return;
@@ -2869,6 +2882,7 @@ const server = http.createServer(async (req, res) => {
       // the artist you actually played most this week beats a guess
       const weekArtist = db.prepare(`SELECT t.artist a, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
         WHERE l.played_at >= ? AND t.artist IS NOT NULL AND t.artist != ''
+        AND (${includeChildren ? '1=1' : "COALESCE(t.genre_family,'') != 'children'"})
         GROUP BY t.artist ORDER BY n DESC LIMIT 1`).get(nowTs - 7 * 86400);
       const addAny = (rows, reason) => { for (const r of rows) { if (!exclude.matches(banned, r)) { add(r, reason); return; } } };
       if (weekArtist && weekArtist.a && /[a-z]/i.test(weekArtist.a)) {
@@ -2951,24 +2965,26 @@ const server = http.createServer(async (req, res) => {
 
       // one concrete observation about this listener, not a dashboard stat
       const nowTs = Math.floor(Date.now() / 1000);
+      const includeChildren = tasteIncludeChildren();
+      const child = includeChildren ? '' : "AND COALESCE(t.genre_family,'') != 'children'";
       const last = db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.bpm, t.key, t.key_scale, t.has_art, l.played_at
         FROM listens l JOIN tracks t ON t.id=l.track_id ORDER BY l.played_at DESC LIMIT 1`).get();
       const weekArtist = db.prepare(`SELECT t.artist, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
-        WHERE l.played_at >= ? AND t.artist IS NOT NULL AND t.artist != ''
+        WHERE l.played_at >= ? AND t.artist IS NOT NULL AND t.artist != '' ${child}
         GROUP BY t.artist ORDER BY n DESC LIMIT 1`).get(nowTs - 7 * 86400);
       const weekTrack = db.prepare(`SELECT t.title, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
-        WHERE l.played_at >= ? GROUP BY l.track_id ORDER BY n DESC LIMIT 1`).get(nowTs - 7 * 86400);
+        WHERE l.played_at >= ? ${child} GROUP BY l.track_id ORDER BY n DESC LIMIT 1`).get(nowTs - 7 * 86400);
       const hourFamily = db.prepare(`SELECT t.genre_family f, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
-        WHERE l.played_at >= ? AND t.genre_family IS NOT NULL AND t.genre_family != ''
+        WHERE l.played_at >= ? AND t.genre_family IS NOT NULL AND t.genre_family != '' ${child}
           AND CAST(strftime('%H', l.played_at, 'unixepoch', 'localtime') AS INTEGER) BETWEEN ? AND ?
         GROUP BY t.genre_family ORDER BY n DESC LIMIT 1`).get(nowTs - 120 * 86400, Math.max(0, hour - 1), Math.min(23, hour + 1));
       const tempo = db.prepare(`SELECT ROUND(AVG(t.bpm)) b, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
-        WHERE l.played_at >= ? AND t.bpm IS NOT NULL AND t.bpm > 0`).get(nowTs - 7 * 86400);
+        WHERE l.played_at >= ? AND t.bpm IS NOT NULL AND t.bpm > 0 ${child}`).get(nowTs - 7 * 86400);
       const weekNew = db.prepare(`SELECT COUNT(*) c FROM tracks WHERE added_at >= ?`).get(nowTs - 7 * 86400).c;
       const weekNewUnheard = db.prepare(`SELECT COUNT(*) c FROM tracks t WHERE t.added_at >= ? AND NOT EXISTS
         (SELECT 1 FROM listens l WHERE l.track_id=t.id)`).get(nowTs - 7 * 86400).c;
       const staleAlbum = db.prepare(`SELECT t.album a, COUNT(*) n, MAX(l.played_at) last FROM listens l JOIN tracks t ON t.id=l.track_id
-        WHERE t.album IS NOT NULL AND t.album != '' GROUP BY t.album HAVING n >= 4 AND last IS NOT NULL AND last < ?
+        WHERE t.album IS NOT NULL AND t.album != '' ${child} GROUP BY t.album HAVING n >= 4 AND last IS NOT NULL AND last < ?
         ORDER BY n DESC LIMIT 1`).get(nowTs - 21 * 86400);
       const topHour = db.prepare(`SELECT CAST(strftime('%H', l.played_at, 'unixepoch', 'localtime') AS INTEGER) h, COUNT(*) n
         FROM listens l GROUP BY h ORDER BY n DESC LIMIT 1`).get();
@@ -3033,16 +3049,19 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/api/ask/suggest') {
       res.setHeader('cache-control', 'no-store');
       const week = now() - 7 * 86400;
+      const includeChildren = tasteIncludeChildren();
+      const child = includeChildren ? '' : "AND COALESCE(t.genre_family,'') != 'children'";
       const topArtists = db.prepare(`SELECT t.artist, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
-        WHERE l.played_at>=? AND t.artist IS NOT NULL AND t.artist!='' GROUP BY t.artist ORDER BY n DESC LIMIT 5`).all(week).map((r) => r.artist);
+        WHERE l.played_at>=? AND t.artist IS NOT NULL AND t.artist!='' ${child} GROUP BY t.artist ORDER BY n DESC LIMIT 5`).all(week).map((r) => r.artist);
       const keys = db.prepare(`SELECT t.key k, t.key_scale s, COUNT(*) n FROM tracks t
         JOIN files f ON f.track_id=t.id AND f.tier='owned'
         WHERE t.key IS NOT NULL AND t.key!='' GROUP BY t.key, t.key_scale ORDER BY n DESC LIMIT 3`).all();
       const fams = db.prepare(`SELECT genre_family f, COUNT(*) n FROM tracks WHERE genre_family IS NOT NULL AND genre_family!=''
+        ${includeChildren ? '' : "AND genre_family != 'children'"}
         GROUP BY genre_family ORDER BY n DESC LIMIT 3`).all().map((r) => r.f);
       const bpmRow = db.prepare(`SELECT AVG(bpm) a FROM tracks WHERE bpm IS NOT NULL AND bpm>0`).get();
       const recent = db.prepare(`SELECT t.artist FROM listens l JOIN tracks t ON t.id=l.track_id
-        WHERE l.played_at>=? AND t.artist IS NOT NULL AND t.artist!='' GROUP BY l.track_id ORDER BY MAX(l.played_at) DESC LIMIT 4`).all(week).map((r) => r.artist);
+        WHERE l.played_at>=? AND t.artist IS NOT NULL AND t.artist!='' ${child} GROUP BY l.track_id ORDER BY MAX(l.played_at) DESC LIMIT 4`).all(week).map((r) => r.artist);
       // a tag can be bars or dashes rather than a name: "more from ||||||||" is not a prompt
       const named = (a) => /[a-z]/i.test(String(a || ''));
       /* Half the suggestions go outside the library. They used to be library queries
@@ -3229,13 +3248,13 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/api/recommend') {
       const days = Math.min(Number(u.searchParams.get('days') || 30), 365);
       const limit = Math.min(Number(u.searchParams.get('limit') || 40), 100);
-      return json(res, 200, recommend.build(db, { days, limit, avoid: tasteAvoid() }));
+      return json(res, 200, recommend.build(db, { days, limit, avoid: tasteAvoid(), includeChildren: tasteIncludeChildren() }));
     }
     // Flow: one-tap infinite mix. discovery=0 (safe rotation) .. 100 (all unheard), genre optional.
     if (u.pathname === '/api/flow') {
       const genre = (u.searchParams.get('genre') || '').trim().toLowerCase();
       const discovery = Math.max(0, Math.min(100, Number(u.searchParams.get('discovery') || 30)));
-      const out = recommend.build(db, { days: 30, limit: 200, avoid: tasteAvoid() });
+      const out = recommend.build(db, { days: 30, limit: 200, avoid: tasteAvoid(), includeChildren: tasteIncludeChildren() });
       let picks = out.picks;
       if (genre) picks = picks.filter((p) => `${p.genre_family || ''} ${p.genre || ''}`.toLowerCase().includes(genre));
       if (!picks.length) return json(res, 200, { count: 0, tracks: [], profile: out.profile });
@@ -3267,7 +3286,7 @@ const server = http.createServer(async (req, res) => {
         const jan1 = new Date(Date.UTC(now2.getUTCFullYear(), 0, 1));
         const week = Math.ceil((((now2 - jan1) / 86400000) + jan1.getUTCDay() + 1) / 7);
         const days = Math.min(Number(b.days || 30), 365);
-        const out = recommend.build(db, { days, limit: Math.min(Number(b.limit || 25), 100), excludePlaylisted: true, avoid: tasteAvoid() });
+        const out = recommend.build(db, { days, limit: Math.min(Number(b.limit || 25), 100), excludePlaylisted: true, avoid: tasteAvoid(), includeChildren: tasteIncludeChildren() });
         const inAnyPlaylist = new Set(db.prepare('SELECT DISTINCT track_id id FROM playlist_tracks').all().map((r) => r.id));
         const picks = out.picks.filter((p) => !inAnyPlaylist.has(p.id));
         const name = `${recommendName(out.profile, picks)} · W${String(week).padStart(2, '0')}`;
@@ -3293,7 +3312,7 @@ const server = http.createServer(async (req, res) => {
         try { b = JSON.parse(body || '{}'); } catch {}
         const days = Math.min(Number(b.days || 30), 365);
         const limit = Math.min(Number(b.limit || 25), 100);
-        const out = recommend.build(db, { days, limit, avoid: tasteAvoid() });
+        const out = recommend.build(db, { days, limit, avoid: tasteAvoid(), includeChildren: tasteIncludeChildren() });
         if (!out.picks.length) return json(res, 200, { created: null, reason: 'not enough listening history yet' });
         const name = String(b.name || `${recommendName(out.profile, out.picks)} · ${new Date().toISOString().slice(0, 10)}`).slice(0, 80);
         const pid = `rec-${Date.now().toString(36)}`;
@@ -4121,7 +4140,8 @@ const server = http.createServer(async (req, res) => {
       // more from artists you actually play: their owned tracks you have not heard yet
       const deeper = db.prepare(`${sel} WHERE ${owned}
         AND t.artist IN (SELECT t2.artist FROM listens l JOIN tracks t2 ON t2.id=l.track_id
-                         WHERE t2.artist IS NOT NULL AND t2.artist != '' GROUP BY t2.artist)
+                         WHERE t2.artist IS NOT NULL AND t2.artist != ''
+                           ${tasteIncludeChildren() ? '' : "AND COALESCE(t2.genre_family,'') != 'children'"} GROUP BY t2.artist)
         AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id)
         ORDER BY (SELECT COUNT(*) FROM listens l WHERE l.track_id=t.id) ASC, t.added_at DESC LIMIT 40`).all();
       // owned but in no playlist: the part of the library you have not filed anywhere
@@ -4139,6 +4159,7 @@ const server = http.createServer(async (req, res) => {
       let seeds = db.prepare(`SELECT t.artist, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
         WHERE t.artist IS NOT NULL AND t.artist != '' AND l.played_at >= ?
           AND EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')
+          ${tasteIncludeChildren() ? '' : "AND COALESCE(t.genre_family,'') != 'children'"}
         GROUP BY t.artist ORDER BY n DESC LIMIT 12`).all(now() - 120 * 86400);
       if (!seeds.length) {
         seeds = db.prepare(`SELECT artist, COUNT(*) n FROM tracks WHERE artist IS NOT NULL AND artist != ''

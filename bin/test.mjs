@@ -119,6 +119,12 @@ console.log('typographic input');
 const curly = await post('/api/agent', { q: '2 tracks by Aphex Twin I don’t have' });
 ok('a curly apostrophe still means "outside my library"', curly.body?.action?.kind === 'playlist' && (curly.body.action.trackIds || []).length === 0, JSON.stringify(curly.body?.plan));
 
+console.log('taste profile');
+const tasteCfg = (await j('/api/settings')).body?.settings || {};
+const recs = await j('/api/recommend?limit=50');
+const childFree = (recs.body?.picks || []).every((t) => t.genre_family !== 'children');
+ok('children are not recommended while the preference is off', tasteCfg.taste_include_children === true || childFree, JSON.stringify(recs.body?.profile));
+
 console.log('analysis version');
 const an = await j('/api/analyze/status');
 ok('analysis reports its version', Number(an.body?.version) >= 2, JSON.stringify(an.body));

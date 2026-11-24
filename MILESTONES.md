@@ -6,6 +6,24 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · Children's music stays out of the taste profile (`v484`)
+
+The library has children's tracks for a daughter; their plays were shaping top family,
+tempo, key, home picks, rotation, greeting facts and A&R suggestions.
+
+- `taste_include_children` in Settings → Taste, **off by default**. When off, every
+  profile query joins `tracks` and excludes `genre_family = 'children'`: recommend/flow/
+  weekly, home picks and artist-of-the-week, the radio for the home rotation (client seed
+  filter), greeting facts, A&R suggestions, `/api/discover` and the personal mix seed.
+- Candidates are excluded too, so children's tracks are not recommended at all while the
+  switch is off. History and the recently played rail keep them; explicit requests
+  (search, A&R, playing a children's playlist) are untouched.
+- Turning the switch on restores the old behaviour; verified by toggling it: the recent
+  play count moved 1,962 → 1,981 and the profile BPM changed, then back to 1,962.
+- The switch is stored in `settings.json` and survives model/provider changes.
+
+Tests 54 → 55, unit 11/11, design-check and smoke green.
+
 ### 2026-11-24 · A curly apostrophe is still an instruction (`v483`)
 
 "5 Gespona tracks I don’t have" returned four local tracks and one new. The phone keyboard
