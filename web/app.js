@@ -1598,7 +1598,10 @@ async function openPlaylist(pid, push = true) {
   }
   const renderRows = () => {
     let sorted = [...list];
-    if (state.sort.key !== 'pos') {
+    if (state.sort.key === 'pos') {
+      // the stored order is the ascending one; clicking "#" asks for it reversed
+      if (state.sort.dir === -1) sorted.reverse();
+    } else {
       sorted.sort((a, b) => {
         const va = a[state.sort.key] ?? '', vb = b[state.sort.key] ?? '';
         if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * state.sort.dir;
@@ -1618,7 +1621,7 @@ async function openPlaylist(pid, push = true) {
       registerRow(t);
       const row = trow(t, i, sorted);
       // drag to reorder, only when the list is shown in its stored order
-      if (state.sort.key === 'pos') {
+      if (state.sort.key === 'pos' && state.sort.dir === 1) {
         row.ondragover = (e) => {
           if (!e.dataTransfer.types.includes('application/x-musicfy')) return;
           e.preventDefault(); e.dataTransfer.dropEffect = 'move'; row.classList.add('dragover');
@@ -1648,7 +1651,7 @@ async function openPlaylist(pid, push = true) {
       tl.appendChild(row);
     });
     $('pl-thead').querySelectorAll('.th').forEach(th => {
-      th.classList.toggle('sorted', th.dataset.key === state.sort.key && state.sort.key !== 'pos');
+      th.classList.toggle('sorted', th.dataset.key === state.sort.key);
       th.classList.toggle('desc', th.dataset.key === state.sort.key && state.sort.dir === -1);
     });
   };
@@ -2106,7 +2109,9 @@ async function renderSongs(push = true) {
   let filter = 'all';
   let query = '';
   state.genreFilter = null;
-  let sort = { key: 'title', dir: 1 };
+  // the page arrives in the catalogue's own order, which is what the "#" column counts;
+  // starting on "title" made the first click on "#" land on the order already on screen
+  let sort = { key: 'pos', dir: 1 };
   let limit = 60;
   let browse = null;
 
@@ -2373,7 +2378,10 @@ async function renderSongs(push = true) {
       const q = query.toLowerCase();
       list = list.filter((t) => `${t.title} ${t.artist} ${t.album}`.toLowerCase().includes(q));
     }
-    if (sort.key !== 'pos') {
+    if (sort.key === 'pos') {
+      // the order the page loaded is position one; the header toggles it
+      if (sort.dir === -1) list.reverse();
+    } else {
       list.sort((a, b) => {
         const va = a[sort.key] ?? '', vb = b[sort.key] ?? '';
         if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * sort.dir;
