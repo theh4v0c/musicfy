@@ -2966,7 +2966,60 @@ async function renderSettings() {
   };
 }
 
+function renderAlbumsCard(a, out, stateEl) {
+  if (stateEl) stateEl.textContent = '';
+  const card = document.createElement('div');
+  card.className = 'ask-action';
+  const head = document.createElement('div');
+  head.className = 'ask-action-head';
+  head.innerHTML = `<div><div class="ask-action-kicker">ON DECK</div><b>${esc(a.action.title)}</b></div><span>${esc(a.action.summary || '')}</span>`;
+  card.appendChild(head);
+  if (a.action.reason) {
+    const meta = document.createElement('div');
+    meta.className = 'ask-action-meta';
+    meta.textContent = a.action.reason;
+    card.appendChild(meta);
+  }
+  const list = document.createElement('div');
+  list.className = 'ask-albums';
+  for (const al of (a.action.albums || [])) {
+    const row = document.createElement('div');
+    row.className = 'ask-album';
+    const art = document.createElement('div');
+    art.className = 'ask-album-art';
+    if (al.cover) art.style.backgroundImage = `url("${al.cover}")`;
+    const meta = document.createElement('div');
+    meta.className = 'ask-album-meta';
+    const bits = [al.year, al.tracks ? `${al.tracks} track${Number(al.tracks) === 1 ? '' : 's'}` : '', al.owned ? `${al.owned} here` : ''].filter(Boolean);
+    meta.innerHTML = `<b>${esc(al.name)}</b><span>${esc(bits.join(' · '))}</span>`;
+    const act = document.createElement('button');
+    act.className = 'btn btn-ghost ask-album-act';
+    if (al.owned > 0) {
+      act.textContent = 'Open';
+      act.onclick = (e) => { e.stopPropagation(); renderAlbum(al.name); };
+    } else {
+      act.textContent = 'Download';
+      act.onclick = async (e) => {
+        e.stopPropagation();
+        act.disabled = true;
+        act.textContent = 'Queueing…';
+        try {
+          const r = await api('/api/albums/download', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: al.name }) });
+          act.textContent = r.queued ? `${r.queued} queued` : 'Already here';
+          toast(r.queued ? `${r.queued} tracks queued from “${al.name}”` : `Nothing missing from “${al.name}”`, 6000);
+        } catch { act.disabled = false; act.textContent = 'Download'; toast('Could not queue that album', 4000); }
+      };
+    }
+    row.append(art, meta, act);
+    row.onclick = () => renderAlbum(al.name);
+    list.appendChild(row);
+  }
+  card.appendChild(list);
+  out.appendChild(card);
+}
+
 function renderActionCard(a, out, stateEl) {
+  if (a.action && a.action.kind === 'albums') { renderAlbumsCard(a, out, stateEl); return; }
   if (stateEl) stateEl.textContent = '';
   const card = document.createElement('div');
   card.className = 'ask-action';
@@ -3177,6 +3230,7 @@ async function runAssistant(text, out, stateEl, box) {
     // don't have" and "outside my library" were going to the library filter
     const agentish = /\b(create|make|build|download|find|search|show|list|playlist|crate|how many|how much|top rated|top \d)\b/i.test(text)
       || /\b(i (?:do not|don't) have|not in (?:my|the) library|outside (?:my|the) library|i do not own|new to me|discover)\b/i.test(text)
+      || /\b(albums?|discography)\b/i.test(text)
       || /^\s*\d{1,3}\s+\S+/i.test(text);
     try {
       if (agentish) {

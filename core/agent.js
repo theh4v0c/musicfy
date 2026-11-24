@@ -6,7 +6,7 @@ const queryEngine = require('./query');
 const mood = require('./mood');
 const deezer = require('./deezer');
 
-const INTENTS = ['build_playlist', 'search_tracks', 'download_album', 'download_missing', 'report_library'];
+const INTENTS = ['build_playlist', 'search_tracks', 'artist_albums', 'download_album', 'download_missing', 'report_library'];
 
 const FOLLOW_RE = /^(more|fewer|less|another|add|remove|drop|make (?:it|them)|same|also|but|now|instead|plus|minus|swap|replace|darker|lighter|faster|slower|shorter|longer|no |without |only |just |and )/i;
 function isFollowUp(text) {
@@ -63,6 +63,21 @@ function planLocally(text) {
     || /\b(something|anything)\b/.test(t) || /\bmusic for\b/.test(t)
     || countedRequest || styledTempo || (childAudience(t) && !reportish);
   const wantsDownload = /\bdownload\b/.test(t);
+  // "albums by Fear Factory" / "Fear Factory's discography" is a catalogue listing
+  // match against the original text, not the lowercased copy: the artist's casing is
+  // part of the name ("Fear Factory", not "fear factory")
+  const byAlbums = text.match(/\b(?:albums?|discography)\s+(?:by|from|of)\s+(.+)$/i);
+  const ownsAlbums = text.match(/^(.+?)(?:'s|’s)\s+(?:albums?|discography)\s*[?.!]*$/i);
+  const trailingAlbums = text.match(/^(.+?)\s+(?:albums?|discography)\s*[?.!]*$/i);
+  const whatAlbums = text.match(/\bwhat albums (?:does|do) (.+?) have\b/i);
+  const artistAlbums = byAlbums || ownsAlbums || whatAlbums || trailingAlbums;
+  if (artistAlbums) {
+    const artist = String(artistAlbums[1] || '')
+      .replace(/\b(?:please|for me|now|the|all|download|get|grab)\b/gi, ' ')
+      .replace(/[?.!]+$/, '')
+      .replace(/\s+/g, ' ').trim();
+    if (artist) return { intent: 'artist_albums', args: { artist } };
+  }
   if (/\balbum\b/.test(t) && wantsDownload) {
     const latest = /\b(latest|newest|new|recent)\b/.test(t);
     const name = String(text)
@@ -87,7 +102,7 @@ async function planWithModel(llm, text, previous) {
     ? `\nThis is a follow-up. The previous request was: ${previous.question}\nIts plan was: ${JSON.stringify(previous.plan)}\nReturn the updated plan: keep what still applies, change only what the new instruction changes, and keep the same intent unless it says otherwise.\n`
     : '';
   const prompt = `Turn a music request into JSON. Reply with JSON only, no prose.${context}
-{"intent":"build_playlist|search_tracks|download_album|download_missing|report_library","args":{...}}
+{"intent":"build_playlist|search_tracks|artist_albums|download_album|download_missing|report_library","args":{...}}
 args by intent:
 - build_playlist: {"query":"the request as written","count":20,"download":false,
    "brief":true|false,
@@ -98,9 +113,11 @@ args by intent:
   likes. A genre or a tempo ("a dance playlist", "techno around 130") is not a brief:
   leave brief false, artists and themes empty, and let the style handle it.
 - search_tracks: {"query":"words to search","limit":20}
+- artist_albums: {"artist":"the artist whose albums they asked for"}
 - download_album: {"query":"artist or album"}
 - download_missing: {"query":"album or artist if named"}
 Rules:
+- "albums by X", "X's discography", "what albums does X have" is artist_albums, never search_tracks.
 - A brief with a person, an age, an occasion or several likes is build_playlist even without the word playlist.
 - themes must be things a catalogue can actually search: not 'unicorns' alone but "unicorn song for kids".
 - artists only real artists; never invent.
@@ -517,6 +534,64 @@ async function briefFill(db, { artists = [], themes = [], need = 0, childSafe = 
   return out;
 }
 
+/* "Albums by X" is answered from the catalogue, not from the three rows that happen to
+   be in the library. Each album says how much of it is already here, so a download is a
+   choice rather than a blind queue. */
+async function artistAlbums(db, artist) {
+  const name = String(artist || '').trim();
+  if (!name) return { kind: 'albums', title: 'Albums', albums: [], reason: 'Name an artist to list their albums.', summary: 'no artist' };
+  const cat = await identity.catalog(name, { songs: 0, albums: 40, artists: 0 }).catch(() => ({ albums: [] }));
+  const want = name.toLowerCase();
+  const seen = new Set();
+  const albums = [];
+  for (const a of (cat.albums || [])) {
+    if (!a || !a.name) continue;
+    const who = String(a.artist || '').toLowerCase();
+    if (!who.includes(want) && !want.includes(who)) continue;
+    const key = `${String(a.name).toLowerCase()}|${a.year || ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const rows = db.prepare(`SELECT COUNT(*) total,
+        SUM(CASE WHEN f.id IS NOT NULL THEN 1 ELSE 0 END) owned
+      FROM tracks t LEFT JOIN files f ON f.track_id=t.id AND f.tier='owned'
+      WHERE lower(COALESCE(t.album,''))=lower(?)`).get(a.name) || {};
+    albums.push({
+      name: a.name, artist: a.artist, year: a.year || null,
+      tracks: a.tracks || null, cover: a.cover || a.artwork || null,
+      inLibrary: rows.total || 0, owned: rows.owned || 0,
+    });
+  }
+  // albums already in the library come first, even when the catalogue's relevance list
+  // does not reach them: "Open" must be possible for what you own
+  const local = db.prepare(`SELECT COALESCE(NULLIF(TRIM(t.album),''),'') album, COUNT(*) n,
+      SUM(CASE WHEN f.id IS NOT NULL THEN 1 ELSE 0 END) owned
+    FROM tracks t LEFT JOIN files f ON f.track_id=t.id AND f.tier='owned'
+    WHERE lower(COALESCE(t.artist,'')) LIKE ?
+    GROUP BY t.album HAVING album != ''`).all(`%${want}%`);
+  const have = new Set(albums.map((a) => String(a.name).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()));
+  const own = [];
+  for (const l of local) {
+    const key = String(l.album).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!key || have.has(key)) continue;
+    have.add(key);
+    own.push({ name: l.album, artist: name, year: null, tracks: l.n,
+      cover: `/api/cover-album/${encodeURIComponent(l.album)}`,
+      inLibrary: l.n, owned: l.owned });
+  }
+  albums.sort((a, b) => (b.year || 0) - (a.year || 0));
+  albums.unshift(...own);
+  return {
+    kind: 'albums',
+    title: `Albums by ${name}`,
+    artist: name,
+    albums: albums.slice(0, 40),
+    reason: albums.length
+      ? `${albums.length} album${albums.length === 1 ? '' : 's'}${own.length ? ` · ${own.length} already in your library` : ''}. Open one you have, or download it.`
+      : `The catalogue returned no albums for “${name}”.`,
+    summary: `${albums.length} album${albums.length === 1 ? '' : 's'}`,
+  };
+}
+
 async function propose(db, plan) {
   if (plan.intent === 'build_playlist') {
     const q = String(plan.args.query || '').trim();
@@ -853,5 +928,5 @@ function commit(db, proposal, deps) {
   return { spoken: 'Nothing to do.', data: {} };
 }
 
-module.exports = { planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan, relevanceGate, childAudience };
+module.exports = { planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan, relevanceGate, childAudience, artistAlbums };
 

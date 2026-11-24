@@ -103,6 +103,10 @@ const rep = await post('/api/agent', { q: 'how much of my library has audio' });
 ok('report_library', rep.body && rep.body.plan.intent === 'report_library', JSON.stringify(rep.body?.plan));
 const find = await post('/api/agent', { q: 'find techno tracks I never played' });
 ok('search_tracks', find.body && find.body.plan.intent === 'search_tracks', JSON.stringify(find.body?.plan));
+const albq = await post('/api/agent', { q: 'Albums by fear factory' });
+ok('albums by an artist is its own intent', albq.body?.plan?.intent === 'artist_albums', JSON.stringify(albq.body?.plan));
+ok('the album list comes from the catalogue', albq.body?.action?.kind === 'albums' && (albq.body?.action?.albums || []).length > 0, JSON.stringify(albq.body?.action?.summary));
+ok('each album says how much is here', (albq.body?.action?.albums || []).every((a) => typeof a.owned === 'number'));
 const alb = await post('/api/agent', { q: 'download the album Pinkfong Animal Songs' });
 ok('download_album previews instead of queueing', alb.body && alb.body.plan.intent === 'download_album' && alb.body.action && alb.body.action.kind === 'album', JSON.stringify(alb.body?.plan));
 

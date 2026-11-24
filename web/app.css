@@ -1174,6 +1174,15 @@ main.main { transition: margin-right .18s ease; }
 .apr-tag { text-align: right; font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-mute); }
 .apr-tag.on { color: var(--ok); }
 .ask-preview-more { padding: 8px 2px; color: var(--fg-mute); font-size: 12px; }
+.ask-albums { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+.ask-album { display: flex; align-items: center; gap: 11px; padding: 7px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.ask-album:last-child { border-bottom: none; }
+.ask-album:hover { background: var(--bg-elev2); }
+.ask-album-art { width: 40px; height: 40px; border-radius: var(--r-sm); background: var(--bg-elev2); background-size: cover; background-position: center; flex: none; }
+.ask-album-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ask-album-meta b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ask-album-meta span { font-size: 11px; color: var(--fg-mute); }
+.ask-album-act { flex: none; }
 .ask-action-safety { font-size: 10.5px; color: var(--fg-mute); margin-top: 12px; letter-spacing: .02em; }
 .ask-action-btns { display: flex; gap: 8px; margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--line); }@media (max-width: 760px){
   .ask-action-btns { flex-wrap: wrap; }

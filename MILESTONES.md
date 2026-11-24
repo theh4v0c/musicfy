@@ -6,6 +6,33 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · "Albums by X" is answered by the catalogue (`v470`)
+
+**The report:** asking "Albums by fear factory" returned three local tracks and nothing
+from the catalogue. It was not caused by the children's brief work; the path never had an
+album intent. Two gaps lined up:
+
+- the client sends a sentence to the agent only when it matches a verb list. "album" was
+  not in it, so the request went to the library filter, which can only see local rows.
+- the agent had `download_album` (one album) and `search_tracks` (text), but no way to
+  list an artist's albums, so even the agent answered `report_library` with "3 tracks
+  match text albums fear factory".
+
+**Fixed**
+- `artist_albums` intent: "albums by X", "X's discography", "what albums does X have",
+  "X albums". Planned locally, and added to the model prompt so the model cannot file it
+  as a search.
+- `agent.artistAlbums` reads the catalogue's album list, merges albums already in the
+  library first (an owned album the catalogue's relevance list skips must still be
+  openable), and reports `owned / total` per album. Deduplicated by name and year.
+- A&R renders an album card: cover, year, track count, "N here", and **Open** for what
+  you have or **Download** for what you do not. Download queues through the existing
+  `/api/albums/download`, which fills the missing tracks of a partial album.
+- Artist casing is preserved from the sentence ("Albums by Fear Factory").
+
+Verified against the live catalogue: Fear Factory returns 10 albums, `Digimortal` first
+with 1 track here and an Open action; the rest offer Download. Tests 43 -> 46.
+
 ### 2026-11-24 · variety in recommendations, discovery in the A&R chips (`v467`)
 
 **Recommendations were a discography**

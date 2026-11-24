@@ -3080,6 +3080,10 @@ const server = http.createServer(async (req, res) => {
             }
           } catch (e) { console.log('[agent] model plan failed:', String(e.message || e).slice(0, 120)); }
         }
+        if (plan.intent === 'artist_albums') {
+          const r = await agent.artistAlbums(db, plan.args.artist || plan.args.query);
+          return json(res, 200, { question: q, plan, source, ...r, action: r });
+        }
         /* "I don't have" is a request for music that is not here. The model sometimes
            files it as a library search; that answer is the opposite of the question. */
         const outsideAsk = /\b(?:not in (?:my|the) library|outside (?:my|the) library|don'?t have|do not have|i don'?t own|unheard|new to me|discover)\b/i.test(q);

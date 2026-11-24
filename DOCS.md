@@ -180,6 +180,12 @@ builds and acts.
   says "from my library", the tracks are used with a warning instead of being silently
   mixed in. Before this, a children's brief filled nine slots from the dark-techno
   rotation because a brief that matched nothing fell back to "what you play now".
+- **"Albums by X" is a discography request.** It is its own intent (`artist_albums`), not
+  a library text search: the list comes from the catalogue, albums already in the library
+  are merged in first (so an old album the catalogue's relevance list skips can still be
+  opened), and each row carries how many tracks are here with *Open* or *Download*. The
+  client used to send this sentence to the library filter because "album" was not in its
+  verb list, which is why it answered with the three local rows and nothing else.
 - **The suggestion chips go both ways.** Half are library questions ("tracks in Fm I
   have not played", "tracks around 121 bpm"); half are discovery ("10 tracks by your top
   artist I don't have", "10 electronic tracks I don't have"). They used to be library
