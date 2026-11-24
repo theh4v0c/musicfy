@@ -248,7 +248,7 @@ function placeCtx(x, y) {
   // tell the reader there is more when the list is taller than the space
   m.classList.toggle('scrolls', m.scrollHeight > m.clientHeight + 1);
 }
-function showBack() {}
+
 function closeCtx(force = false) {
   const el = $('ctx');
   // never yank the sheet away from someone who is typing in it, whoever asked
@@ -1235,23 +1235,7 @@ function trackCard(t, list, origin) {
 }
 
 /* all time, from 175k real Spotify plays */
-async function drawAllTime() {
-  const slot = $('alltime-slot');
-  if (!slot) return;
-  const h = await api('/api/history/stats').catch(() => null);
-  if (!h || !h.top_artists || !h.top_artists.length) return;
-  const years = h.first && h.last ? `${new Date(h.first).getFullYear()} to ${new Date(h.last).getFullYear()}` : '';
-  slot.innerHTML = `<div class="sec-title">All time <small>${h.plays.toLocaleString()} PLAYS - ${h.hours.toLocaleString()} HOURS - ${years}</small></div>
-    <div class="row-scroller" id="at-row"></div>`;
-  const row = slot.querySelector('#at-row');
-  h.top_artists.slice(0, 14).forEach((a) => {
-    const c = document.createElement('button');
-    c.className = 'cat-card';
-    c.innerHTML = `<span class="cat-art">${esc(String(a.artist || '?').charAt(0).toUpperCase())}</span><b>${esc(a.artist)}</b><span>${a.plays} plays</span>`;
-    c.onclick = () => renderArtist(a.artist);
-    row.appendChild(c);
-  });
-}
+
 
 async function drawRotation(rec) {
   const slot = $('rotation-slot');
@@ -2894,16 +2878,18 @@ async function renderSearch() {
     if (hints) hints.style.display = ask ? 'none' : '';
   };
   modeBtns.forEach((b) => b.onclick = () => {
+    // switching mode changes how the next Enter is read; it must not re-run the last query
     state.askMode = b.dataset.mode === 'ask';
     paintAsk();
-    const text = q.value.trim();
-    if (text) submit();
     q.focus();
   });
   paintAsk();
   const submit = () => {
     const text = q.value.trim();
     if (!text) { if (disc) disc.hidden = false; draw(); return; }
+    // a plain search ends the draft conversation; a short instruction continues it
+    const followish = !!state.lastAgent && /^(more|fewer|less|another|add|remove|drop|make (?:it|them)|same|also|but|now|instead|plus|minus|swap|replace|darker|lighter|faster|slower|shorter|longer|no |without |only |just |and )/i.test(text);
+    if (!state.askMode && !followish) state.lastAgent = null;
     if (disc) disc.hidden = true;   // suggestions are for browsing, not for answering
     if (assistantish.test(text) && !state.askMode) { state.askMode = true; paintAsk(); }
     if (state.askMode) { drawAsk(text); q.focus(); return; }
@@ -3015,6 +3001,14 @@ async function renderSearch() {
     // verbs like create, find, download go to the agent; questions go to the query engine.
     // a short instruction after a draft is a follow-up, whatever its first word is.
     const followText = !!state.lastAgent && /^(more|fewer|less|another|add|remove|drop|make (?:it|them)|same|also|but|now|instead|plus|minus|swap|replace|darker|lighter|faster|slower|shorter|longer|no |without |only |just |and )/i.test(text.trim());
+    const followShaped = /^(more|fewer|less|another|add|remove|drop|make (?:it|them)|same|also|but|now|instead|plus|minus|swap|replace|darker|lighter|faster|slower|shorter|longer|no |without |only |just |and )/i.test(text.trim());
+    if (followShaped && !state.lastAgent) {
+      // nothing to adjust: say so instead of matching the words against titles
+      setSearchStatus('');
+      res.innerHTML = `<section class="answer"><div class="answer-head"><span class="answer-kicker">Answer</span><span class="answer-src">LOCAL</span></div>
+        <p class="answer-said">That reads like a follow-up, but there is no draft to adjust. Ask for a playlist first — then “darker”, “30 tracks” or “no Daft Punk” will apply to it.</p></section>`;
+      return;
+    }
     const agentish = followText || /\b(create|make|build|download|find|search|show|list|playlist|how many|how much|top rated|top \d)\b/i.test(text);
     if (agentish) {
       setSearchStatus('Working out what to do', 'thinking');
@@ -3715,18 +3709,7 @@ function trackProgress(trackId, anchorEl) {
 // loudness normalisation: turn every track down to a common target, never boost
 // short fades at both ends: not a true crossfade, but no hard cut between tracks
 let fadeTimer = null;
-function fadeTo(target, ms = 400) {
-  clearInterval(fadeTimer);
-  const start = audio.volume;
-  const steps = Math.max(1, Math.round(ms / 40));
-  let i = 0;
-  fadeTimer = setInterval(() => {
-    i += 1;
-    const v = start + (target - start) * (i / steps);
-    try { audio.volume = Math.max(0, Math.min(1, v)); } catch {}
-    if (i >= steps) clearInterval(fadeTimer);
-  }, 40);
-}
+
 function targetVolume() {
   const s = state.settings || {};
   const base = Number(state.volume ?? 0.9);
@@ -4812,7 +4795,7 @@ $('np-art').onclick = (e) => {
   openCtx(state.current, Math.min(b.left, innerWidth - 240), Math.min(b.bottom + 6, innerHeight - 260));
 };
 longPress($('np-art'), () => { if (state.current) openCtx(state.current, innerWidth / 2 - 110, innerHeight / 2 - 140); });
-const npOpen = (open) => { $('np').hidden = !open; if (open) fitNowPlaying(); };
+;
 $('mini').addEventListener('click', () => setTimeout(fitNowPlaying, 30), true);
 const closeQueue = () => {
   $('queue-drawer').hidden = true;

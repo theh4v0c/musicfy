@@ -48,7 +48,8 @@ function planLocally(text) {
   const t = String(text || '').toLowerCase();
   const countMatch = t.match(/(\d{1,3})\s*(?:[a-z-]+\s+){0,4}(?:songs?|tracks?|items?)/i);
   const count = countMatch ? Math.min(Number(countMatch[1]), 100) : 20;
-  const wantsPlaylist = /\b(playlist|set|mix|selection)\b/.test(t) || /\bcreate\b/.test(t);
+  const wantsPlaylist = /\b(playlist|set|mix|selection)\b/.test(t) || /\bcreate\b/.test(t)
+    || /\b(something|anything)\b/.test(t) || /\bmusic for\b/.test(t);
   const wantsDownload = /\bdownload\b/.test(t);
   if (/\balbum\b/.test(t) && wantsDownload) {
     const latest = /\b(latest|newest|new|recent)\b/.test(t);
@@ -94,8 +95,19 @@ Rules:
 - allowExternal is true when they say not to limit to the library, or ask for things they do not have.
 - count defaults to 20. download is true only if they ask to download.
 Request: ${text}`;
-  const out = await llm.askRaw(prompt, 20000);
-  const parsed = JSON.parse(String(out).replace(/^```(json)?/i, '').replace(/```$/, '').trim());
+  // the endpoint occasionally returns an empty completion or wraps the JSON in prose;
+  // one retry, then take the first object found instead of failing outright
+  let parsed = null;
+  for (let attempt = 0; attempt < 2 && !parsed; attempt += 1) {
+    let raw = '';
+    try { raw = String(await llm.askRaw(prompt, 20000) || ''); } catch (e) { if (attempt === 1) throw e; continue; }
+    const cleaned = raw.replace(/^```(json)?/i, '').replace(/```$/, '').trim();
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    const body = start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned;
+    try { parsed = JSON.parse(body); } catch { parsed = null; }
+  }
+  if (!parsed) throw new Error('model returned nothing usable');
   if (!INTENTS.includes(parsed.intent)) throw new Error('unknown intent');
   if (!parsed.args || typeof parsed.args !== 'object') parsed.args = {};
   return parsed;
@@ -441,7 +453,17 @@ async function propose(db, plan) {
     const count = Math.max(1, Math.min(Number(plan.args.count) || 20, 100));
     const artists = (plan.args.artists || []).map((a) => String(a).trim()).filter(Boolean).slice(0, 4);
     const themes = (plan.args.themes || []).map((t) => String(t).trim()).filter(Boolean).slice(0, 4);
-    const brief = plan.args.brief === true || artists.length > 0;
+    const BRIEF_RE = /\b(for my|she likes|he likes|they like|who likes|shes into|hes into|don'?t limit|birthday|wedding|kids?|children|toddler|baby|story time|year old|\d+\s*yo|about (unicorns?|robots?|dinosaurs?|space|animals?))\b/i;
+    // the model is good at naming artists and themes, unreliable at deciding what a brief
+    // is: 'a techno set for a warehouse' is not one. Decide locally.
+    const brief = BRIEF_RE.test(q) || artists.length > 0;
+    if (brief && !themes.length && !artists.length) {
+      // the model called it a brief but gave us nothing to look for: use the sentence,
+      // minus the instructions, as the search phrase
+      const fallback = q.replace(/\b(create|make|build|playlist|for|my|a|an|the|please|some|of|with|songs?|tracks?)\b/gi, ' ')
+        .replace(/\s+/g, ' ').trim();
+      if (fallback) themes.push(fallback.slice(0, 60));
+    }
     const picked = mood.select(db, q, count);
     const moodNames = { question: 'Question everything', feel: 'Emotional', euphoric: 'Euphoric' };
     const styleNames = { burningman: 'Burning Man', indiedance: 'Indie dance', downtempo: 'Downtempo', techno: 'Techno', house: 'House', dance: 'Dance floor' };
@@ -485,7 +507,8 @@ async function propose(db, plan) {
       }).sort((a, b) => (b.owned || 0) - (a.owned || 0)).slice(0, count);
     }
     if (!local.length) local = picked.tracks;
-    const allowExternal = plan.args.allowExternal !== false && !onlyLocal;
+    // a brief goes outside unless the request says to stay in the library
+    const allowExternal = !onlyLocal && (brief || plan.args.allowExternal !== false);
     // a brief that says "don't limit yourself" must leave room outside: 20 local tracks
     // and nothing new is the same failure in a different coat
     if (brief && allowExternal && local.length >= count) local = local.slice(0, Math.max(1, Math.round(count * 0.6)));

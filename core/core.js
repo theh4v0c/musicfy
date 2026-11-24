@@ -2742,6 +2742,9 @@ const server = http.createServer(async (req, res) => {
             const modelPlan = await Promise.race([agent.planWithModel(llm, q, previous), new Promise((r) => setTimeout(() => r(null), 9000))]);
             if (modelPlan && modelPlan.intent) {
               modelPlan.args = { ...(plan.args || {}), ...(modelPlan.args || {}), query: plan.args.query || q };
+              // the model sometimes calls an occasion a plain genre. The local heuristic
+              // knows a wedding is a brief even when the model does not.
+              if (richBrief) modelPlan.args.brief = true;
               plan = modelPlan;
               source = followUp ? 'follow-up+llm' : 'llm';
             }
@@ -3635,9 +3638,13 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (u.pathname === '/api/tracks') {
-      const rows = db.prepare(`SELECT t.*, (f.id IS NOT NULL) AS owned, (t.src_id IS NOT NULL AND t.src_id != '') AS streamable, f.bitrate, r.rung, r.quality,
-        (SELECT COUNT(*) FROM listens l WHERE l.track_id=t.id) plays,
-        (SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.track_id=t.id) n_playlists
+      // explicit columns: t.* dragged beat_grid, key_confidence, dup_key and uid along with
+      // it, and the client reads none of them. This is the payload every phone loads.
+      const rows = db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.year, t.genre, t.genre_family,
+          t.duration, t.bpm, t.key, t.key_scale, t.loudness, t.has_art, t.format, t.track_no,
+          t.added_at, t.updated_at,
+          (f.id IS NOT NULL) AS owned, (t.src_id IS NOT NULL AND t.src_id != '') AS streamable,
+          f.bitrate, r.rung, r.quality
         FROM tracks t
         LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
         LEFT JOIN resolutions r ON r.track_id=t.id
