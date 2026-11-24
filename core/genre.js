@@ -40,7 +40,7 @@ const throttle = () => {
 // broad families the library can filter on, in priority order
 const FAMILIES = [
   ['metal', /\b(metal|doom|sludge|grindcore|death metal|black metal|thrash|hardcore punk)\b/i],
-  ['electronic', /\b(electronic|techno|house|ambient|idm|drum and bass|dnb|dubstep|trance|electro|breakbeat|downtempo|garage|bass)\b/i],
+  ['electronic', /\b(electronic|techno|house|microhouse|deep house|tech house|acid house|progressive house|ambient|idm|drum and bass|dnb|dubstep|trance|electro|breakbeat|downtempo|garage|bass|minimal)\b/i],
   ['hip hop', /\b(hip hop|hip-hop|rap|trap|grime)\b/i],
   ['latin', /\b(latin|latin pop|reggaeton|reggaetón|dembow|bachata|cumbia|salsa|merengue|sertanejo|perreo|flamenco)\b/i],
   ['children', /\b(children|kids|nursery|lullaby|bebefinn|pinkfong|cocomelon)\b/i],
@@ -50,11 +50,11 @@ const FAMILIES = [
   ['blues', /\b(blues|boogie woogie)\b/i],
   ['country', /\b(country|bluegrass|americana|honky tonk)\b/i],
   ['folk', /\b(folk|acoustic|singer-songwriter)\b/i],
-  ['rock', /\b(rock|punk|indie|shoegaze|post-punk|grunge|alternative)\b/i],
   ['soul', /\b(soul|funk|r&b|rhythm and blues|disco|motown)\b/i],
+  ['rock', /\b(rock|punk|indie rock|shoegaze|post-punk|grunge|alternative rock)\b/i],
+  ['pop', /\b(pop|synthpop|eurodance|boy band)\b/i],
   ['reggae', /\b(reggae|dub|dancehall|ska)\b/i],
   ['gospel', /\b(gospel|worship|christian)\b/i],
-  ['pop', /\b(pop|synthpop|eurodance|boy band)\b/i],
 ];
 
 /* iTunes returns role words where a genre should be ("Composer", "Actress") for odd
@@ -111,16 +111,27 @@ function familyOf(genres) {
   return null;
 }
 
-async function fetchArtistTags(artist) {
+/* A tag string can name several people: "Oxia, Robag Wruhme" is not an artist, so a
+   single MusicBrainz query for it returns nothing. Try each name, first hit wins — this is
+   why a library full of collaborations used to tag nothing at all. */
+function artistCandidates(name) {
+  return String(name || '')
+    .split(/\s*(?:,|;|&|\bfeat\.?\b|\bft\.?\b|\bvs\.?\b|\bx\b)\s*/i)
+    .map((x) => x.trim())
+    .filter((x) => x.length > 1 && !/^[|_\-.\s]+$/.test(x))
+    .slice(0, 3);
+}
+
+async function lookupOne(artist) {
   const c = load();
   const key = String(artist || '').toLowerCase().trim();
   if (!key) return null;
-  if (c[key]) return c[key];
+  if (c[key] && !c[key].err) return c[key];
+  if (c[key] && c[key].err) delete c[key];
   const q = encodeURIComponent(`artist:"${artist}"`);
   const url = `https://musicbrainz.org/ws/2/artist?query=${q}&fmt=json&limit=3`;
   let data = null;
   let lastErr = null;
-  // MusicBrainz throttles hard: back off instead of recording a permanent miss
   for (let attempt = 0; attempt < 4; attempt += 1) {
     await throttle();
     try { data = await getJson(url); lastErr = null; break; }
@@ -130,25 +141,47 @@ async function fetchArtistTags(artist) {
       await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
     }
   }
-  if (!data) {
-    // a failure is not an answer: returning it now is fine, caching it forever is not
-    return { genres: [], family: null, err: lastErr ? String(lastErr.message) : 'no data' };
-  }
+  if (!data) return { genres: [], family: null, err: lastErr ? String(lastErr.message) : 'no data' };
   const list = (data && data.artists) || [];
   const best = list.find((a) => String(a.name || '').toLowerCase() === key) || list[0];
-  let genres = ((best && best.tags) || []).sort((a, b) => (b.count || 0) - (a.count || 0)).map((t) => t.name).slice(0, 6);
+  const genres = ((best && best.tags) || []).sort((a, b) => (b.count || 0) - (a.count || 0)).map((t) => t.name).slice(0, 6);
   const entry = { genres, family: familyOf(genres), at: Date.now() };
   c[key] = entry;
   save();
   return entry;
 }
 
-async function fillTracks(db, { limit = 100 } = {}) {
+async function fetchArtistTags(artist) {
+  const c = load();
+  const key = String(artist || '').toLowerCase().trim();
+  if (!key) return null;
+  const cached = c[key];
+  // a hit is final; an empty result is only final for a single name, because a
+  // collaboration string has to be split before anyone can answer for it
+  if (cached && cached.genres && cached.genres.length) return cached;
+  if (cached && !cached.err && artistCandidates(artist).length <= 1) return cached;
+  for (const cand of artistCandidates(artist)) {
+    const entry = await lookupOne(cand);
+    if (entry && entry.genres && entry.genres.length) {
+      const merged = { genres: entry.genres, family: entry.family, from: cand, at: Date.now() };
+      c[key] = merged;
+      save();
+      return merged;
+    }
+  }
+  // genuinely untagged: remember the miss, but without an error flag so it can retry later
+  c[key] = { genres: [], family: null, at: Date.now() };
+  save();
+  return c[key];
+}
+
+async function fillTracks(db, { limit = 100, onProgress = null } = {}) {
   const rows = db.prepare(`SELECT DISTINCT artist FROM tracks
     WHERE (genre IS NULL OR genre = '') AND artist IS NOT NULL AND artist != '' LIMIT ?`).all(limit);
   let tagged = 0, families = 0, looked = 0;
   for (const row of rows) {
     looked += 1;
+    if (onProgress) { try { onProgress({ checked: looked, tagged, families }); } catch {} }
     const info = await fetchArtistTags(row.artist);
     if (!info || !info.genres || !info.genres.length) continue;
     const primary = info.genres[0];

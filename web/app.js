@@ -2547,6 +2547,7 @@ async function renderSettings() {
           <button class="btn btn-ghost" id="set-dedupe" type="button">Remove duplicate files</button>
           <button class="btn btn-ghost" id="set-cache-clear" type="button">Clear cache</button>
         </div>
+        <p class="set-note" id="set-maint" data-tone="">Nothing run yet.</p>
         <p class="set-note" id="set-cache">cache -</p>
         <p class="set-note" id="set-rungs">sources -</p>
         <label>Auto-save after plays<input id="set-auto-dl" type="number" min="0" max="20" value="${Number(s.auto_download_plays ?? 2)}"></label>
@@ -2772,29 +2773,64 @@ async function renderSettings() {
     paintCache();
     toast('Cache cleared', 3000);
   };
+  // maintenance answers in the card, with numbers, instead of a toast that disappears
+  const maintEl = document.getElementById('set-maint');
+  const maint = (text, tone) => {
+    if (!maintEl) return;
+    maintEl.textContent = text;
+    maintEl.dataset.tone = tone || '';
+  };
   const setRepair = document.getElementById('set-repair');
   if (setRepair) setRepair.onclick = async () => {
     setRepair.disabled = true;
-    toast('Repairing metadata');
+    maint('Repairing metadata…');
     try {
       const r = await api('/api/maintenance/repair', { method: 'POST' });
-      toast(`Years fixed ${r.fixed_year}, placeholders cleared ${r.cleared_placeholder_album}`);
+      maint(`Repair: ${r.fixed_year} year${r.fixed_year === 1 ? '' : 's'} fixed · ${r.cleared_placeholder_album} placeholder album${r.cleared_placeholder_album === 1 ? '' : 's'} cleared${r.trimmed ? ` · ${r.trimmed} titles trimmed` : ''}`, 'ok');
       state.allTracks = null;
-    } catch { toast('repair failed'); }
+    } catch { maint('Repair failed', 'bad'); }
     setRepair.disabled = false;
   };
   const setGenres = document.getElementById('set-genres');
   if (setGenres) setGenres.onclick = async () => {
     setGenres.disabled = true;
-    toast('Tagging genres from MusicBrainz, this runs in the background', 6000);
-    try { await api('/api/genre/run?limit=200', { method: 'POST' }); } catch { toast('could not start genre pass'); }
+    maint('Asking MusicBrainz, one artist at a time…');
+    try {
+      // 409 means a pass is already running: watch that one instead of failing
+      await api('/api/genre/run?limit=200', { method: 'POST' }).catch(() => {});
+      for (let i = 0; i < 400; i += 1) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const st = await api('/api/genre/status', { nocache: true }).catch(() => null);
+        if (!st) break;
+        const j = st.job || {};
+        if (j.running) {
+          maint(`Genres: ${j.checked} artists checked · ${j.tagged} newly tagged · ${st.tagged} of ${st.total} tracks have a genre`);
+        } else {
+          maint(j.error
+            ? `Genres: stopped — ${j.error}`
+            : `Genres: ${j.checked} artists checked · ${j.tagged} newly tagged · ${j.families} families learned · ${st.tagged} of ${st.total} tracks now have a genre`, j.error ? 'bad' : 'ok');
+          state.allTracks = null;
+          break;
+        }
+      }
+    } catch (e) { maint(`Could not start the genre pass: ${e.message || 'unknown'}`, 'bad'); }
     setGenres.disabled = false;
   };
   const setCovers = document.getElementById('set-covers');
   if (setCovers) setCovers.onclick = async () => {
     setCovers.disabled = true;
-    toast('Fetching official album art in the background', 6000);
-    try { await api('/api/covers/fill', { method: 'POST' }); } catch { toast('could not start cover repair'); }
+    maint('Looking for official album art…');
+    try {
+      const r = await api('/api/covers/fill?limit=60', { method: 'POST' });
+      state.artV = Date.now();
+      if (r.found) {
+        maint(`Covers: ${r.found} found of ${r.tried} tried · ${r.remaining} still without art`, 'ok');
+      } else {
+        const names = (r.missing_titles || []).slice(0, 3).map((t) => `“${String(t).slice(0, 40)}”`).join(', ');
+        maint(`Covers: ${r.tried} tried, none matched${names ? ` — the catalogue has nothing for ${names}` : ''}. ${r.remaining} still without art.`, 'warn');
+      }
+      state.allTracks = null;
+    } catch (e) { maint(`Cover repair failed: ${e.message || 'unknown'}`, 'bad'); }
     setCovers.disabled = false;
   };
   const setDedupe = document.getElementById('set-dedupe');
@@ -2803,9 +2839,9 @@ async function renderSettings() {
     setDedupe.disabled = true;
     try {
       const r = await api('/api/maintenance/dedupe-files', { method: 'POST' });
-      toast(`${r.removed} extra file${r.removed === 1 ? '' : 's'} removed`);
+      maint(r.removed ? `Duplicates: ${r.removed} extra file${r.removed === 1 ? '' : 's'} removed from ${r.tracks} track${r.tracks === 1 ? '' : 's'}` : `Duplicates: none — ${r.tracks} tracks have more than one file`, 'ok');
       state.allTracks = null;
-    } catch { toast('could not dedupe'); }
+    } catch { maint('Could not remove duplicates', 'bad'); }
     setDedupe.disabled = false;
   };
   const rungs = document.getElementById('set-rungs');

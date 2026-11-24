@@ -323,6 +323,9 @@ html, body { overflow-x: hidden; max-width: 100%; }
 #set-msg[data-tone="ok"] { color: var(--ok); }
 #set-msg[data-tone="warn"] { color: var(--fg-soft); }
 #set-msg[data-tone="bad"] { color: #ff8b74; }
+#set-maint[data-tone="ok"] { color: var(--ok); }
+#set-maint[data-tone="bad"] { color: #ff8b74; }
+#set-maint[data-tone="warn"] { color: #ffb454; }
 /* actions that change the library read as a list, not as a row of lozenges */
 .set-tools { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
 .set-tools .btn { width: 100%; justify-content: flex-start; text-align: left; }

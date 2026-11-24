@@ -162,6 +162,8 @@ function weatherWord(code) {
 // one weather call per 10 minutes, not one per home screen load
 let weatherCache = { at: 0, key: '', data: null };
 let picksCache = { at: 0, data: null };
+// state of the MusicBrainz genre pass, so the Settings button can report progress
+const genreJob = { running: false, startedAt: null, finishedAt: null, passes: 0, checked: 0, tagged: 0, families: 0, last: null, error: null };
 // live progress for a crate prep, so the card can say what is happening
 const crateJobs = new Map();
 
@@ -3072,25 +3074,35 @@ const server = http.createServer(async (req, res) => {
 
     // fill genre tags from MusicBrainz artist metadata
     if (u.pathname === '/api/genre/run' && req.method === 'POST') {
+      if (genreJob.running) return json(res, 409, { started: false, running: true, ...genreJob });
       const limit = Math.min(Number(u.searchParams.get('limit') || 120), 600);
       const loop = u.searchParams.get('all') === '1';
+      Object.assign(genreJob, { running: true, startedAt: Date.now(), passes: 0, last: null, checked: 0, tagged: 0, families: 0, error: null });
       (async () => {
         let guard = 0;
         for (;;) {
-          const r = await genre.fillTracks(db, { limit });
+          // live counters: a batch of 200 artists is eight minutes, and a status that
+          // sits at 0 until the end is indistinguishable from a dead button
+          const base = { checked: genreJob.checked, tagged: genreJob.tagged, families: genreJob.families };
+          const r = await genre.fillTracks(db, {
+            limit,
+            onProgress: (p) => { genreJob.checked = base.checked + p.checked; genreJob.tagged = base.tagged + p.tagged; },
+          });
+          Object.assign(genreJob, { passes: genreJob.passes + 1, last: r, checked: base.checked + (r.artistsChecked || 0), tagged: base.tagged + (r.tagged || 0), families: base.families + (r.families || 0) });
           console.log('[genre]', JSON.stringify(r));
           guard += 1;
           if (!loop || !r.remainingArtists || guard > 40) break;
           await new Promise((res2) => setTimeout(res2, 2000));
         }
-      })().catch((e) => console.error('[genre]', e.message));
-      return json(res, 202, { started: true, limit, loop });
+      })().catch((e) => { genreJob.error = String(e.message || e).slice(0, 140); console.error('[genre]', e.message); })
+        .finally(() => { genreJob.running = false; genreJob.finishedAt = Date.now(); });
+      return json(res, 202, { started: true, limit, loop, running: true });
     }
     if (u.pathname === '/api/genre/status') {
       const total = db.prepare('SELECT COUNT(*) c FROM tracks').get().c;
       const tagged = db.prepare("SELECT COUNT(*) c FROM tracks WHERE genre IS NOT NULL AND genre != ''").get().c;
       const families = db.prepare("SELECT genre_family g, COUNT(*) c FROM tracks WHERE genre_family IS NOT NULL GROUP BY g ORDER BY c DESC").all();
-      return json(res, 200, { total, tagged, untagged: total - tagged, families });
+      return json(res, 200, { total, tagged, untagged: total - tagged, families, job: genreJob });
     }
 
     // ask the library a question in plain language, optionally creating a playlist

@@ -215,6 +215,24 @@ iOS ignores `audio.volume` completely, so this is a desktop and Android feature.
 deliberately **no file-rewriting path**: re-encoding a track to hit a loudness number
 compresses its peaks, and that is not something a library should do behind your back.
 
+## Maintenance buttons
+
+Each button in Settings → Maintenance writes its result into the card, with numbers. A
+toast that vanishes is not an answer.
+
+| button | what it does | reports |
+|---|---|---|
+| Repair metadata | whitespace, years, placeholder albums (`Web`, `Unknown`) | years fixed, albums cleared, titles trimmed |
+| Fill genres | MusicBrainz artist tags, one artist every 1.5 s, split across collaborators | artists checked · newly tagged · tracks with a genre, **live** |
+| Fix covers | official album art for tracks with none | tried · found · still without art · the titles the catalogue could not match |
+| Remove duplicate files | keeps the best copy per track, deletes the rest | files removed · tracks affected |
+| Clear cache | localStorage + Cache Storage | page cache size |
+
+Genre pass specifics: a tag string like "Oxia, Robag Wruhme" is not an artist, so it is
+split and each name is tried until one answers. A lookup that fails is not cached as a
+missing answer any more. Progress is per artist, not per batch, because a batch of 200 is
+eight minutes and a counter that sits at zero is indistinguishable from a dead button.
+
 ## Genres
 
 One family list, in `core/genre.js`: metal, electronic, hip hop, latin, children,
