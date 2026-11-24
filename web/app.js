@@ -1202,6 +1202,17 @@ function closeInlinePreview() {
   inlinePreview.remove();
   inlinePreview = null;
 }
+/* One source of sound at a time: a preview and the main player must never overlap, in
+   either direction. Both helpers are cheap and safe to call when nothing is playing. */
+function pausePreviews() {
+  document.querySelectorAll('.inline-preview audio, audio.ip-audio').forEach((el) => {
+    try { if (!el.paused) el.pause(); } catch {}
+  });
+}
+function pauseMainForPreview() {
+  try { if (!audio.paused) audio.pause(); } catch {}
+}
+
 function toggleSuggestionPreview(s, anchor, opts = {}) {
   const key = `${s.title || ''}|${s.artist || ''}`;
   if (inlinePreview && inlinePreview.dataset.key === key) { closeInlinePreview(); return; }
@@ -1226,7 +1237,7 @@ function toggleSuggestionPreview(s, anchor, opts = {}) {
   inlinePreview = panel;
   panel.querySelector('[data-close]').onclick = closeInlinePreview;
   let audioEl = panel.querySelector('audio');
-  if (audioEl) audioEl.play().catch(() => {});
+  if (audioEl) { pauseMainForPreview(); audioEl.play().catch(() => {}); }
   const noteEl = panel.querySelector('.ip-note');
   if (!audioEl && noteEl) {
     api(`/api/preview?title=${encodeURIComponent(s.title || '')}&artist=${encodeURIComponent(s.artist || '')}&duration=${Number(s.duration) || ''}`, { nocache: true })
@@ -1239,6 +1250,7 @@ function toggleSuggestionPreview(s, anchor, opts = {}) {
         audioEl.preload = 'none';
         audioEl.src = r.url;
         noteEl.replaceWith(audioEl);
+        pauseMainForPreview();
         audioEl.play().catch(() => {});
       })
       .catch(() => { if (inlinePreview === panel) noteEl.textContent = 'No preview available.'; });
@@ -4706,6 +4718,7 @@ async function playAt(i, opts = {}) {
   state._resumeAt = 0;
   saveQueue();
   const t = state.current;
+  pausePreviews();
   applyLoudnessGain(t);
   audio.src = await offlineSrcIfNeeded(t, streamUrl(t));
   try { audio.volume = targetVolume(); } catch {}
@@ -4846,7 +4859,8 @@ function paintRows() {
 const togglePlay = () => {
   if (!state.current) return null;
   if (!audio.getAttribute('src')) return playAt(state.qi);
-  return audio.paused ? audio.play().catch(() => {}) : audio.pause();
+  if (audio.paused) { pausePreviews(); return audio.play().catch(() => {}); }
+  return audio.pause();
 };
 let continuing = false;
 function nextTrack() {
