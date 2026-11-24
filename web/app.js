@@ -821,7 +821,7 @@ function openPlaylistMenu(p, x, y) {
       try {
         const dry = await api(`/api/playlists/${encodeURIComponent(p.id)}/tags?dryRun=1`, { method: 'POST' });
         const ok = (dry.results || []).filter((r) => !r.skipped && !r.error).length;
-        if (!ok) { toast('No MP3s to tag in this crate', 4000); return; }
+        if (!ok) { toast('No MP3s to tag in this playlist', 4000); return; }
         if (!confirm(`Write Traktor + ID3 tags into ${ok} file(s)?\n\nA .mf.bak backup is kept once per file.`)) return;
         const pp = progressPill(`Tagging ${ok} files…`);
         const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/tags`, { method: 'POST' });
@@ -1063,11 +1063,13 @@ async function renderHome() {
     const greet = document.getElementById('mast-greet');
     const note = document.getElementById('mast-note');
     if (greet) {
-      // small hours get their own line: "Good evening" at 2am is a lie
-      const late = Number(g.hour) >= 23 || Number(g.hour) < 5;
-      const salutation = late
-        ? (g.name ? `Still up,` : 'Still up.')
-        : `Good ${g.part}${g.name ? ',' : '.'}`;
+      // said the way a person would say it: no "Good evening" at 2am, and a long
+      // session gets acknowledged instead of a clock reading
+      const hour = Number(g.hour);
+      const late = hour >= 23 || hour < 5;
+      const longSession = g.session && Number(g.session.minutes) >= 120;
+      const phrase = late ? 'Late one' : longSession ? 'Deep in it' : (g.part === 'morning' ? 'Morning' : g.part === 'afternoon' ? 'Afternoon' : 'Evening');
+      const salutation = `${phrase}${g.name ? ',' : '.'}`;
       greet.innerHTML = g.name
         ? `${esc(salutation)}<br><span class="mast-name">${esc(g.name)}</span>`
         : esc(salutation);
@@ -1462,7 +1464,7 @@ function drawQuick() {
   const tiles = [
     { go: 'liked', n: state.liked.size, l: 'liked songs', s: 'your shortlist' },
     { go: 'fresh', n: fresh, l: 'new this week', s: 'in the library' },
-    { go: 'prep', n: state.playlists.length, l: 'crates', s: 'ready to prep' },
+    { go: 'prep', n: state.playlists.length, l: 'playlists', s: 'ready to prep' },
   ];
   q.innerHTML = tiles.map((t) => `<button class="mtile" data-go="${esc(t.go)}">
       <span class="mtile-n">${Number(t.n) || 0}</span>
@@ -1801,9 +1803,9 @@ function bindOrderControls(rerender) {
 async function renderLibrary() {
   state.genreFilter = null;
   setNav('library'); state.playlistId = null; renderSidebar();
-  $('view-title').textContent = 'Your Library';
+  $('view-title').textContent = 'Playlists';
   const v = $('view');
-  v.innerHTML = `${heroBanner('LIBRARY', 'Your Library', 'Everything you own, and every playlist.')}<div class="lib-actions">
+  v.innerHTML = `${heroBanner('PLAYLISTS', 'Playlists', 'The sets you build — play one, prep it, export it.')}<div class="lib-actions">
       <button class="btn btn-primary" id="lib-upload">Upload track</button>
       <button class="btn btn-ghost" id="lib-newpl">New playlist</button>
       <button class="btn btn-ghost" id="hist-import">Playlist from most-played</button>
@@ -1884,14 +1886,14 @@ async function renderDjExport() {
     <div class="prep-hero">
       <div class="prep-kicker">SET PREPARATION</div>
       <div class="prep-title">Prep</div>
-      <p class="prep-sub">Prep a crate for BPM, key and beat grid. Export copies the audio and writes cues from what is already prepped; it does not analyze on the way out.</p>
+      <p class="prep-sub">Prep a playlist for BPM, key and beat grid. Export copies the audio and writes cues from what is already prepped; it does not analyze on the way out.</p>
       <div class="prep-meter"><div class="prep-meter-bar"><i id="prep-fill" style="width:0%"></i></div><span id="prep-cov">…</span></div>
       <div class="prep-actions">
         <button class="btn btn-primary" id="dj-analyze">Analyze unanalyzed</button>
         <button class="btn btn-ghost" id="dj-compat" hidden>Make playable</button>
       </div>
     </div>
-    <div class="sec-title">Crates <small>EXPORT READY</small></div>
+    <div class="sec-title">Playlists <small>EXPORT READY</small></div>
     <div class="list-bar"><div class="mode-tabs" id="crate-order">
       ${PREP_ORDERS.map(([v, label]) => `<button class="mode-tab${prepOrder() === v ? ' on' : ''}" data-order="${v}">${label}</button>`).join('')}
     </div>${viewSwitch('prep', prepView())}</div>
@@ -1953,7 +1955,7 @@ async function renderDjExport() {
         <span class="lrow-idx">${pad(p.idx)}</span>
         <img class="crate-row-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=120&v=${state.artV || 0}" alt="" loading="lazy">
         <div class="crate-row-t"><b>${esc(p.name)}</b><i>${p.n_tracks || 0} tracks · ${p.prepped || 0}/${p.owned || 0} prepped</i></div>
-        ${(p.owned && cov < 100) ? `<button class="crate-btn crate-analyze">Prep ${prepLabel(p)}</button>` : '<span class="crate-ready-tag">ready</span>'}
+        ${(p.owned && cov < 100) ? `<button class="crate-btn crate-analyze">Prep ${prepLabel(p)}</button>` : `<span class="crate-ready-tag">ready</span>${p.owned ? ' <button class="crate-btn crate-again" title="Analyse again to pick up sections, energy and cue points">Re-analyse</button>' : ''}`}
         <div class="crate-row-acts">
           <button class="crate-btn" data-rb title="rekordbox XML + audio">Rekordbox</button>
           <button class="crate-btn" data-tr title="Traktor NML + audio">Traktor</button>
@@ -1967,7 +1969,7 @@ async function renderDjExport() {
       </div>
       <div class="crate-name"><span class="crate-no">${pad(p.idx)}</span>${esc(p.name)}</div>
       <div class="crate-ready"><i style="width:${cov}%"></i></div>
-      <div class="crate-meta"><span>${p.n_tracks || 0} tracks · ${p.prepped || 0}/${p.owned || 0} prepped</span>${(p.owned && cov < 100) ? `<button class="crate-analyze">Prep ${prepLabel(p)}</button>` : '<span class="crate-ready-tag">ready</span>'}</div>
+      <div class="crate-meta"><span>${p.n_tracks || 0} tracks · ${p.prepped || 0}/${p.owned || 0} prepped</span>${(p.owned && cov < 100) ? `<button class="crate-analyze">Prep ${prepLabel(p)}</button>` : `<span class="crate-ready-tag">ready</span>${p.owned ? ' <button class="crate-again" title="Analyse again to pick up sections, energy and cue points">Re-analyse</button>' : ''}`}</div>
       <div class="crate-acts">
         <button class="crate-btn" data-rb title="Download a ZIP with the audio + rekordbox XML">Rekordbox</button>
         <button class="crate-btn" data-tr title="Download a ZIP with the audio + Traktor NML">Traktor</button>
@@ -1977,26 +1979,25 @@ async function renderDjExport() {
     const missingPrep = Math.max(0, (p.owned || 0) - (p.prepped || 0));
     const exportCrate = (fmt) => {
       if (missingPrep && fmt !== 'usb' && !confirm(`${missingPrep} track${missingPrep === 1 ? '' : 's'} in "${p.name}" have no beat grid. Cues will be missing. Export anyway?`)) return;
-      toast(fmt === 'usb' ? 'Building the CDJ library…' : 'Zipping the crate…', 6000);
+      toast(fmt === 'usb' ? 'Building the CDJ library…' : 'Zipping the playlist…', 6000);
       if (fmt === 'usb') window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/pioneer.zip`;
       else window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.zip?format=${fmt}`;
     };
     card.querySelector('[data-rb]').onclick = (e) => { e.stopPropagation(); exportCrate('rekordbox'); };
     card.querySelector('[data-tr]').onclick = (e) => { e.stopPropagation(); exportCrate('traktor'); };
     card.querySelector('[data-usb]').onclick = (e) => { e.stopPropagation(); exportCrate('usb'); };
-    const abt = card.querySelector('.crate-analyze');
-    if (abt) abt.onclick = async (e) => {
-      e.stopPropagation();
+    const runPrep = (btn, force) => async (e) => {
+      if (e) e.stopPropagation();
       const meta = card.querySelector('.crate-meta span');
-      const label0 = abt.textContent;
-      abt.disabled = true;
-      abt.textContent = 'Starting';
+      const label0 = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = force ? 'Re-analysing' : 'Starting';
       try {
-        const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/analyze`, { method: 'POST' });
+        const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/analyze${force ? '?force=1' : ''}`, { method: 'POST' });
         if (!r.count) {
-          toast(r.note || 'Nothing to prep in this crate', 5000);
-          abt.disabled = false;
-          abt.textContent = label0;
+          toast(r.note || 'Nothing to prep in this playlist', 5000);
+          btn.disabled = false;
+          btn.textContent = label0;
           return;
         }
         // the analyser takes seconds per track: count them off instead of going quiet
@@ -2006,20 +2007,22 @@ async function renderDjExport() {
           if (!j) { setTimeout(tick, 2500); return; }
           const done = Number(j.done) || 0;
           const total = Number(j.total) || r.count;
-          // one track at a time: counting the one in flight is the honest number
           const shown = Math.min(total, done + (Number(j.active) || (j.running ? 1 : 0)));
-          abt.textContent = `Prepping ${shown}/${total}`;
-          // the card's own count is a render behind while a job runs: say what the job is doing
-          if (meta) meta.textContent = `${p.n_tracks || 0} tracks · prepping ${shown}/${total}`;
+          btn.textContent = `${force ? 'Re-analysing' : 'Prepping'} ${shown}/${total}`;
+          if (meta) meta.textContent = `${p.n_tracks || 0} tracks · ${force ? 're-analysing' : 'prepping'} ${shown}/${total}`;
           if (j.running) { setTimeout(tick, 1500); return; }
-          abt.disabled = false;
-          abt.textContent = done ? `Prepped ${done}` : label0;
-          toast(`${done} of ${total} prepped${j.failed ? ` · ${j.failed} failed` : ''}`, 5000);
+          btn.disabled = false;
+          btn.textContent = done ? `Done ${done}` : label0;
+          toast(`${done} of ${total} ${force ? 're-analysed' : 'prepped'}${j.failed ? ` · ${j.failed} failed` : ''}`, 5000);
           setTimeout(() => refreshView(), 900);
         };
         setTimeout(tick, 800);
-      } catch { toast('Could not start'); abt.disabled = false; abt.textContent = label0; }
+      } catch { toast('Could not start'); btn.disabled = false; btn.textContent = label0; }
     };
+    const abt = card.querySelector('.crate-analyze');
+    if (abt) abt.onclick = runPrep(abt, false);
+    const again = card.querySelector('.crate-again');
+    if (again) again.onclick = runPrep(again, true);
     card.onclick = () => openPlaylist(p.id);
     list.appendChild(card);
     }
@@ -2072,9 +2075,9 @@ async function renderSongs(push = true) {
   $('back').hidden = !state.history.length;
   setNav('songs'); state.view = 'songs'; state.playlistId = null; state.artistName = null; state.albumName = null;
   renderSidebar();
-  $('view-title').textContent = 'Songs';
+  $('view-title').textContent = 'Library';
   const v = $('view');
-  v.innerHTML = `${heroBanner('CATALOGUE', 'Songs', 'Search, filter and play the whole library.')}<div class="songs-chips" id="songs-chips"></div>
+  v.innerHTML = `${heroBanner('LIBRARY', 'Library', 'Every track you own. Search it, filter it, play it.')}<div class="songs-chips" id="songs-chips"></div>
     <div class="lib-actions songs-head">
       <input class="search" id="songs-q" placeholder="Filter by title, artist or album" autocomplete="off">
       <div class="mode-tabs" id="songs-filter">
@@ -3173,12 +3176,6 @@ async function runAssistant(text, out, stateEl, box) {
     }
   }
 
-/* Search stays literal; a question typed there is handed to A&R with the text it came with */
-function navAandR(question) {
-  state.arPending = String(question || '').trim() || null;
-  nav('askai');
-}
-
 async function renderAskAi() {
   closeInlinePreview();
   setNav('askai');
@@ -3235,7 +3232,7 @@ async function renderSearch() {
   setNav('search'); state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'Search';
   const v = $('view');
-  v.innerHTML = `${heroBanner('SEARCH', 'Search', 'Find a track, an artist, an album. A&R answers questions.')}
+  v.innerHTML = `${heroBanner('SEARCH', 'Search', 'Find a track, an artist, an album.')}
     <div class="search-wrap">
       <div class="search-field">
         <input class="search" id="q" placeholder="Search tracks, artists and albums" autocomplete="off">
@@ -3253,7 +3250,7 @@ async function renderSearch() {
         <button class="mode-tab" id="long-sets" data-on="false" aria-pressed="false" title="Include DJ mixes, sets and long recordings">Long sets</button>
       </div>
       <div class="ladder-state" id="ladder-state"></div>
-    </div><div id="ar-bridge-slot"></div><div id="qres"></div><div id="search-discover"></div>`;
+    </div><div id="qres"></div><div id="search-discover"></div>`;
   renderExternalInto($('search-discover'));
   const q = $('q'); q.focus();
   if (!state.allTracks) state.allTracks = await api('/api/tracks');
@@ -3296,16 +3293,6 @@ async function renderSearch() {
     if (!followish) state.lastAgent = null;
     if (disc) disc.hidden = true;   // suggestions are for browsing
     $('view').classList.remove('asking');
-    // a question typed into Search is still handed to the place that answers it
-    const slot = $('ar-bridge-slot');
-    if (slot) slot.innerHTML = '';
-    if (assistantish.test(text) && slot) {
-      const bridge = document.createElement('button');
-      bridge.className = 'btn btn-ghost ar-bridge';
-      bridge.textContent = `Ask A&R: “${text.length > 62 ? text.slice(0, 62) + '…' : text}”`;
-      bridge.onclick = () => navAandR(text);
-      slot.appendChild(bridge);
-    }
     draw();
   };
   // every example is a question, so it opens the place that answers them
@@ -3772,7 +3759,7 @@ async function renderSearch() {
     const value = q.value.trim();
     if (!value && disc) disc.hidden = false;
     if (!value) { setSearchStatus(''); return; }
-    if (assistantish.test(value)) { setSearchStatus('Press Enter to search · A&R answers questions', 'idle'); return; }
+    if (assistantish.test(value)) { setSearchStatus('Press Enter to search', 'idle'); return; }
     $('view').classList.remove('asking');
     setSearchStatus('Searching', 'thinking');
     deb = setTimeout(draw, 350);

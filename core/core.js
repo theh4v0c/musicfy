@@ -2758,13 +2758,13 @@ const server = http.createServer(async (req, res) => {
       };
       const candidates = [];
       if (last && nowTs - last.played_at < 8 * 3600) {
-        candidates.push(`“${last.title}” was the last thing on${hhmm(last.played_at) ? `, at ${hhmm(last.played_at)}` : ''}.`);
+        candidates.push(`You left off on “${last.title}”${hhmm(last.played_at) ? ` at ${hhmm(last.played_at)}` : ''}.`);
       }
       if (weekTrack && weekTrack.n >= 4) candidates.push(`“${weekTrack.title}”, ${weekTrack.n} times this week.`);
       if (weekArtist && weekArtist.n >= 3) candidates.push(`${weekArtist.artist}, ${weekArtist.n} plays this week.`);
       if (weekNew) candidates.push(`${weekNew} new track${weekNew === 1 ? '' : 's'} this week${weekNewUnheard ? `; ${weekNewUnheard} still unheard` : ''}.`);
       if (hourFamily && hourFamily.n >= 4) candidates.push(`At this hour you usually reach for ${hourFamily.f}.`);
-      if (staleAlbum) candidates.push(`${staleAlbum.a}, untouched for ${Math.floor((nowTs - staleAlbum.last) / 86400)} days.`);
+      if (staleAlbum) candidates.push(`“${staleAlbum.a}” hasn't been on in ${Math.floor((nowTs - staleAlbum.last) / 86400)} days.`);
       if (tempo && tempo.n >= 10 && tempo.b) candidates.push(`${tempo.b} BPM, more or less all week.`);
       if (topHour && topHour.n >= 20) candidates.push(`${String(topHour.h).padStart(2, '0')}:00 is your hour.`);
 
@@ -3352,10 +3352,19 @@ const server = http.createServer(async (req, res) => {
         const j = crateJobs.get(pid);
         return json(res, 200, { started: false, count: j.total - j.done, note: 'this crate is already prepping' });
       }
-      const ids = db.prepare(`SELECT t.id FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
-        JOIN files f ON f.track_id=t.id AND f.tier='owned'
-        WHERE pt.playlist_id=? AND (t.analyzed_at IS NULL OR t.beat_grid IS NULL OR t.beat_grid = '')`).all(pid).map((r) => r.id);
-      if (!ids.length) return json(res, 200, { started: false, count: 0, note: 'this crate has no tracks missing a beat grid' });
+      const force = u.searchParams.get('force') === '1';
+      // a normal prep fills what is missing. A forced pass re-analyses the ones that have
+      // no musical sections yet, which is how a library analysed before sections existed
+      // gains cue points without redoing everything.
+      const ids = (force
+        ? db.prepare(`SELECT t.id FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
+            JOIN files f ON f.track_id=t.id AND f.tier='owned'
+            WHERE pt.playlist_id=? AND (t.sections IS NULL OR t.sections = '' OR t.analyzed_at IS NULL)`)
+        : db.prepare(`SELECT t.id FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
+            JOIN files f ON f.track_id=t.id AND f.tier='owned'
+            WHERE pt.playlist_id=? AND (t.analyzed_at IS NULL OR t.beat_grid IS NULL OR t.beat_grid = '')`)
+      ).all(pid).map((r) => r.id);
+      if (!ids.length) return json(res, 200, { started: false, count: 0, note: force ? 'this playlist is already analysed' : 'this playlist has no tracks missing a beat grid' });
       crateJobs.set(pid, { total: ids.length, done: 0, failed: 0, at: Date.now(), finishedAt: 0 });
       (async () => {
         // two at a time: the analyser is one process per track, and a crate of forty
