@@ -42,14 +42,67 @@ const FAMILIES = [
   ['metal', /\b(metal|doom|sludge|grindcore|death metal|black metal|thrash|hardcore punk)\b/i],
   ['electronic', /\b(electronic|techno|house|ambient|idm|drum and bass|dnb|dubstep|trance|electro|breakbeat|downtempo|garage|bass)\b/i],
   ['hip hop', /\b(hip hop|hip-hop|rap|trap|grime)\b/i],
+  ['latin', /\b(latin|latin pop|reggaeton|reggaetón|dembow|bachata|cumbia|salsa|merengue|sertanejo|perreo|flamenco)\b/i],
+  ['children', /\b(children|kids|nursery|lullaby|bebefinn|pinkfong|cocomelon)\b/i],
+  ['soundtrack', /\b(soundtrack|score|film music|video game|musical)\b/i],
   ['jazz', /\b(jazz|swing|bebop|fusion)\b/i],
-  ['classical', /\b(classical|orchestra|baroque|romantic era|chamber|opera|piano)\b/i],
+  ['classical', /\b(classical|orchestra|baroque|romantic era|chamber|opera)\b/i],
+  ['blues', /\b(blues|boogie woogie)\b/i],
+  ['country', /\b(country|bluegrass|americana|honky tonk)\b/i],
+  ['folk', /\b(folk|acoustic|singer-songwriter)\b/i],
   ['rock', /\b(rock|punk|indie|shoegaze|post-punk|grunge|alternative)\b/i],
-  ['folk', /\b(folk|acoustic|country|bluegrass|americana)\b/i],
   ['soul', /\b(soul|funk|r&b|rhythm and blues|disco|motown)\b/i],
   ['reggae', /\b(reggae|dub|dancehall|ska)\b/i],
+  ['gospel', /\b(gospel|worship|christian)\b/i],
   ['pop', /\b(pop|synthpop|eurodance|boy band)\b/i],
 ];
+
+/* iTunes returns role words where a genre should be ("Composer", "Actress") for odd
+   releases. They are not genres, so they never become a family and never get shown. */
+const NOT_A_GENRE = /^(composer|actress|actor|writer|producer|manager|author|artist)$/i;
+
+function genreOf(value) {
+  const g = String(value || '').trim();
+  if (!g || NOT_A_GENRE.test(g)) return null;
+  return g;
+}
+
+function familyOfString(genre) {
+  const g = genreOf(genre);
+  if (!g) return null;
+  for (const [name, re] of FAMILIES) if (re.test(g)) return name;
+  return null;
+}
+
+/* Recompute families from the genre text already stored, without the network. Quiet
+   rows whose family is missing or no longer matches are corrected; everything else is
+   left exactly as it is. */
+function reclassify(db) {
+  let changed = 0;
+  const rows = db.prepare("SELECT id, genre, genre_family FROM tracks WHERE genre IS NOT NULL AND genre != ''").all();
+  const upd = db.prepare('UPDATE tracks SET genre_family=? WHERE id=?');
+  for (const r of rows) {
+    const fam = familyOfString(r.genre);
+    // only ever fills a gap or corrects a wrong family; a genre we cannot classify must
+    // not erase a family that came from the artist's tags
+    if (fam && fam !== (r.genre_family || null)) { upd.run(fam, r.id); changed += 1; }
+  }
+  return changed;
+}
+
+/* Families that came from MusicBrainz artist tags are already on disk; restore them for
+   tracks whose genre text cannot be classified, without a network call. */
+function restoreFromCache(db) {
+  const c = load();
+  let filled = 0;
+  const rows = db.prepare("SELECT id, artist FROM tracks WHERE genre_family IS NULL AND artist IS NOT NULL AND artist != ''").all();
+  const upd = db.prepare('UPDATE tracks SET genre_family=? WHERE id=?');
+  for (const r of rows) {
+    const hit = c[String(r.artist).toLowerCase().trim()];
+    if (hit && hit.family) { upd.run(hit.family, r.id); filled += 1; }
+  }
+  return filled;
+}
 
 function familyOf(genres) {
   for (const [name, re] of FAMILIES) {
@@ -78,10 +131,7 @@ async function fetchArtistTags(artist) {
     }
   }
   if (!data) {
-    if (lastErr && !/50[0-9]|429/.test(String(lastErr.message))) {
-      c[key] = { genres: [], family: null, err: String(lastErr.message), at: Date.now() };
-      save();
-    }
+    // a failure is not an answer: returning it now is fine, caching it forever is not
     return { genres: [], family: null, err: lastErr ? String(lastErr.message) : 'no data' };
   }
   const list = (data && data.artists) || [];
@@ -113,4 +163,4 @@ async function fillTracks(db, { limit = 100 } = {}) {
   return { artistsChecked: looked, tagged, families, remainingArtists: remaining };
 }
 
-module.exports = { fillTracks, fetchArtistTags, FAMILIES };
+module.exports = { fillTracks, fetchArtistTags, familyOf, familyOfString, genreOf, reclassify, restoreFromCache, FAMILIES };

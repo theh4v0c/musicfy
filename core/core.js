@@ -4547,6 +4547,13 @@ process.on('unhandledRejection', (e) => {
 });
 
 try { migrate(); } catch (e) { console.error('[migrate]', e.message); }
+// families are derived from the genre text already stored; keep them honest without a
+// network round trip. Cheap (one pass), idempotent, and only touches rows that differ.
+try {
+  const fixed = genre.reclassify(db);
+  const restored = genre.restoreFromCache(db);
+  if (fixed || restored) console.log('[genre] families: reclassified', fixed, '· restored', restored);
+} catch (e) { console.error('[genre] reclassify failed:', e.message); }
 checkDependencies();
 
 // a download that stops reporting progress is dead weight: reap it and free its slot

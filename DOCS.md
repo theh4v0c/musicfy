@@ -215,6 +215,24 @@ iOS ignores `audio.volume` completely, so this is a desktop and Android feature.
 deliberately **no file-rewriting path**: re-encoding a track to hit a loudness number
 compresses its peaks, and that is not something a library should do behind your back.
 
+## Genres
+
+One family list, in `core/genre.js`: metal, electronic, hip hop, latin, children,
+soundtrack, jazz, classical, blues, country, folk, rock, soul, reggae, gospel, pop.
+`identity.js` imports it instead of keeping a second copy, which is how children's music
+and latin used to exist in the library but on no card.
+
+- **Role words are not genres.** iTunes returns "Composer" or "Actress" in the genre
+  field for odd releases; `genreOf()` refuses them, so they never become a family and
+  never appear as a chip.
+- **Families are derived twice**: from the genre text (`classify`) and, where that cannot
+  decide, from the artist tags already in `genre-cache.json` (`restoreFromCache`). Both
+  run at boot, are idempotent, and only fill a gap — a genre the classifier does not
+  recognise never erases a family that came from the artist.
+- **The numbers reconcile.** The Genres view builds cards from the data with no whitelist,
+  shows every family, and adds a **no family** card for the rest. The header reads
+  `10 families · 435 of 1461 tracks`, and the cards add up to exactly that.
+
 ## Mixed In Key interop, and what we took from it
 
 Mixed in Key 10.2.1 (`com.mixedinkey.application`) is a native app with separate

@@ -74,6 +74,10 @@ const FAMILY_OF_GENRE = [
 ];
 
 function familyOf(genre) {
+  // one list, in genre.js: a second copy here classified children's music as nothing
+  try { return require('./genre').familyOfString(genre); } catch { return familyOfLocal(genre); }
+}
+function familyOfLocal(genre) {
   for (const [name, re] of FAMILY_OF_GENRE) if (re.test(String(genre || ''))) return name;
   return null;
 }

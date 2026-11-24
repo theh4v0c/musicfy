@@ -960,6 +960,16 @@ const VIEW_ICONS = {
   compact: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="3" height="3" rx="1"/><rect x="7" y="2" width="3" height="3" rx="1"/><rect x="12" y="2" width="2" height="3" rx="1"/><rect x="2" y="7" width="3" height="3" rx="1"/><rect x="7" y="7" width="3" height="3" rx="1"/><rect x="12" y="7" width="2" height="3" rx="1"/><rect x="2" y="12" width="3" height="2" rx="1"/><rect x="7" y="12" width="3" height="2" rx="1"/><rect x="12" y="12" width="2" height="2" rx="1"/></svg>',
 };
 const VIEW_LABELS = { list: 'List', grid: 'Grid', compact: 'Compact' };
+/* A genre tag is a family if we have one, otherwise a real genre. Role words that iTunes
+   returns in the genre field ("Composer", "Actress") are not genres and are not shown. */
+const NOT_A_GENRE = /^(composer|actress|actor|writer|producer|manager|author|artist)$/i;
+function genreTag(t) {
+  if (!t) return '';
+  if (t.genre_family) return String(t.genre_family);
+  const g = String(t.genre || '').trim();
+  return g && !NOT_A_GENRE.test(g) ? g : '';
+}
+
 /* Key names, in either notation, from one setting: "Am" or "8A". The wheel values are the
    same numbers the analysis and the harmonic ordering use. */
 const CAMELOT_MINOR = { 'G#': 1, 'D#': 2, 'A#': 3, F: 4, C: 5, G: 6, D: 7, A: 8, E: 9, B: 10, 'F#': 11, 'C#': 12 };
@@ -2031,10 +2041,14 @@ async function renderDjExport() {
 function renderGenreView(host, all, limit) {
   const genre = state.genreFilter;
   if (!genre) return false;
-  const list = all.filter((t) => String(t.genre_family || t.genre || '').toLowerCase() === genre.toLowerCase());
+  const wantNone = genre === '__none__';
+  const list = all.filter((t) => {
+    const fam = String(t.genre_family || '').toLowerCase().trim();
+    return wantNone ? !fam : fam === genre.toLowerCase();
+  });
   host.innerHTML = '';
   const head = document.createElement('div');
-  head.innerHTML = `<div class="sec-title" style="margin-top:0">${esc(genre)} <small>${list.length} TRACKS</small>
+  head.innerHTML = `<div class="sec-title" style="margin-top:0">${esc(genre === '__none__' ? 'No family yet' : genre)} <small>${list.length} TRACKS</small>
     <button class="btn btn-ghost" id="genre-clear" style="margin-left:10px">Clear</button></div>`;
   host.appendChild(head);
   head.querySelector('#genre-clear').onclick = () => { state.genreFilter = null; refreshView(); };
@@ -2250,22 +2264,28 @@ async function renderSongs(push = true) {
   const drawBrowse = (host) => {
     if (!browse) return false;
     if (browse === 'genres') {
-      // real families only: the genre column also holds labels like composer or actress
-      const KNOWN = ['metal', 'electronic', 'hip hop', 'jazz', 'classical', 'rock', 'folk', 'soul', 'reggae', 'pop'];
-      const fams = {};
+      // every family the library actually has, plus the untagged rest, so the card
+      // counts add up to the library instead of to a whitelist
+      const fams = new Map();
+      let untagged = 0;
       for (const t of all) {
-        const g = String(t.genre_family || '').toLowerCase();
-        if (g && KNOWN.includes(g)) fams[g] = (fams[g] || 0) + 1;
+        const g = String(t.genre_family || '').toLowerCase().trim();
+        if (g) fams.set(g, (fams.get(g) || 0) + 1);
+        else untagged += 1;
       }
-      const rows = Object.entries(fams).sort((a, b) => b[1] - a[1]);
-      host.innerHTML = `<div class="sec-title">Genres <small>${rows.length}</small></div><div class="pgrid" id="browse-grid"></div>`;
+      const rows = [...fams.entries()].sort((a, b) => b[1] - a[1]);
+      const tagged = rows.reduce((n, [, c]) => n + c, 0);
+      host.innerHTML = `<div class="sec-title">Genres <small>${rows.length} families · ${tagged} of ${all.length} tracks</small></div><div class="pgrid" id="browse-grid"></div>`;
       const grid = host.querySelector('#browse-grid');
-      for (const [name, n] of rows) {
+      const cards = rows.map(([name, n]) => ({ name, n }));
+      if (untagged) cards.push({ name: 'no family', n: untagged });
+      for (const { name, n } of cards) {
+        const untag = name === 'no family';
         const card = document.createElement('div');
         card.className = 'pcard';
-        card.innerHTML = `<div class="pcard-art ph" style="background:${gradFor(name)};color:rgba(255,255,255,.9)">${esc(name.charAt(0).toUpperCase())}</div>
+        card.innerHTML = `<div class="pcard-art ph" style="background:${untag ? 'var(--bg-elev2)' : gradFor(name)};color:rgba(255,255,255,.9)">${esc(name.charAt(0).toUpperCase())}</div>
           <div class="pcard-name">${esc(name)}</div><div class="pcard-sub">${n} tracks</div>`;
-        card.onclick = () => { browse = null; state.genreFilter = name; limit = 60; draw(); };
+        card.onclick = () => { browse = null; state.genreFilter = untag ? '__none__' : name; limit = 60; draw(); };
         grid.appendChild(card);
       }
       return true;
@@ -3774,7 +3794,7 @@ function trow(t, i, list) {
   el.innerHTML = `
     <div class="tno"><span class="tno-num">${String(i + 1).padStart(2, '0')}</span><button class="tno-play" aria-label="Play">${IC.play}</button></div>
     ${artTag(t, 'tart', 96)}
-    <div class="tmeta"><div class="tt">${esc(t.title)}</div>${t.album ? `<div class="talbum-line">${t.artist ? `<span class="tal-artist alink" data-kind="artist">${esc(t.artist)}</span><span class="tal-sep"> &middot; </span>` : ''}<span class="alink">${esc(t.album)}</span></div>` : ''}${t.genre || t.genre_family ? `<button class="genrechip" data-kind="genre">${esc(t.genre_family || t.genre)}</button>` : ''}${t.bpm ? `<div class="tbpm">${Math.round(t.bpm)} BPM${t.key ? ` <button class="keychip key-${keyHueClass(t.key, t.key_scale)}" data-kind="key" title="Sort by key">${esc(keyLabel(t))}</button>` : ''}</div>` : ''}</div>
+    <div class="tmeta"><div class="tt">${esc(t.title)}</div>${t.album ? `<div class="talbum-line">${t.artist ? `<span class="tal-artist alink" data-kind="artist">${esc(t.artist)}</span><span class="tal-sep"> &middot; </span>` : ''}<span class="alink">${esc(t.album)}</span></div>` : ''}${genreTag(t) ? `<button class="genrechip" data-kind="genre">${esc(genreTag(t))}</button>` : ''}${t.bpm ? `<div class="tbpm">${Math.round(t.bpm)} BPM${t.key ? ` <button class="keychip key-${keyHueClass(t.key, t.key_scale)}" data-kind="key" title="Sort by key">${esc(keyLabel(t))}</button>` : ''}</div>` : ''}</div>
     <div class="tartist"><span class="alink ${t.artist ? '' : 'muted'}" data-kind="artist">${esc(t.artist || 'unknown artist')}</span></div>
     <div class="talbum"><span class="alink" data-kind="album">${esc(t.album || '')}</span></div>
     <div class="tadded">${esc(added)}</div>
