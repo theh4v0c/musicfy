@@ -17,6 +17,13 @@ Change order, every time:
 A check that fails means the work is not done. Do not "adjust the check" to make it
 pass; adjust the CSS or update the token deliberately, and say which.
 
+## Where things are recorded
+
+- `MILESTONES.md` — dated log of what shipped and why, plus what is open. Read it before
+  proposing work; add an entry when something lands.
+- `DOCS.md` — how the system works.
+- `DESIGN.md` + `design/tokens.json` — the interface contract.
+
 ## Hard rules
 
 - Three control roles only: **action** (36px/13px/pill), **tab** (30px/12px/pill),
