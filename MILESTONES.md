@@ -6,6 +6,27 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · The original is not the remaster (`v486`)
+
+"Glints Collide" downloaded as the 2006 remaster every time, including after deleting and
+downloading again. It was not a bad search result: `identity.canon()` returns the
+*Remastered 2006* release, and `resolveBest()` adopted its title for the search. The
+remaster is a different recording (guitars re-recorded, drums triggered), and its title
+exact-matched the rewritten seed.
+
+- `ladder.titleForVersion()` keeps the requested version: a plain request searches the
+  plain title even when canon returns a remaster; a request naming the remaster keeps it.
+- `scoreCandidate()` penalises a remaster when one was not asked for (and a plain cut when
+  one was), without rejecting the only available source.
+- `expected` duration now prefers the library's own value, so a 6:33 original is not
+  rejected because the 7:06 remaster matched the catalogue.
+- Track 1816 was repaired in place: the old file was copied to
+  `backups/Glints-1816-remastered-20261124-2050.m4a`, the file row cleared, the track
+  re-downloaded (new duration 295.74, different hash) and re-analysed (BPM 69.8, C#m,
+  89 cues). The separately-labelled Remastered 2006 track remains its own row.
+
+Unit 13/13, API 55/55, design-check and smoke green.
+
 ### 2026-11-24 · Children's uploads are classified, so the rotation can skip them (`v485`)
 
 The children's tracks in the library were YouTube uploads with no genre, so

@@ -9,7 +9,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { createHash } = require('node:crypto');
 const { execFile, execFileSync, spawn } = require('node:child_process');
-const { normalize, scoreCandidate, QUALITY_RANK } = require('./ladder');
+const { normalize, scoreCandidate, titleForVersion, QUALITY_RANK } = require('./ladder');
 const ytdlp = require('./ytdlp');
 const bandcamp = require('./bandcamp');
 const mb = require('./mb');
@@ -1538,9 +1538,13 @@ async function resolveBest(seed, cap = 1800, opts = {}) {
   let canon = null;
   const baseTitle = cleanTitle(seed.title);
   try { canon = await identity.canon(seed.artist || '', baseTitle); } catch {}
-  const searchSeed = canon
-    ? { ...seed, artist: canon.artist || seed.artist, title: canon.title || baseTitle }
-    : { ...seed, title: baseTitle };
+  const wantsRemaster = /\bremaster(ed)?\b/i.test(String(seed.title || ''));
+  const searchSeed = {
+    ...seed,
+    artist: (canon && canon.artist) || seed.artist,
+    title: titleForVersion(seed.title, baseTitle, canon && canon.title),
+    wantsRemaster,
+  };
 
   const [yt, sc, ia] = await Promise.all([
     ytdlp.searchYoutube(searchSeed, { limit: 6 }).catch(() => []),
@@ -1549,7 +1553,9 @@ async function resolveBest(seed, cap = 1800, opts = {}) {
   ]);
   let canonical = null;
   try { canonical = await mb.lookup(searchSeed.artist, searchSeed.title); } catch {}
-  const expected = (canon && canon.duration) || (canonical && canonical.duration) || seed.duration || null;
+  // the library's own duration is the version the person asked for; a canonical remaster
+  // can be several seconds longer (Nebulous: 6:33 vs 7:06)
+  const expected = seed.duration || (canon && canon.duration) || (canonical && canonical.duration) || null;
 
   const scored = [...yt, ...sc, ...ia]
     .map((c) => {

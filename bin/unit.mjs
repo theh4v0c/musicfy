@@ -8,6 +8,7 @@ const require = createRequire(import.meta.url);
 const H = require('../core/harmonic.js');
 const A = require('../core/agent.js');
 const G = require('../core/genre.js');
+const L = require('../core/ladder.js');
 
 const MINOR = { 1: 'G#', 2: 'D#', 3: 'A#', 4: 'F', 5: 'C', 6: 'G', 7: 'D', 8: 'A', 9: 'E', 10: 'B', 11: 'F#', 12: 'C#' };
 const MAJOR = { 1: 'B', 2: 'F#', 3: 'C#', 4: 'G#', 5: 'D#', 6: 'A#', 7: 'F', 8: 'C', 9: 'G', 10: 'D', 11: 'A', 12: 'E' };
@@ -126,4 +127,14 @@ test('children’s music is recognised without a genre', () => {
   assert.equal(G.looksChildren({ title: 'Kids', artist: 'MGMT', album: 'Oracular Spectacular' }), false);
   assert.equal(G.looksChildren({ genre: "Children's Music" }), true);
   assert.equal(G.looksChildren({ genre: 'Techno' }), false);
+});
+
+test('a plain request is not answered with a remaster', () => {
+  const plain = { title: 'Glints Collide', artist: 'Meshuggah', duration: 296, wantsRemaster: false };
+  const remaster = { title: 'Glints Collide', artist: 'Meshuggah', duration: 296, wantsRemaster: false };
+  const a = L.scoreCandidate({ title: 'Glints Collide', artist: 'Meshuggah', duration: 296 }, plain);
+  const b = L.scoreCandidate({ title: 'Glints Collide (Remastered 2006)', artist: 'Meshuggah', duration: 297 }, remaster);
+  assert.ok(a.score > b.score, `${a.score} vs ${b.score}`);
+  assert.equal(L.titleForVersion('Glints Collide', 'Glints Collide', 'Glints Collide (Remastered 2006)'), 'Glints Collide');
+  assert.equal(L.titleForVersion('Glints Collide (Remastered 2006)', 'Glints Collide', 'Glints Collide (Remastered 2006)'), 'Glints Collide (Remastered 2006)');
 });

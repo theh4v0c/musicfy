@@ -25,6 +25,15 @@ function artistTokens(s) {
 // ---------- scoring ----------
 // candidate: { title, artist, album?, duration?, format?, bitrate?, size?, filename? }
 // seed: { title, artist, duration? }
+/* A remaster is a different recording, not a cleaner copy: Nothing 2006 re-recorded
+   guitars and triggered drums. A request that does not name a remaster must not be
+   answered with one just because the catalogue's canonical match happens to be it. */
+function titleForVersion(seedTitle, baseTitle, canonTitle) {
+  const wants = /\bremaster(ed)?\b/i.test(String(seedTitle || ''));
+  if (wants) return /\bremaster/i.test(String(canonTitle || '')) ? canonTitle : String(seedTitle || '');
+  return baseTitle;
+}
+
 function scoreCandidate(candidate, seed) {
   const ct = normalize(candidate.title || candidate.filename || '');
   const st = normalize(seed.title);
@@ -67,6 +76,10 @@ function scoreCandidate(candidate, seed) {
     else if (d > 25) { score -= 15; reasons.push('duration far'); }
   }
 
+  const candidateRemaster = /\bremaster(ed)?\b|\bre-?release\b|\breissue\b/i.test(String(candidate.title || ''));
+  if (seed.wantsRemaster === false && candidateRemaster) { score -= 15; reasons.push('version mismatch'); }
+  else if (seed.wantsRemaster === true && !candidateRemaster) { score -= 10; reasons.push('not the remaster'); }
+
   const fmt = String(candidate.format || '').toLowerCase();
   const br = Number(candidate.bitrate || 0);
   if (fmt === 'flac' || fmt.includes('flac')) { score += 15; reasons.push('flac'); }
@@ -87,4 +100,4 @@ const QUALITY_RANK = (c) => {
   return 20;
 };
 
-module.exports = { normalize, artistTokens, scoreCandidate, QUALITY_RANK };
+module.exports = { normalize, artistTokens, scoreCandidate, titleForVersion, QUALITY_RANK };

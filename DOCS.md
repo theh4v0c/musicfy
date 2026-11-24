@@ -74,6 +74,17 @@ to the 160k AAC path, which is what most tracks will use.
 No paid source is wired in. Beatport was implemented, required a streaming plan, and was
 removed on request: this project does not depend on paid services.
 
+## Versions: original vs remaster
+
+`ladder.titleForVersion()` keeps the version the person asked for. A request without
+"remaster"/"re-release"/"reissue" searches the plain title even when the catalogue's
+canonical match is the remaster; candidates that carry a version marker are scored down.
+A request that names the remaster keeps the marker and prefers the remaster. This matters
+because a remaster is a different recording, not a cleaner file: Meshuggah's *Nothing*
+2006 re-recorded guitars and triggered drums. The library's own duration is used as the
+length expectation first, so a 6:33 original is not rejected because a 7:06 remaster
+matched the catalogue.
+
 ## Track length rules
 
 Absolute floors were rejecting legitimate short material: grindcore and death metal tracks,
