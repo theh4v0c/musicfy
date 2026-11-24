@@ -42,7 +42,7 @@ Filters reject lyrics videos, interviews, documentaries, podcasts, reactions, mi
 
 ### SoundCloud specifics
 
-- Streaming: the route `/api/ladder/stream/soundcloud?u=<track url>` downloads the whole track once into `/tmp/musicfy-sc/<key>.mp3` and serves it with range support. Fetching the HLS segment url directly is what truncated playback to about 29 seconds, so do not go back to that.
+- Streaming: the route `/api/ladder/stream/soundcloud?u=<track url>` downloads the whole track once into ``<os.tmpdir()>/musicfy-sc/<key>.mp3`` and serves it with range support. Fetching the HLS segment url directly is what truncated playback to about 29 seconds, so do not go back to that.
 - First play of an uncached SoundCloud track waits for the full fetch (tens of seconds on a long track). Later plays are instant. If latency matters, prewarm on search results.
 - Downloads use `-f hls_aac_160k/hls_aac_96k/hls_mp3_128/bestaudio -x --audio-format m4a`, keeping the native 160k AAC instead of re-encoding, and a probe step refuses clips that are only 30 second previews (SoundCloud serves those for tracks that require a paid plan).
 - Free SoundCloud tops out at 96k/160k AAC or 128k mp3. 128k files are the ceiling for some uploads, not a bug.
@@ -582,7 +582,7 @@ starting Baby Shark, Head Shoulders Knees and Toes, Baby T-Rex.
 
 Piping yt-dlp into ffmpeg and straight to the browser does not work inside the service: it
 produced zero bytes and, before the crash guards existed, killed the process mid request. The
-working design is file based: fetch once into `/tmp/musicfy-sc/<key>.mp3` and stream that file
+working design is file based: fetch once into ``<os.tmpdir()>/musicfy-sc/<key>.mp3`` and stream that file
 while it grows, reading in 256 KB chunks and ending when the fetch finishes and the reader
 catches up. A second play serves the cache with range support.
 

@@ -3,7 +3,7 @@
 Self-hosted music library with a browser player, a DJ prep bench, and a library you own.
 One Node service, one SQLite database, no npm dependencies, no account in the playback path.
 
-Developed on a Raspberry Pi 5 (Debian 12, aarch64). Any Node 22 host with ffmpeg works.
+Developed on a Raspberry Pi 5 (Debian 12, aarch64). Any Node 22.13+ host with ffmpeg works.
 
 ## What it does
 
@@ -55,7 +55,7 @@ OPERATIONS.md    deploy, backup, restore, diagnose (generic)
 
 ## Requirements
 
-- Node 22 or newer (`node:sqlite` is built in, so there are no npm dependencies).
+- Node 22.13 or newer (`node:sqlite` is unflagged there, and there are no npm dependencies).
 - `yt-dlp` and `ffmpeg`/`ffprobe` for downloads and streaming.
 - Python 3 with librosa for analysis (see `INSTALL.md`).
 
@@ -67,7 +67,7 @@ Every path comes from the environment (`MUSICFY_HOME`, `MUSICFY_OWNED`, `MUSICFY
 ```sh
 node core/core.js          # listens on 0.0.0.0:8710
 ./bin/smoke.sh             # checks every critical endpoint
-node bin/test.mjs          # asserts real behaviour, 48 checks
+node bin/test.mjs          # asserts real behaviour, 50 checks
 ```
 
 Settings and secrets (`settings.json`, `llm.json`, `soundcloud.json`) live in the data

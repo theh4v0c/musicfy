@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const H = require('../core/harmonic.js');
+const A = require('../core/agent.js');
 
 const MINOR = { 1: 'G#', 2: 'D#', 3: 'A#', 4: 'F', 5: 'C', 6: 'G', 7: 'D', 8: 'A', 9: 'E', 10: 'B', 11: 'F#', 12: 'C#' };
 const MAJOR = { 1: 'B', 2: 'F#', 3: 'C#', 4: 'G#', 5: 'D#', 6: 'A#', 7: 'F', 8: 'C', 9: 'G', 10: 'D', 11: 'A', 12: 'E' };
@@ -89,4 +90,25 @@ test('a compatible chain stays on the wheel', () => {
     const b = { n: Number(keys[i].slice(0, -1)), minor: keys[i].endsWith('A') };
     assert.ok(H.harmonicScore(a, b) > 0, `${keys[i - 1]} -> ${keys[i]}`);
   }
+});
+
+test('a new subject is not a follow-up', () => {
+  assert.equal(A.isFollowUp('10 aphex twin'), false);
+  assert.equal(A.isFollowUp('albums by fear factory'), false);
+  assert.equal(A.isFollowUp('make it darker'), true);
+  assert.equal(A.isFollowUp('the same but slower'), true);
+  assert.equal(A.isFollowUp('two more'), true);
+});
+
+test('the brief filter rejects a single-word coincidence', () => {
+  // "Kids" is a real song, but it is not about unicorns or robots
+  assert.equal(A.briefMatches(['unicorns and robots'], {
+    title: 'Kids', artist: 'MGMT', album: 'Oracular Spectacular', genre: 'Alternative',
+  }), false);
+  assert.equal(A.briefMatches(['unicorns and robots'], {
+    title: 'Sleeping Unicorns', artist: 'The Kiboomers', album: 'x', genre: "Children's Music",
+  }), true);
+  assert.equal(A.briefMatches(['unicorns and robots'], {
+    title: 'The Robot Song', artist: 'Remember White', album: 'x', genre: 'Pop',
+  }), true);
 });

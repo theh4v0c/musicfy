@@ -817,6 +817,11 @@ setInterval(() => {
     const kept = v.filter((t) => now - t < RATE.window);
     if (kept.length) buckets.set(k, kept); else buckets.delete(k);
   }
+  // a cancelled download that is neither running nor queued needs no tombstone
+  try {
+    const queued = new Set(downloadQueue.map((i) => i.jobId));
+    for (const id of cancelledJobs) if (!runningChildren.has(id) && !queued.has(id)) cancelledJobs.delete(id);
+  } catch {}
 }, 60000);
 
 /* A staged ZIP has one owner: this function. The temp tree is removed when the response
@@ -920,6 +925,29 @@ function migrate() {
     catch (e) { console.error('[migrate] failed at', version, e.message); break; }
   }
   return currentVersion();
+}
+
+/* SoundCloud stream cache: one place, in the OS temp dir, pruned on use. It used to be
+   /tmp/musicfy-sc with no ceiling. */
+function scCacheDir() {
+  const dir = path.join(os.tmpdir(), 'musicfy-sc');
+  fs.mkdirSync(dir, { recursive: true });
+  try {
+    const now = Date.now();
+    const files = fs.readdirSync(dir).map((f) => {
+      const p = path.join(dir, f);
+      const st = fs.statSync(p);
+      return { p, size: st.size, at: st.mtimeMs };
+    });
+    for (const f of files) if (now - f.at > 7 * 86400 * 1000) { try { fs.rmSync(f.p, { force: true }); } catch {} }
+    const kept = files.filter((f) => now - f.at <= 7 * 86400 * 1000).sort((a, b) => b.at - a.at);
+    let total = kept.reduce((n, f) => n + f.size, 0);
+    const CAP = 2 * 1024 * 1024 * 1024;
+    for (let i = kept.length - 1; i >= 0 && total > CAP; i -= 1) {
+      try { fs.rmSync(kept[i].p, { force: true }); total -= kept[i].size; } catch {}
+    }
+  } catch {}
+  return dir;
 }
 
 // 5. dependencies must fail loudly at boot, not silently mid download
@@ -1647,8 +1675,8 @@ const server = http.createServer(async (req, res) => {
       const clean = u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '');
       // Secure only when the request actually arrived over TLS: a LAN install on plain
       // http would otherwise receive a cookie the browser refuses to store
-      const secure = req.socket.encrypted || (/^(::1|127\.|::ffff:127\.)/.test(String(req.socket.remoteAddress || ''))
-        && String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https');
+      const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+      const secure = req.socket.encrypted || proto === 'https';
       res.writeHead(302, { 'set-cookie': `mf_auth=${AUTH_TOKEN}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000${secure ? '; Secure' : ''}`, location: clean });
       return res.end();
     }
@@ -1958,8 +1986,7 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/api/ladder/stream/soundcloud') {
       const target = u.searchParams.get('u') || '';
       if (!/^https:\/\/(www\.)?(api\.)?soundcloud\.com\//.test(target)) return json(res, 400, { error: 'non-soundcloud url' });
-      const dir = '/tmp/musicfy-sc';
-      fs.mkdirSync(dir, { recursive: true });
+      const dir = scCacheDir();
       const key = 'sc-' + target.replace(/[^a-zA-Z0-9]+/g, '').slice(-40);
       const file = path.join(dir, key + '.mp3');
 
@@ -3026,6 +3053,9 @@ const server = http.createServer(async (req, res) => {
       if (fams[0]) discovery.push(`10 ${fams[0]} tracks I don't have`);
       else if (keys[0]) discovery.push(`10 tracks in ${keys[0].k}${keys[0].s === 'minor' ? 'm' : ''} I don't have`);
       if (discovery.length < 2 && topArtists.filter(named)[1]) discovery.push(`10 tracks by ${topArtists.filter(named)[1]} I don't have`);
+      // a fresh or empty library has no artist/family to derive from; the outside half
+      // must still exist, or a new install only ever sees the library prompts
+      if (!discovery.length) discovery.push("10 ambient tracks I don't have", "10 electronic tracks I don't have");
 
       const local = [];
       for (const k of keys.slice(0, 2)) local.push(`tracks in ${k.k}${k.s === 'minor' ? 'm' : ''} I have not played`);
@@ -3569,6 +3599,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (mCrateAnalyze && req.method === 'POST') {
       const pid = decodeURIComponent(mCrateAnalyze[1]);
+      const plKind = db.prepare('SELECT kind FROM playlists WHERE id=?').get(pid);
+      if (plKind && plKind.kind === 'listen') {
+        return json(res, 200, { started: false, count: 0, note: 'this playlist is marked listening' });
+      }
       if (crateJobs.has(pid) && !crateJobs.get(pid).finishedAt) {
         const j = crateJobs.get(pid);
         return json(res, 200, { started: false, count: j.total - j.done, note: 'this crate is already prepping' });
@@ -3915,11 +3949,11 @@ const server = http.createServer(async (req, res) => {
       if (t.src_kind === 'soundcloud' && (t.src_url || t.src_id)) {
         const target = t.src_url || t.src_id;
         const key = 'sc-' + String(target).replace(/[^a-zA-Z0-9]+/g, '').slice(-40);
-        const file = path.join('/tmp/musicfy-sc', key + '.mp3');
+        const dir = scCacheDir();
+        const file = path.join(dir, key + '.mp3');
         if (!fs.existsSync(file) && !scStreamJobs.has(key)) {
-          fs.mkdirSync('/tmp/musicfy-sc', { recursive: true });
           const job = new Promise((resolve, reject) => {
-            const tpl = path.join('/tmp/musicfy-sc', key + '.%(ext)s');
+            const tpl = path.join(dir, key + '.%(ext)s');
             const child = spawn(paths.YTDLP, [
               '--no-warnings', '-x', '--audio-format', 'mp3', '--audio-quality', '0', '-o', tpl, target,
             ], { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -4053,8 +4087,14 @@ const server = http.createServer(async (req, res) => {
       let body = '';
       req.on('data', c => body += c);
       req.on('end', () => {
-        try { recordListen(JSON.parse(body)); json(res, 200, { ok: true }); }
-        catch (e) { json(res, 400, { error: e.message }); }
+        let b = null;
+        try { b = JSON.parse(body || '{}'); } catch { return json(res, 400, { error: 'bad request body' }); }
+        const tid = Number(b.track_id);
+        if (!Number.isInteger(tid) || !db.prepare('SELECT 1 FROM tracks WHERE id=?').get(tid)) {
+          return json(res, 400, { error: 'no such track' });
+        }
+        try { recordListen({ ...b, track_id: tid }); json(res, 200, { ok: true }); }
+        catch (e) { serverError(res, e, '/api/listen'); }
       });
       return;
     }

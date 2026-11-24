@@ -97,6 +97,17 @@ const up2b = await up2.json();
 ok('the same track is refused as a duplicate', up2.status === 409 && up2b.duplicate === true, `${up2.status} ${JSON.stringify(up2b)}`);
 if (up1b.track) await post('/api/tracks/delete', { ids: [up1b.track] });
 
+console.log('guards, again');
+const badListen = await post('/api/listen', { track_id: 999999999 });
+ok('an unknown track id is rejected, not a foreign-key error', badListen.status === 400 && /no such track/.test(badListen.body?.error || ''), `${badListen.status} ${JSON.stringify(badListen.body)}`);
+const listenPl = await post('/api/playlists', { name: 'listen guard ' + Date.now() });
+if (listenPl.body?.id) {
+  await patch(`/api/playlists/${listenPl.body.id}`, { kind: 'listen' });
+  const guarded = await post(`/api/playlists/${listenPl.body.id}/analyze`, {});
+  ok('a listening playlist refuses analysis', guarded.status === 200 && guarded.body?.started === false && /listening/i.test(guarded.body?.note || ''), JSON.stringify(guarded.body));
+  await del(`/api/playlists/${listenPl.body.id}`);
+}
+
 console.log('analysis version');
 const an = await j('/api/analyze/status');
 ok('analysis reports its version', Number(an.body?.version) >= 2, JSON.stringify(an.body));

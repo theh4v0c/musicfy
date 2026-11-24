@@ -9,7 +9,7 @@ honest distance between that and a public release.
 
 ## 1. Requirements
 
-- **Node 22** (uses `node:sqlite`, `node:http`, no npm dependencies).
+- **Node 22.13+** (`node:sqlite` is unflagged from 22.13; no npm dependencies).
 - **Python 3.11+** with `librosa` in a venv (audio analysis).
 - **ffmpeg**, **ffprobe**, **zip** on PATH.
 - **yt-dlp** in a venv (the download/stream resolver).
@@ -34,8 +34,6 @@ the few it differs on and inherits the rest of the behaviour.
 | `MUSICFY_PYTHON` | `$MUSICFY_HOME/essentia-venv/bin/python` | the analyser interpreter |
 | `MUSICFY_FFMPEG` | found on `PATH` | ffmpeg |
 | `MUSICFY_FFPROBE` | found on `PATH` | ffprobe |
-| `MUSICFY_FFMPEG` | found on `PATH` | ffmpeg |
-| `MUSICFY_FFPROBE` | found on `PATH` | ffprobe |
 | `MUSICFY_BACKUP_DIR` | `$MUSICFY_HOME/backups` | nightly snapshots |
 | `MUSICFY_PORT` | `8710` | listen port |
 | `MUSICFY_BIND` | `0.0.0.0` | listen address |
@@ -58,7 +56,7 @@ At boot the server prints what it resolved, and names anything missing:
 ```bash
 git clone https://github.com/<you>/MUSICFY && cd MUSICFY
 
-# Node: no dependencies, Node 22+ only.
+# Node: no dependencies, Node 22.13+ (node:sqlite is unflagged there).
 # Python: the analyser. The directory name matters, or set MUSICFY_PYTHON.
 python3 -m venv essentia-venv
 ./essentia-venv/bin/pip install librosa numpy scipy
@@ -98,7 +96,7 @@ WantedBy=multi-user.target
 
 ### Docker (optional)
 
-One image with Node 22, ffmpeg, and the two Python venvs; mount `owned/` and `data/` as
+One image with Node 22.13+, ffmpeg, and the two Python venvs; mount `owned/` and `data/` as
 volumes; expose 8710 on localhost only.
 
 ---
@@ -159,23 +157,9 @@ done; see `MILESTONES.md`.
 
 ## Where things live (env)
 
-Nothing in the code spells an absolute path. An installation says where its parts are:
-
-| variable | default | what it is |
-|---|---|---|
-| `MUSICFY_HOME` | `/opt/musicfy` | root for data, logs, backups, venvs |
-| `MUSICFY_DATA` | `$MUSICFY_HOME/data` | database, settings, caches, covers |
-| `MUSICFY_OWNED` | `$MUSICFY_HOME/owned` | the audio library (may be another mount) |
-| `MUSICFY_DB` | `$MUSICFY_DATA/musicfy.db` | the SQLite file |
-| `MUSICFY_BIN` | `$MUSICFY_HOME/ytdlp-venv/bin` | where the downloader lives |
-| `MUSICFY_YTDLP` | `$MUSICFY_BIN/yt-dlp` | the downloader binary |
-| `MUSICFY_PYTHON` | `$MUSICFY_HOME/essentia-venv/bin/python` | the analyser interpreter |
-| `MUSICFY_FFMPEG` | found on `PATH` | ffmpeg |
-| `MUSICFY_FFPROBE` | found on `PATH` | ffprobe |
-| `MUSICFY_BACKUP_DIR` | `$MUSICFY_HOME/backups` | nightly snapshots |
-| `MUSICFY_PORT` | `8710` | listen port |
-
-A second machine needs only those variables; it inherits behaviour, not your paths.
+The complete table is in §2; it is the only list, so it cannot drift from itself.
+Nothing in the code spells an absolute path. A second machine needs only those variables;
+it inherits behaviour, not your paths.
 
 Built-in defences: writes require a same-origin `Origin`; request bodies are capped
 (4 MB, 64 MB uploads); the generic streamer refuses loopback/private/metadata URLs;

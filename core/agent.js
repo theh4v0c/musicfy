@@ -23,12 +23,14 @@ function bannedTerms() {
 const INTENTS = ['build_playlist', 'search_tracks', 'artist_albums', 'download_album', 'download_missing', 'report_library'];
 
 const FOLLOW_RE = /^(more|fewer|less|another|add|remove|drop|make (?:it|them)|same|also|but|now|instead|plus|minus|swap|replace|darker|lighter|faster|slower|shorter|longer|no |without |only |just |and )/i;
+/* A follow-up is an instruction about the previous draft. "Short and not a genre word"
+   was too generous: "10 aphex twin" is a new subject and inherited the previous genres. */
+const FOLLOW_MODIFIER = /^(?:(?:a|an|the|it|them|that|this|more|fewer|less|another|same|but|and|also|now|instead|plus|minus|only|just|no|without|darker|lighter|faster|slower|shorter|longer|louder|quieter|tracks?|songs?|ones?|please|ok|okay|one|two|three|four|five|six|seven|eight|nine|ten|twenty)\s*)+$/i;
 function isFollowUp(text) {
   const t = String(text || '').trim();
   if (!t) return false;
   if (FOLLOW_RE.test(t)) return true;
-  // short and no subject of its own: "two more", "the same but slower"
-  return t.split(/\s+/).length <= 5 && !/\b(playlist|album|techno|house|ambient|jazz|dnb|dub)\b/i.test(t);
+  return FOLLOW_MODIFIER.test(t);
 }
 
 /* Apply an instruction to the plan it refers to. The deterministic pass covers count
@@ -61,7 +63,11 @@ function mergePlan(prev, text) {
 function planLocally(text) {
   const t = String(text || '').toLowerCase();
   const countMatch = t.match(/(\d{1,3})\s*(?:[a-z-]+\s+){0,4}(?:songs?|tracks?|items?)/i);
-  const count = countMatch ? Math.min(Number(countMatch[1]), 100) : 20;
+  // "10 aphex twin" asks for ten things even without the noun; a unit is not a request
+  const leading = t.match(/^\s*(\d{1,3})\s+\S/i);
+  const bareCount = !!leading && !/^\s*\d{1,3}\s*(?:bpm|minutes?|hours?|seconds?|years?)\b/i.test(t);
+  const count = countMatch ? Math.min(Number(countMatch[1]), 100)
+    : bareCount ? Math.min(Number(leading[1]), 100) : 20;
   // "build me 20 tracks of dark techno" is a draft request, not a library report. The
   // verb list was missing every synonym of create except 'create', so the most natural
   // way to ask for a set fell through to report_library and answered with a count.
@@ -75,7 +81,7 @@ function planLocally(text) {
     || /\b(create|build|make|curate|put together|throw together|assemble)\b/.test(t)
     || /\b(give me|i need|i want|can you get|can i get)\b/.test(t)
     || /\b(something|anything)\b/.test(t) || /\bmusic for\b/.test(t)
-    || countedRequest || styledTempo || (childAudience(t) && !reportish);
+    || countedRequest || (bareCount && !reportish) || styledTempo || (childAudience(t) && !reportish);
   const wantsDownload = /\bdownload\b/.test(t);
   // "albums by Fear Factory" / "Fear Factory's discography" is a catalogue listing
   // match against the original text, not the lowercased copy: the artist's casing is
@@ -494,6 +500,18 @@ function briefWords(themes) {
   return [...out];
 }
 
+/* One predicate, used by the fill and tested directly. briefWords() returns an array;
+   the old guard tested `.size`, which was undefined, so every catalogue result passed. */
+function briefMatches(themes, t) {
+  const words = briefWords(themes);
+  if (!words.length) return true;
+  const hay = `${t.title || ''} ${t.album || ''} ${t.genre || ''}`.toLowerCase();
+  // a brief says "robots", a title says "The Robot Song": one plural is not a miss
+  const forms = (w) => [w, w.replace(/s$/, '')];
+  if (words.some((w) => forms(w).some((f) => f.length > 2 && hay.includes(f)))) return true;
+  return /children/i.test(String(t.genre || ''));
+}
+
 async function briefFill(db, { artists = [], themes = [], need = 0, childSafe = false }) {
   if (need <= 0) return [];
   const inLib = new Set(db.prepare('SELECT dup_key FROM tracks').all().map((r) => r.dup_key));
@@ -525,15 +543,7 @@ async function briefFill(db, { artists = [], themes = [], need = 0, childSafe = 
   const lists = [];
   for (const th of themes) {
     const res = await identity.catalog(th, { songs: childSafe ? 30 : 12, albums: 0, artists: 0 }).catch(() => ({ songs: [] }));
-    lists.push((res.songs || []).filter((t) => {
-      // briefWords returns a Set: `length` was undefined, so this filter never filtered,
-      // and any pop song from the search came through ("Fast Car" on a dance brief)
-      if (!words.size) return true;
-      const hay = `${t.title} ${t.album} ${t.genre || ''}`.toLowerCase();
-      if (words.some((w) => hay.includes(w))) return true;
-      // the catalogue's own classification is a match: Children's Music needs no title word
-      return /children/i.test(String(t.genre || ''));
-    }));
+    lists.push((res.songs || []).filter((t) => briefMatches(themes, t)));
   }
   for (let i = 0; out.length < need && i < 12; i += 1) {
     let took = false;
@@ -948,5 +958,5 @@ function commit(db, proposal, deps) {
   return { spoken: 'Nothing to do.', data: {} };
 }
 
-module.exports = { planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan, relevanceGate, childAudience, artistAlbums };
+module.exports = { planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan, relevanceGate, childAudience, artistAlbums, briefWords, briefMatches };
 

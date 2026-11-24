@@ -6,6 +6,51 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · audit pass 3: the filter that did not filter, and the follow-up that swallowed a new request (`v474`)
+
+The audit was right on the three P1s, including one that was my own previous "fix":
+
+- **The brief filter never filtered.** `briefWords()` returns an array, but `briefFill()`
+  tested `.size`; undefined meant "no words", so every catalogue result for a theme
+  passed. The comment claiming the Fast Car failure was fixed was false. The filter is one
+  exported predicate (`briefMatches`), it reads `.length`, it tolerates a plural
+  ("robots" / "The Robot Song"), and a unit test asserts MGMT's *Kids* is rejected on a
+  unicorn brief.
+- **A new subject was treated as a follow-up.** `isFollowUp()` accepted any sentence of
+  five words or fewer without a genre word, so "10 aphex twin" inherited the previous
+  plan's genres and query. A follow-up must now be an instruction (`more`, `darker`,
+  `the same but slower`, `two more`) or a modifier-only sentence. "10 aphex twin" is a
+  new request, and a leading count without a noun is now understood as a request for that
+  many tracks.
+- **An empty library lost the outside half of the suggestions.** No artists, families or
+  keys meant no discovery prompt. A static fallback ("10 ambient tracks I don't have",
+  "10 electronic tracks I don't have") keeps the promise on a fresh install; verified with
+  an empty `MUSICFY_HOME`.
+
+P2s, all correct:
+- `backup-db.js` no longer calls a schema-less database corrupt: missing DB and zero tables
+  both print `{snapshot:null, skipped:…}` and exit 0 without creating a file. The
+  missing-DB case was not in the report and failed the same way.
+- The three inline `onerror=` cover fallbacks are gone; a capture listener on `document`
+  handles `data-cover-hide` / `data-cover-initial`, so the CSP can stay strict. No console
+  CSP violations on load.
+- `/api/listen` validates the id (400 "no such track") instead of echoing a foreign-key
+  error.
+- The SoundCloud stream cache is under `os.tmpdir()` and pruned (7 days, 2 GB); no
+  hardcoded `/tmp` remains outside `paths.js`.
+- `INSTALL.md` has one environment table, and Node is 22.13+ everywhere (that is where
+  `node:sqlite` loses the flag).
+- `cancelledJobs` is trimmed in the 60 s interval when the job is neither running nor
+  queued.
+- A `kind='listen'` playlist refuses `/analyze` even when called directly.
+- `savedBlobs` refreshes its LRU on a hit; warm URLs are capped at four, so the map cannot
+  grow past the keep size in practice.
+- The auth cookie sets `Secure` on `X-Forwarded-Proto: https` from any proxy; a client can
+  only affect its own cookie by lying.
+
+Acceptance: unit 10/10 (two new: follow-up classification, brief filter), `bin/test.mjs`
+50/50 (listen validation, listening guard), design-check and smoke green.
+
 ### 2026-11-24 · A&R keeps the last draft; exclusions reach the catalogue (`v473`)
 
 Two gaps in "memory":

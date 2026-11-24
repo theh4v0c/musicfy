@@ -9,6 +9,12 @@ const DB = paths.DB;
 const OUT = paths.BACKUPS;
 const KEEP = Number(process.env.MUSICFY_BACKUP_KEEP || 7);
 
+// a job that runs before the first boot has nothing to snapshot, and must not create
+// the app's database just to copy it
+if (!fs.existsSync(DB)) {
+  console.log(JSON.stringify({ snapshot: null, skipped: 'database does not exist yet' }));
+  process.exit(0);
+}
 fs.mkdirSync(OUT, { recursive: true });
 const stamp = new Date().toISOString().slice(0, 10);
 const dest = path.join(OUT, `musicfy-${stamp}.db`);
@@ -27,7 +33,14 @@ const integrity = check.prepare('PRAGMA integrity_check').get();
 const tables = check.prepare("SELECT COUNT(*) c FROM sqlite_master WHERE type='table'").get().c;
 check.close();
 const verdict = Object.values(integrity || {})[0];
-if (verdict !== 'ok' || !tables) { fs.rmSync(tmp); throw new Error(`backup failed integrity: ${verdict}`); }
+// an empty database is not a corrupt one: a job that runs before the first boot (or
+// after a data-directory move) should say so and leave no file, not claim corruption
+if (!tables) {
+  fs.rmSync(tmp);
+  console.log(JSON.stringify({ snapshot: null, skipped: 'database has no schema yet' }));
+  process.exit(0);
+}
+if (verdict !== 'ok') { fs.rmSync(tmp); throw new Error(`backup failed integrity: ${verdict}`); }
 fs.renameSync(tmp, dest);
 
 const files = fs.readdirSync(OUT).filter((f) => /^musicfy-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort();

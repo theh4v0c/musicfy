@@ -783,7 +783,7 @@ function renderSlibItems() {
     row.innerHTML = p.liked
       ? `<div class="slib-art ph" style="display:flex;align-items:center;justify-content:center;color:var(--liked)">${IC.heartFull}</div>
          <div style="min-width:0"><div class="slib-name">Liked Songs</div><div class="slib-sub">${p.n} songs</div></div>`
-      : `<img class="slib-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=88&v=${state.artV || 0}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+      : `<img class="slib-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=88&v=${state.artV || 0}" alt="" loading="lazy" data-cover-hide>
          <div style="min-width:0"><div class="slib-name"><span class="pl-idx">${idxLabel(p.idx)}</span>${esc(p.name)}</div><div class="slib-sub">${p.n_tracks} tracks</div></div>`;
     row.onclick = () => p.liked ? nav('liked') : openPlaylist(p.id);
     if (!p.liked) {
@@ -1779,7 +1779,7 @@ async function openPlaylist(pid, push = true) {
 
 function plHeadArt(pid, name) {
   return `<img class="plhead-art" src="/api/cover-playlist/${encodeURIComponent(pid)}?s=420&v=${state.artV || 0}" alt="" draggable="false"
-    onerror="this.outerHTML='<div class=plhead-art ph>${esc(name.charAt(0).toUpperCase())}</div>'">`;
+    data-cover-initial="${esc(name.charAt(0).toUpperCase())}">`;
 }
 
 async function renderLiked() {
@@ -4318,7 +4318,7 @@ async function renderAlbum(name, push = true) {
   const first = (await api(`/api/group/album/${encodeURIComponent(name)}`))[0];
   v.innerHTML = `<div class="plhead">
       <img class="plhead-art" src="/api/cover-album/${encodeURIComponent(name)}?v=${state.artV || 0}" alt="" loading="lazy"
-        onerror="this.outerHTML='<div class=plhead-art ph>${esc(name.charAt(0).toUpperCase())}</div>'">
+        data-cover-initial="${esc(name.charAt(0).toUpperCase())}">
       <div>
         <div class="plhead-kicker">ALBUM</div>
         <h1 class="plhead-name">${esc(name)}</h1>
@@ -4869,14 +4869,21 @@ const SAVED_BLOB_KEEP = 6;
 // read must not happen on the "ended" path: it happens here instead.
 const warmSrc = new Map();
 async function savedAudioUrl(id) {
-  if (savedBlobs.has(id)) return savedBlobs.get(id);
+  if (savedBlobs.has(id)) {
+    // refresh the insertion order so the LRU means "least recently played"
+    const url = savedBlobs.get(id);
+    savedBlobs.delete(id);
+    savedBlobs.set(id, url);
+    return url;
+  }
   try {
     const c = await caches.open('mf-audio-v2');
     const hit = await c.match('/offline/' + id);
     if (!hit) return null;
     const url = URL.createObjectURL(await hit.blob());
     savedBlobs.set(id, url);
-    // keep enough for a warmed queue; never release a URL that is waiting to be played
+    // keep enough for a warmed queue; never release a URL that is waiting to be played.
+    // warmSrc is capped at 4, so this loop always has a victim before the map can grow.
     while (savedBlobs.size > SAVED_BLOB_KEEP) {
       const victim = [...savedBlobs.keys()].find((k) => !warmSrc.has(k));
       if (victim === undefined) break;
@@ -5297,6 +5304,20 @@ function setPlayIcons(playing) {
   $('np-toggle').innerHTML = playing ? IC.pause : IC.play;
   $('mini-toggle').innerHTML = playing ? IC.pause : IC.play;
 }
+
+/* Covers that 404 fall back to a generated tile. This used to be inline onerror=,
+   which the CSP correctly refuses to run. */
+document.addEventListener('error', (e) => {
+  const img = e.target;
+  if (!img || img.tagName !== 'IMG') return;
+  if (img.dataset.coverHide !== undefined) { img.style.visibility = 'hidden'; return; }
+  if (img.dataset.coverInitial !== undefined) {
+    const tile = document.createElement('div');
+    tile.className = 'plhead-art ph';
+    tile.textContent = img.dataset.coverInitial;
+    img.replaceWith(tile);
+  }
+}, true);
 
 /* static markup icon bootstrap */
 ['shuffle','prev','toggle','next','repeat','mini-toggle','np-shuffle','np-prev','np-toggle','np-next','np-repeat'].forEach((id) => {
