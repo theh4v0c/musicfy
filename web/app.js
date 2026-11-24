@@ -907,23 +907,22 @@ async function renderHome() {
   v.innerHTML = `
     <section class="mast">
       <div class="mast-glow" id="mast-glow"></div>
-      <div class="mast-meta"><span id="mast-clock"></span><span id="mast-name"></span><span id="mast-session"></span><span class="mast-flex"></span></div>
-      <div class="mast-main">
+      <div class="mast-hero">
+        <button class="mast-art" id="mast-art" aria-label="Play the last track"></button>
         <div class="mast-copy">
-          <h1 class="mast-greet" id="mast-greet">${state.playlists.length} crates</h1>
-          <p class="mast-note" id="mast-note"><span class="mast-fact">Reading the library…</span></p>
-          <button class="mast-mix" id="mast-mix" hidden></button>
-        </div>
-        <div class="mast-side">
-          <button class="flow-key beam" id="flow-btn" aria-label="Start Flow">
-            <span class="flow-key-k">${IC.play}</span>
-            <span class="flow-key-t"><b>Flow</b><i>endless mix from what you play</i></span>
-          </button>
-          <button class="mast-resume" id="mast-resume" hidden></button>
+          <div class="mast-kicker" id="mast-kicker">WHERE YOU LEFT OFF</div>
+          <h1 class="mast-title" id="mast-title">Loading…</h1>
+          <p class="mast-sub" id="mast-sub"></p>
+          <div class="mast-actions">
+            <button class="mast-more" id="mast-more" hidden>More like this</button>
+            <button class="flow-key" id="flow-btn" aria-label="Start Flow">
+              <span class="flow-key-k">${IC.play}</span>
+              <span class="flow-key-t"><b>Flow</b><i>endless mix from what you play</i></span>
+            </button>
+          </div>
         </div>
       </div>
       <div class="mast-picks" id="mast-picks" hidden></div>
-      <div class="mast-tiles" id="quick"></div>
     </section>
     <div id="rotation-slot"></div>
     <div id="home-lazy">
@@ -933,98 +932,49 @@ async function renderHome() {
       <div class="sec-title">Your playlists <small>${state.playlists.length} TOTAL</small></div>
       <div class="pgrid" id="home-grid"></div>
     </div>`;
-  // the masthead reports the session, not the weather: time, place, what was last on
-  const paintClock = () => {
-    const clock = document.getElementById('mast-clock');
-    if (!clock) return;
-    const d = new Date();
-    const day = d.toLocaleDateString(undefined, { weekday: 'short' });
-    const hm = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-    clock.textContent = `${day} ${hm}`;
-  };
-  paintClock();
-  if (state._clockTimer) clearInterval(state._clockTimer);
-  state._clockTimer = setInterval(() => {
-    if (!document.getElementById('mast-clock')) { clearInterval(state._clockTimer); state._clockTimer = null; return; }
-    paintClock();
-  }, 30000);
+  // the header is the record you had on, not a report about it
   api('/api/greeting', { nocache: true }).then((g) => {
-    const greet = document.getElementById('mast-greet');
-    const noteEl = document.getElementById('mast-note');
-    const nameEl = document.getElementById('mast-name');
-    if (nameEl && g.name) nameEl.textContent = g.name.toUpperCase();
-    const mixBtn = document.getElementById('mast-mix');
-    if (greet) {
-      // the headline is a mixing fact, not a greeting: what can follow what you played
-      const mix = g.compatible;
-      if (mix && mix.count >= 3 && mix.exact && mix.seed && mix.seed.title) {
-        greet.innerHTML = `${mix.count} tracks would follow <span class="mast-name">${esc(mix.seed.title)}</span>`;
-      } else if (mix && mix.count >= 3) {
-        // the last play had no tempo of its own: speak in the session's tempo
-        greet.innerHTML = `${mix.count} tracks near <span class="mast-name">${Math.round(mix.bpm)} BPM</span>`;
-      } else if (g.session) {
-        const mins = g.session.minutes;
-        greet.textContent = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m in` : `${mins}m in`;
-      } else {
-        greet.textContent = `${(g.stats && g.stats.tracks) || 0} tracks in the library`;
+    const art = document.getElementById('mast-art');
+    const title = document.getElementById('mast-title');
+    const sub = document.getElementById('mast-sub');
+    const kicker = document.getElementById('mast-kicker');
+    const last = g.last;
+    if (last && last.title) {
+      if (kicker) kicker.textContent = 'WHERE YOU LEFT OFF';
+      if (art) {
+        art.innerHTML = `${last.has_art ? `<img src="/api/cover/${last.id}?s=220&v=${state.artV || 0}" alt="">` : `<span class="ph" style="background:${gradFor((last.artist || '') + last.title)}">${esc(String(last.title).charAt(0).toUpperCase())}</span>`}<span class="mast-art-play">${IC.play}</span>`;
+        art.onclick = () => playList([{ id: last.id, title: last.title, artist: last.artist, has_art: last.has_art, owned: 1, rung: 'local' }], 0, false, 'Home');
       }
-      if (mixBtn) {
-        if (mix && mix.count >= 3) {
-          mixBtn.hidden = false;
-          mixBtn.textContent = `Play those ${mix.count}`;
-          mixBtn.onclick = async () => {
-            mixBtn.disabled = true;
-            try {
-              const r = await api('/api/mix/next', { nocache: true });
-              if (r.tracks && r.tracks.length) playList(r.tracks, 0, false, `After ${r.seed && r.seed.title ? r.seed.title : 'the last one'}`);
-              else toast('Nothing compatible right now');
-            } catch { toast('Could not build that'); }
-            mixBtn.disabled = false;
-          };
-        } else {
-          mixBtn.hidden = true;
-        }
-      }
+      if (title) title.textContent = last.title;
+      if (sub) sub.textContent = last.artist || '';
+    } else {
+      if (kicker) kicker.textContent = 'START HERE';
+      if (title) title.textContent = 'Your library';
+      if (sub) sub.textContent = 'Flow builds a set from what you play.';
+      if (art) { art.innerHTML = `<span class="ph">${IC.play}</span>`; art.onclick = null; }
     }
-    if (noteEl) {
-      const fact = String(g.fact || g.sub || '').replace(/\s*·\s*$/, '');
-      const mix = g.compatible;
-      // the tempo is already the headline when the seed was an average: do not repeat it
-      const lead = (mix && mix.count >= 3 && mix.exact && mix.bpm)
-        ? `${mix.bpm} BPM${mix.key ? ` · ${mix.key}${mix.key_scale === 'minor' ? 'm' : ''}` : ''}`
-        : '';
-      const line = [lead, fact].filter(Boolean).join('. ');
-      noteEl.innerHTML = line ? `<span class="mast-fact">${esc(line)}</span>` : '';
+    const keep = document.getElementById('mast-more');
+    const mix = g.compatible;
+    if (keep) {
+      // the action speaks in verbs; it is there whenever there is a set to play
+      if (mix && mix.ok) {
+        keep.hidden = false;
+        keep.onclick = async () => {
+          keep.disabled = true;
+          try {
+            const r = await api('/api/mix/next', { nocache: true });
+            if (r.tracks && r.tracks.length) playList(r.tracks, 0, false, r.seed && r.seed.title ? `After ${r.seed.title}` : 'More like this');
+            else toast('Nothing compatible right now');
+          } catch { toast('Could not build that'); }
+          keep.disabled = false;
+        };
+      } else keep.hidden = true;
     }
-    // one line of context, not a widget: how long the session is and what it averages
-    const sesEl = document.getElementById('mast-session');
-    if (sesEl && g.session) {
-      const ses = g.session;
-      const dur = ses.minutes >= 60 ? `${Math.floor(ses.minutes / 60)}h ${ses.minutes % 60}m` : `${ses.minutes}m`;
-      // a phone gets the two numbers that matter; a desktop can afford all three
-      const wide = innerWidth >= 700;
-      sesEl.textContent = wide
-        ? `${dur} · ${ses.tracks} tracks${ses.avgBpm ? ` · ${ses.avgBpm} BPM` : ''}`
-        : `${dur}${ses.avgBpm ? ` · ${ses.avgBpm} BPM` : ` · ${ses.tracks} tracks`}`;
-    }
-    // the greeting already counts this week's additions; the library list may not be
-    // loaded yet when the tiles first render
-    if (g.stats && Number.isFinite(Number(g.stats.addedWeek))) {
-      state._addedWeek = Number(g.stats.addedWeek);
-      drawQuick();
-    }
+  }).catch(() => {
+    const title = document.getElementById('mast-title');
+    if (title) title.textContent = 'Your library';
+  });
 
-  }).catch(() => {});
-  loadMastPicks();
-  // a queue survives the session: offer to pick it up instead of starting cold
-  const rq = state.queue && state.queue[state.qi];
-  const resume = document.getElementById('mast-resume');
-  if (resume && rq) {
-    resume.hidden = false;
-    resume.innerHTML = `<span class="mast-resume-k">Resume</span><b>${esc(rq.title || 'last track')}</b>`;
-    resume.onclick = () => { playAt(state.qi); };
-  }
-  drawQuick();
   const fb = $('flow-btn');
   if (fb) fb.onclick = async () => {
     fb.disabled = true;
@@ -1322,35 +1272,6 @@ async function loadMastPicks(fresh) {
     const sh = host.querySelector('.mpick-shuffle');
     if (sh) sh.onclick = () => { sh.disabled = true; loadMastPicks(true); };
   } catch { host.hidden = true; }
-}
-
-function drawQuick() {
-  const q = $('quick');
-  if (!q) return;
-  // three readouts, not a grid of cards: the state of the library at a glance
-  const tracks = state.allTracks || [];
-  const weekAgo = Math.floor(Date.now() / 1000) - 7 * 86400;
-  const fresh = state._addedWeek != null
-    ? state._addedWeek
-    : tracks.filter((t) => Number(t.added_at) >= weekAgo).length;
-  const tiles = [
-    { go: 'liked', n: state.liked.size, l: 'liked songs', s: 'your shortlist' },
-    { go: 'fresh', n: fresh, l: 'new this week', s: 'in the library' },
-    { go: 'prep', n: state.playlists.length, l: 'crates', s: 'ready to prep' },
-  ];
-  q.innerHTML = tiles.map((t) => `<button class="mtile" data-go="${esc(t.go)}">
-      <span class="mtile-n">${Number(t.n) || 0}</span>
-      <span class="mtile-l">${esc(t.l)}</span>
-      <span class="mtile-s">${esc(t.s)}</span>
-    </button>`).join('');
-  q.querySelectorAll('.mtile').forEach((el) => {
-    el.onclick = () => {
-      const go = el.dataset.go;
-      if (go === 'liked') return nav('liked');
-      if (go === 'fresh') return nav('library');
-      if (go === 'prep') return nav('djexport');
-    };
-  });
 }
 
 async function drawRecents(rec) {
