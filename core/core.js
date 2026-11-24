@@ -4367,6 +4367,38 @@ const server = http.createServer(async (req, res) => {
       db.prepare('UPDATE playlists SET updated_at=? WHERE id=?').run(now(), pid);
       return json(res, 200, { ok: true, count: ordered.length });
     }
+    // delete a whole selection in one request: the row menu and the selection bar both
+    // end up here, so "delete 40 tracks" is one round trip, not forty
+    if (u.pathname === '/api/tracks/delete' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (c) => { body += c; });
+      req.on('end', () => {
+        let ids = [];
+        try { ids = (JSON.parse(body || '{}').ids || []).map(Number).filter((n) => Number.isFinite(n)); } catch {}
+        if (!ids.length) return json(res, 400, { error: 'ids required' });
+        const del = db.prepare('DELETE FROM tracks WHERE id=?');
+        const filesOf = db.prepare('SELECT path FROM files WHERE track_id=?');
+        let deleted = 0;
+        const freed = [];
+        db.exec('BEGIN');
+        try {
+          for (const id of ids) {
+            const files = filesOf.all(id);
+            const r = del.run(id);
+            if (r.changes) deleted += 1;
+            for (const f of files) freed.push(f.path);
+          }
+          db.exec('COMMIT');
+        } catch (e) {
+          try { db.exec('ROLLBACK'); } catch {}
+          return json(res, 500, { error: e.message });
+        }
+        for (const p of freed) { try { fs.unlinkSync(p); } catch {} }
+        return json(res, 200, { ok: true, deleted, files: freed.length });
+      });
+      return;
+    }
+
     const mTrk = u.pathname.match(/^\/api\/tracks\/(\d+)$/);
     if (mTrk && req.method === 'DELETE') {
       const tid = Number(mTrk[1]);

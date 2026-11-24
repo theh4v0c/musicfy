@@ -222,7 +222,7 @@ function openCtx(t, x, y) {
     ${state.view === 'playlist' && state.playlistId ? '<button data-act="rmpl">Remove from this playlist</button>' : ''}
     ${(!t.ladder && t.id) ? '<button data-act="rename">Rename track</button>' : ''}
     ${(!t.ladder && t.id) ? '<button data-act="repair">Fix metadata</button>' : ''}
-    ${(!t.ladder && t.id) ? '<button data-act="deltrack">Delete from library</button>' : ''}
+    ${(!t.ladder && t.id) ? `<button data-act="deltrack">${state.selectedIds.size > 1 && state.selectedIds.has(t.id) ? `Delete ${state.selectedIds.size} selected` : 'Delete from library'}</button>` : ''}
     <button data-act="radiostart">Start track radio</button>`;
   m.classList.add('open');
   placeCtx(x, y);
@@ -406,6 +406,11 @@ $('ctx').addEventListener('click', async (e) => {
     } catch { toast('Remove failed'); }
   }
   if (act === 'deltrack') {
+    // the menu knows about the selection: right-clicking one of twelve selected tracks
+    // means the twelve, not the one under the cursor
+    const many = state.selectedIds.size > 1 && state.selectedIds.has(t.id);
+    const ids = many ? [...state.selectedIds] : [t.id];
+    if (many) { await deleteTracks(ids); return; }
     const msg = hasAudio(t)
       ? `Delete "${t.title}"? The audio file is removed from disk and the track disappears from every playlist.`
       : `Delete "${t.title}" from the library?`;
@@ -439,6 +444,54 @@ $('ctx').addEventListener('click', async (e) => {
     } catch { toast('Delete failed', 4000); }
   }
 });
+
+/* Delete any number of tracks: one confirmation, one request, one refresh. */
+async function deleteTracks(input) {
+  const ids = [...new Set((input || []).map(Number).filter(Boolean))];
+  if (!ids.length) return;
+  const all = state.allTracks || [];
+  const withAudio = ids.filter((id) => { const t = all.find((x) => x.id === id) || (state._rows && state._rows.get(id)); return t && hasAudio(t); });
+  const one = ids.length === 1;
+  const msg = one
+    ? (withAudio.length ? 'Delete this track? The audio file is removed from disk and it disappears from every playlist.' : 'Delete this track from the library?')
+    : `Delete ${ids.length} tracks?${withAudio.length ? ` ${withAudio.length} audio file${withAudio.length === 1 ? ' is' : 's are'} removed from disk` : ''} and they disappear from every playlist.`;
+  if (!confirm(msg)) return;
+
+  // the rows go at once, so a forty track delete does not crawl
+  for (const id of ids) document.querySelectorAll(`.trow[data-tid="${id}"]`).forEach((r) => r.remove());
+  const scrolls = [...document.querySelectorAll('.view, .list-scroll')].map((el) => el.scrollTop);
+  const winY = window.scrollY;
+
+  let deleted = 0;
+  try {
+    const r = await api('/api/tracks/delete', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids }),
+    });
+    deleted = r.deleted || 0;
+  } catch {
+    toast('Delete failed', 4000);
+    refreshView();
+    return;
+  }
+
+  // the queue drops them; if the playing track was one of them it keeps playing until
+  // the end of the file, then the queue continues without it
+  const wasCurrent = state.current && ids.includes(state.current.id);
+  state.queue = state.queue.filter((q) => !ids.includes(q.id));
+  if (state.qi >= state.queue.length) state.qi = state.queue.length - 1;
+  saveQueue();
+
+  clearSelection();
+  state.allTracks = null;
+  afterWrite();
+  await loadPlaylists().catch(() => {});
+  refreshView();
+  requestAnimationFrame(() => {
+    [...document.querySelectorAll('.view, .list-scroll')].forEach((el, i) => { if (scrolls[i] != null) el.scrollTop = scrolls[i]; });
+    window.scrollTo(0, winY);
+  });
+  toast(`Deleted ${deleted} track${deleted === 1 ? '' : 's'}${wasCurrent ? ' — the current one keeps playing until the end' : ''}`, 5000);
+}
 
 function findTrack(rowEl) {
   const tid = Number(rowEl.dataset.tid);
@@ -4021,10 +4074,12 @@ function renderSelectionBar() {
   bar.innerHTML = `<span class="selcount" id="selcount">${n} selected</span>
     <button class="btn btn-primary" id="sel-create">New playlist</button>
     <button class="btn btn-ghost" id="sel-add">Add to playlist</button>
+    <button class="btn btn-ghost" id="sel-delete">Delete</button>
     <button class="btn btn-ghost" id="sel-clear">Clear</button>`;
   host.appendChild(bar);
   bar.querySelector('#sel-create').onclick = selCreatePlaylist;
   bar.querySelector('#sel-add').onclick = selAddToPlaylist;
+  bar.querySelector('#sel-delete').onclick = () => deleteTracks([...state.selectedIds]);
   bar.querySelector('#sel-clear').onclick = clearSelection;
 }
 
@@ -5009,6 +5064,10 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowRight' && !onControl) nextTrack();
   if (e.key === 'ArrowLeft' && !onControl) prevTrack();
   if (e.key === 'Escape') { closeCtx(); $('queue-drawer').hidden = true; }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedIds.size) {
+    e.preventDefault();
+    deleteTracks([...state.selectedIds]);
+  }
 });
 
 /* ============ offline (service worker) ============ */
