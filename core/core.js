@@ -4271,11 +4271,35 @@ const server = http.createServer(async (req, res) => {
           LEFT JOIN resolutions r ON r.track_id=t.id
           WHERE t.id != ? ORDER BY RANDOM() LIMIT 15`).all(tid));
       }
+      // A seed with one family neighbour produced a radio of one, and the home row was a
+      // single card in an empty page. A radio is a queue: fill it to a usable length from
+      // the same family, then from the rest of the owned library.
+      const bannedRadio = tasteAvoid();
+      const kept = bannedRadio.length ? out.filter((t) => !exclude.matches(bannedRadio, t)) : out.slice();
+      const RADIO_TARGET = 15;
+      const take = (rows) => {
+        for (const r of rows) {
+          if (kept.length >= RADIO_TARGET) break;
+          if (!r || have.has(r.id)) continue;
+          if (bannedRadio.length && exclude.matches(bannedRadio, r)) continue;
+          kept.push(r); have.add(r.id);
+        }
+      };
+      if (kept.length < RADIO_TARGET && fam) {
+        take(db.prepare(`SELECT t.*, (f.id IS NOT NULL) AS owned, (t.src_id IS NOT NULL AND t.src_id != '') AS streamable, f.bitrate, r.rung, r.quality
+          FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned'
+          LEFT JOIN resolutions r ON r.track_id=t.id
+          WHERE t.id != ? AND t.genre_family = ? ORDER BY RANDOM() LIMIT 60`).all(tid, fam));
+      }
+      if (kept.length < RADIO_TARGET) {
+        take(db.prepare(`SELECT t.*, 1 AS owned, (t.src_id IS NOT NULL AND t.src_id != '') AS streamable, f.bitrate, r.rung, r.quality
+          FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned'
+          LEFT JOIN resolutions r ON r.track_id=t.id
+          WHERE t.id != ? ORDER BY RANDOM() LIMIT 60`).all(tid));
+      }
       // known family first. 'Tim Green' the house producer and 'Tim Green' the Death guitarist
       // are one string, so the genre column is the only thing that separates their neighbours
-      if (fam) out.sort((a, b) => (a.genre_family === fam ? 0 : 1) - (b.genre_family === fam ? 0 : 1));
-      const bannedRadio = tasteAvoid();
-      const kept = bannedRadio.length ? out.filter((t) => !exclude.matches(bannedRadio, t)) : out;
+      if (fam) kept.sort((a, b) => (a.genre_family === fam ? 0 : 1) - (b.genre_family === fam ? 0 : 1));
       return json(res, 200, kept);
     }
 

@@ -108,6 +108,10 @@ if (listenPl.body?.id) {
   await del(`/api/playlists/${listenPl.body.id}`);
 }
 
+console.log('home radio');
+const rad = await j(`/api/radio/${t ? t.id : 1}`);
+ok('radio fills a queue instead of one card', Array.isArray(rad.body) && rad.body.length >= 10, `n=${Array.isArray(rad.body) ? rad.body.length : '?'}`);
+
 console.log('analysis version');
 const an = await j('/api/analyze/status');
 ok('analysis reports its version', Number(an.body?.version) >= 2, JSON.stringify(an.body));

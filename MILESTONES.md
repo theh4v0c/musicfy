@@ -6,6 +6,23 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · Home stops showing empty rows (`v477`)
+
+Two empty areas came from the data and the lazy loader, not the layout:
+
+- `/api/radio/:id` returned only the seed when a track had one same-family neighbour and
+  no shared-playlist neighbours. The fallback that fills the queue ran only when the list
+  was **completely** empty, so "Your rotation" was one card in a full-width rail.
+  The radio now fills to 15 from the same family, then from the owned library, skipping
+  taught exclusions; a seed with one neighbour returns 15 instead of one.
+- `#home-lazy:not([data-filled]) { display:none }` hid the recents and the playlist grid
+  for six seconds, because `data-filled` is only set when the discovery rail loads. The
+  header comment claimed those two paint at once. Only `#discover-home` is hidden while
+  it is empty now; recents and playlists appear immediately, discovery joins them.
+
+Measured at 1162×936: rotation 1 -> 12 cards; Recently played visible at 3 s instead of a
+blank half-page. Tests 50 -> 51 (`/api/radio` returns a queue).
+
 ### 2026-11-24 · UI/UX correctness pass: readable, operable, content first (`v476`)
 
 Response to the external audit. Correctness and the first screen; no redesign.
