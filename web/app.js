@@ -914,6 +914,10 @@ async function renderHome() {
           <p class="mast-note" id="mast-note"><span class="mast-fact">${state.playlists.length} playlist${state.playlists.length === 1 ? '' : 's'}, ready when you are.</span></p>
         </div>
         <div class="mast-side">
+          <div class="session" id="mast-session" hidden>
+            <div class="session-arc" id="mast-session-arc"></div>
+            <div class="session-meta"><span id="mast-session-line"></span><span id="mast-session-bpm"></span></div>
+          </div>
           <button class="flow-key beam" id="flow-btn" aria-label="Start Flow">
             <span class="flow-key-k">${IC.play}</span>
             <span class="flow-key-t"><b>Flow</b><i>endless mix from what you play</i></span>
@@ -953,8 +957,10 @@ async function renderHome() {
     if (greet) {
       // small hours get their own line: "Good evening" at 2am is a lie
       const late = Number(g.hour) >= 23 || Number(g.hour) < 5;
+      const longSession = g.session && g.session.minutes >= 120;
       const salutation = late
         ? (g.name ? `Still up,` : 'Still up.')
+        : longSession ? (g.name ? 'Still going,' : 'Still going.')
         : `Good ${g.part}${g.name ? ',' : '.'}`;
       greet.innerHTML = g.name
         ? `${esc(salutation)}<br><span class="mast-name">${esc(g.name)}</span>`
@@ -963,6 +969,35 @@ async function renderHome() {
     if (note) {
       const fact = String(g.fact || g.sub || '').replace(/\s*·\s*$/, '');
       note.innerHTML = fact ? `<span class="mast-fact">${esc(fact)}</span>` : '';
+    }
+    // what this session actually is, drawn from the listens themselves
+    const sBox = document.getElementById('mast-session');
+    if (sBox && g.session) {
+      const ses = g.session;
+      const dur = ses.minutes >= 60 ? `${Math.floor(ses.minutes / 60)}h ${ses.minutes % 60}m` : `${ses.minutes}m`;
+      sBox.hidden = false;
+      const line = document.getElementById('mast-session-line');
+      if (line) line.textContent = `${dur} in · ${ses.tracks} tracks · ${ses.artists} artists`;
+      const bpmEl = document.getElementById('mast-session-bpm');
+      if (bpmEl) bpmEl.textContent = ses.avgBpm ? `${ses.avgBpm} BPM avg` : '';
+      // the covers say where the last hour went; the arc says how it moved
+      const arc = document.getElementById('mast-session-arc');
+      const recent = (ses.recent || []).filter((r) => r && r.id);
+      const series = (ses.series || []).filter((v) => Number.isFinite(v));
+      if (arc && recent.length) {
+        arc.innerHTML = `<div class="session-covers">${recent.map((r) => r.has_art
+          ? `<img src="/api/cover/${r.id}?s=80&v=${state.artV || 0}" alt="" loading="lazy" title="${esc(r.title || '')}">`
+          : `<span class="ph"></span>`).join('')}</div>`;
+      } else if (arc) {
+        if (series.length >= 6) {
+          const min = Math.min(...series), max = Math.max(...series), span = Math.max(1, max - min);
+          const W = 120, H = 24;
+          const pts = series.map((v, i) => `${((i / (series.length - 1)) * W).toFixed(1)},${(H - 2 - ((v - min) / span) * (H - 6)).toFixed(1)}`).join(' ');
+          arc.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="var(--acc)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+        } else {
+          arc.innerHTML = '';
+        }
+      }
     }
     // the greeting already counts this week's additions; the library list may not be
     // loaded yet when the tiles first render

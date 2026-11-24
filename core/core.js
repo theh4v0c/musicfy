@@ -2637,6 +2637,34 @@ const server = http.createServer(async (req, res) => {
       const tracks = db.prepare('SELECT COUNT(*) c FROM tracks').get().c;
       const artists = db.prepare("SELECT COUNT(DISTINCT artist) c FROM tracks WHERE artist IS NOT NULL AND artist != ''").get().c;
       const addedWeek = weekNew;
+      // the session in progress: listens with no 90 minute gap, so the header can say
+      // "42 minutes in" and draw the tempo arc of the set instead of a generic greeting
+      let session = null;
+      try {
+        const rows = db.prepare(`SELECT l.played_at, t.id, t.title, t.has_art, t.bpm, t.artist
+          FROM listens l JOIN tracks t ON t.id=l.track_id
+          WHERE l.played_at >= ? ORDER BY l.played_at DESC`).all(nowTs - 12 * 3600);
+        const run = [];
+        let prev = null;
+        for (const r of rows) {
+          if (prev != null && prev - r.played_at > 90 * 60) break;
+          run.push(r);
+          prev = r.played_at;
+        }
+        if (run.length >= 2) {
+          const bpms = run.filter((r) => r.bpm).map((r) => Math.round(r.bpm)).reverse();
+          session = {
+            minutes: Math.max(1, Math.round((run[0].played_at - run[run.length - 1].played_at) / 60)),
+            tracks: run.length,
+            artists: new Set(run.map((r) => r.artist).filter(Boolean)).size,
+            avgBpm: bpms.length ? Math.round(bpms.reduce((a, b) => a + b, 0) / bpms.length) : null,
+            series: bpms.slice(-14),
+            recent: run.slice(0, 4).map((r) => ({ id: r.id, title: r.title, has_art: !!r.has_art })),
+            startedAt: run[run.length - 1].played_at,
+          };
+        }
+      } catch {}
+
       const lastOut = last ? {
         id: last.id, title: last.title, artist: last.artist, album: last.album,
         bpm: last.bpm ? Math.round(last.bpm) : null, key: last.key || null,
@@ -2646,6 +2674,7 @@ const server = http.createServer(async (req, res) => {
         name, part, hour, weather, city, sub, line, fact, last: lastOut,
         // what this listener usually reaches for at this hour: useful, not decorative
         hourFamily: hourFamily ? { family: hourFamily.f, count: hourFamily.n } : null,
+        session,
         stats: { plays, tracks, artists, addedWeek },
       });
     }
