@@ -2,6 +2,11 @@
 # npm dependencies; the images below exist for downloads and analysis.
 FROM node:22-bookworm-slim
 
+LABEL org.opencontainers.image.title="MUSICFY" \
+      org.opencontainers.image.description="Self-hosted music library, browser player and DJ prep bench" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later" \
+      org.opencontainers.image.source="https://github.com/theh4v0c/musicfy"
+
 ENV DEBIAN_FRONTEND=noninteractive \
     MUSICFY_HOME=/data \
     MUSICFY_OWNED=/music \
@@ -17,7 +22,7 @@ RUN apt-get update \
  && /opt/venv/bin/pip install --no-cache-dir -U pip yt-dlp librosa numpy scipy
 
 WORKDIR /app
-COPY package.json README.md INSTALL.md OPERATIONS.md DOCS.md DESIGN.md MILESTONES.md CHANGELOG.md SECURITY.md LICENSE ./
+COPY package.json README.md INSTALL.md OPERATIONS.md DOCS.md DESIGN.md MILESTONES.md CHANGELOG.md SECURITY.md CONTRIBUTING.md THIRD_PARTY.md LICENSE ./
 COPY core ./core
 COPY web ./web
 COPY design ./design

@@ -87,7 +87,7 @@ Every path comes from the environment (`MUSICFY_HOME`, `MUSICFY_OWNED`, `MUSICFY
 ```sh
 node core/core.js          # listens on 0.0.0.0:8710
 ./bin/smoke.sh             # checks every critical endpoint
-node bin/test.mjs          # asserts real behaviour, 57 checks
+node bin/test.mjs          # asserts real behaviour, 61 checks
 ```
 
 Settings and secrets (`settings.json`, `llm.json`, `soundcloud.json`) live in the data
@@ -109,3 +109,25 @@ directory and are never committed.
 4. Keep the interface plain: no emojis, no em dashes, no marketing copy.
 
 See `DOCS.md` for the data model and every endpoint, and `OPERATIONS.md` for the runbook.
+
+## License
+
+MUSICFY is licensed under **AGPL-3.0-or-later**. The full text is in `LICENSE`; the SPDX
+identifier is in `package.json`. In plain terms: you can run, study, change and share it,
+and if you run a modified version as a network service, your users must be able to get
+the corresponding source.
+
+This is a code license, not a music license. MUSICFY ships no audio and grants no rights
+to anything you download, stream or add to your library. You are responsible for the
+material you add and for how you obtain it; downloading from YouTube, SoundCloud or any
+other service is governed by that service's terms and by your local copyright law.
+MUSICFY is not affiliated with those services, with Pioneer, Rekordbox, Traktor, Spotify,
+Apple, Deezer or MusicBrainz.
+
+Third-party tools keep their own licenses: ffmpeg/ffprobe (LGPL/GPL depending on the
+build), yt-dlp (Unlicense), Node (MIT), Python and the librosa stack (BSD/ISC family).
+The Docker image installs ffmpeg from Debian and carries its copyright file; see
+`THIRD_PARTY.md`.
+
+Contributions are accepted under the same license, with a DCO sign-off; see
+`CONTRIBUTING.md`. This section is engineering guidance, not legal advice.

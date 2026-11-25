@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.1 — 2026-11-25
+
+Licensing and distribution notices.
+
+- README: license section, SPDX identifier, and the separation between the code license
+  and the music / third-party services.
+- CONTRIBUTING.md: DCO sign-off and the limits of a DCO for future dual licensing.
+- THIRD_PARTY.md: ffmpeg, yt-dlp, Node, Python and catalogue-data obligations; the Docker
+  image keeps Debian's ffmpeg copyright and points at its corresponding source.
+- Dockerfile: OCI license/source labels and the notices copied into the image.
+
 ## 0.1.0 — 2026-11-25
 
 First installable release.
