@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.45 — 2026-11-25
+
+- The Portuguese prompt asks for catalogue search themes in English, the language the
+  catalogue indexes, so a Portuguese word the metadata does not carry ("galpão") is not
+  searched literally. Rules-only requests still search the word they were given.
+
 ## 0.1.44 — 2026-11-25
 
 - The catalogue query is built from the normalised sentence, so "10 faixas electronic que

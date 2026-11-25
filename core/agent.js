@@ -224,7 +224,9 @@ function planPrompt(lang, context, text) {
 O pedido pode estar em português ou em inglês. Leia como está escrito, mantenha os nomes de
 intent e o schema exatamente como abaixo, e escreva artistas e temas na grafia normal.
 Um pedido de playlist em português devolve "query" em português e um "name" curto em
-português.`
+português. Os "themes" são frases curtas que um catálogo consegue encontrar e, como o
+catálogo indexa em inglês, escreva-os em inglês (por exemplo "armazém" -> "warehouse
+techno").`
     : `Turn a music request into JSON. Reply with JSON only, no prose.
 The request may be written in Portuguese or in English. Read it as it is written, keep the
 intent names and the JSON schema exactly as below, and put artist and theme names in their
