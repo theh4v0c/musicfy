@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.17 — 2026-11-25
+
+- Portuguese covers the Prep page (EXPORTAR, PRONTAS PARA EXPORTAR, Prepare/Update counts,
+  cue-point summaries, ready/Re-analyse, listening toggle), the search Include label, the
+  playlist filter and Name sort, Upload as **Subir**, Liked Songs, Settings notes, and the
+  A&R suggestion prompts.
+- Singular counts read "1 faixa" instead of "1 faixas".
+
 ## 0.1.16 — 2026-11-25
 
 - Settings uses two columns at up to 1100px, with equal-height rows, instead of one 880px
