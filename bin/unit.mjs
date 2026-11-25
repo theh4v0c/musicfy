@@ -286,3 +286,12 @@ test('the agent writes its own sentences in the request language', () => {
   // english is left alone
   assert.equal(A.localizeReason('Nothing new turned up this time.', 'en'), 'Nothing new turned up this time.');
 });
+
+test('release versions compare numerically', () => {
+  const R = require('../core/release.js');
+  assert.equal(R.compare('0.1.46', '0.1.45'), 1);
+  assert.equal(R.compare('v0.1.46', '0.1.46'), 0);
+  assert.equal(R.compare('0.1.9', '0.1.10'), -1);
+  assert.equal(R.compare('1.0.0', '0.99.99'), 1);
+  assert.equal(R.compare('0.2', '0.2.0'), 0);
+});

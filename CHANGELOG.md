@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.46 — 2026-11-25
+
+- Installs without git can update. `musicfy update` on a bundle takes the latest release,
+  verifies it and swaps the code (previous copy kept under `backups/`), instead of stopping
+  at "not a git checkout". Settings' **Check for updates** reports the published version and
+  **Update now** applies it; on a PID-file install it restarts itself.
+- `bin/update-bundle.mjs` is a standalone bootstrap for installs older than this release,
+  which have no release updater to run.
+
 ## 0.1.45 — 2026-11-25
 
 - The Portuguese prompt asks for catalogue search themes in English, the language the

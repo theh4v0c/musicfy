@@ -8,6 +8,8 @@ import net from 'node:net';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+const requireCore = createRequire(import.meta.url);
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CORE = path.join(APP, 'core', 'core.js');
@@ -147,7 +149,7 @@ Usage: musicfy <command> [options]
   backup [--keep N]         Database snapshot plus settings/covers archive.
   restore <snapshot.db>     Replace the database; stop the service first.
   token [--rotate]          Create or rotate MUSICFY_TOKEN in musicfy.env.
-  update                    git pull in a git install, then restart if running.
+  update [--no-restart]     git pull, or the latest release on a bundle install, then restart.
   service install|uninstall systemd (Linux) or launchd (macOS) unit.
   open                      Open the URL in the default browser.
 
@@ -573,6 +575,7 @@ async function update() {
   const self = fileURLToPath(import.meta.url);
   const hashOf = () => { try { return crypto.createHash('sha1').update(fs.readFileSync(self)).digest('hex'); } catch { return ''; } };
   const before = hashOf();
+  let bundleUpdated = false;
   if (fs.existsSync(path.join(APP, '.git'))) {
     const head = capture('git', ['-C', APP, 'rev-parse', '--abbrev-ref', 'HEAD']);
     const ok = head === 'HEAD'
@@ -585,10 +588,22 @@ async function update() {
       return 1;
     }
   } else {
-    console.log('This is not a git checkout. Update with your package manager, then run: musicfy restart');
-    return 0;
+    // a bundle install has no git: take the published release instead
+    let rel;
+    try { rel = requireCore('../core/release.js'); } catch (e) {
+      console.log('This is not a git checkout and the release updater is missing:', e.message);
+      return 1;
+    }
+    try {
+      const r = await rel.apply(APP);
+      if (r.upToDate) console.log(`Already on the latest release (${r.from}).`);
+      else { console.log(`Updated ${r.from} → ${r.to} (release bundle). Previous code kept in ${r.backup}`); bundleUpdated = true; }
+    } catch (e) {
+      console.log('Release update failed:', String(e.message || e).slice(0, 200));
+      return 1;
+    }
   }
-  if (hashOf() !== before) {
+  if (!bundleUpdated && hashOf() !== before) {
     // restart() would run the old code; the new CLI does the right thing
     const r = spawnSync(process.execPath, [self, ...argv], { stdio: 'inherit', env: process.env });
     return r.status == null ? 1 : r.status;
@@ -603,6 +618,10 @@ async function update() {
     return 0;
   }
   // restart() is async: returning it here put a Promise into process.exitCode
+  if (flags.has('--no-restart')) {
+    console.log('Restart to apply: musicfy restart');
+    return 0;
+  }
   if (alive(pid())) return await restart();
   console.log('Updated. Start with: musicfy start');
   return 0;

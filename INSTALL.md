@@ -449,6 +449,32 @@ Settings also shows the installed version and **Check for updates**. **Update no
 the code, but the running process keeps the old version until MUSICFY is restarted. The
 footer prints the restart command for the way it is running.
 
+### Update an install without git
+
+`install.sh --local`, a downloaded archive, or a folder copied from another machine has no
+`.git`. From `0.1.46` the same command updates it from the published release:
+
+```sh
+musicfy update
+```
+
+It downloads the latest release, verifies the archive, keeps the previous code in
+`~/.musicfy/backups/code-<version>-<stamp>`, and swaps it in. Your database, covers, audio
+and `musicfy.env` are not touched.
+
+An install older than `0.1.46` has no release updater yet. Run this bootstrap once, in the
+code folder (`~/.musicfy/app` by default):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/theh4v0c/musicfy/main/bin/update-bundle.mjs -o /tmp/musicfy-update.mjs
+node /tmp/musicfy-update.mjs ~/.musicfy/app
+musicfy restart
+```
+
+After that, `musicfy update` handles it. Settings → **Check for updates** reports the
+published version in both kinds of install, and **Update now** applies it; on a PID-file
+install it restarts itself, under systemd it prints the restart line.
+
 If you installed with npm:
 
 ```sh

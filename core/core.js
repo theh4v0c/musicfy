@@ -18,6 +18,7 @@ const soundcloud = require('./soundcloud');
 const analyser = require('./analyze');
 const queryEngine = require('./query');
 const llm = require('./llm');
+const release = require('./release');
 const genre = require('./genre');
 const repair = require('./repair');
 const agent = require('./agent');
@@ -57,7 +58,23 @@ async function updateInfo(check = false) {
   try {
     out.git = execFileSync('git', ['-C', APP_ROOT, 'rev-parse', '--is-inside-work-tree'], { timeout: 5000 }).toString().trim() === 'true';
   } catch {}
-  if (!out.git) return out;
+  if (!out.git) {
+    // a bundle install still has releases to compare against
+    out.bundle = true;
+    if (!check) return out;
+    if (updateCache.data && Date.now() - updateCache.at < 5 * 60 * 1000) return { ...updateCache.data, version: APP_VERSION };
+    try {
+      const rel = await release.latest();
+      out.latest = rel.version;
+      out.behind = release.compare(rel.version, APP_VERSION) > 0 ? 1 : 0;
+      out.page = rel.page;
+    } catch (e) {
+      out.error = String(e.message || e).split('\n')[0].slice(0, 160);
+    }
+    out.at = Date.now();
+    updateCache = { at: out.at, data: out };
+    return out;
+  }
   try {
     const head = execFileSync('git', ['-C', APP_ROOT, 'rev-parse', '--abbrev-ref', 'HEAD'], { timeout: 5000 }).toString().trim();
     // install.sh used to leave a shallow clone on a detached HEAD; compare with the remote
@@ -3243,7 +3260,30 @@ const server = http.createServer(async (req, res) => {
     }
     if (u.pathname === '/api/update' && req.method === 'POST') {
       const info = await updateInfo(true);
-      if (!info.git) return json(res, 409, { error: 'this install is not a git checkout' });
+      if (!info.git) {
+        // release bundle: download, verify, swap the code, then restart from the new copy
+        if (info.error) return json(res, 502, { error: info.error });
+        try {
+          const r = await release.apply(APP_ROOT);
+          updateCache = { at: 0, data: null };
+          const systemd = fs.existsSync('/run/systemd/system');
+          json(res, 200, { ok: true, from: r.from, to: r.to, upToDate: !!r.upToDate,
+            restart: systemd ? 'sudo systemctl restart musicfy' : 'musicfy restart', restarting: !systemd && !r.upToDate });
+          if (!systemd && !r.upToDate) {
+            // answer first: the restart replaces this process
+            setTimeout(() => {
+              try {
+                const cli = path.join(APP_ROOT, 'bin', 'musicfy.mjs');
+                const child = spawn(process.execPath, [cli, 'restart'], { detached: true, stdio: 'ignore' });
+                child.unref();
+              } catch {}
+            }, 1200);
+          }
+          return;
+        } catch (e) {
+          return json(res, 500, { error: String(e.message || e).split('\n')[0].slice(0, 180) });
+        }
+      }
       if (info.error) return json(res, 502, { error: info.error });
       try {
         const head = execFileSync('git', ['-C', APP_ROOT, 'rev-parse', '--abbrev-ref', 'HEAD'], { timeout: 5000 }).toString().trim();

@@ -191,7 +191,6 @@
     'Fetching official album art': 'Buscando capa oficial do álbum', 'Looking up the track': 'Procurando a faixa',
     'Mirroring playlist...': 'Espelhando lista...', 'Repairing metadata…': 'Corrigindo metadados…',
     'Tagging genres from MusicBrainz, this runs in the background': 'Marcando gêneros no MusicBrainz, isso roda em segundo plano',
-    'Update pulled; restart MUSICFY to apply it': 'Atualização baixada; reinicie o MUSICFY para aplicar',
     'Everything with audio has been analysed at least once': 'Tudo com áudio já foi analisado pelo menos uma vez',
     'Those tracks were not uploaded again. Use "Find higher quality" to replace a copy.': 'Essas faixas não foram enviadas de novo. Use "Buscar qualidade melhor" para substituir uma cópia.',
     'Tags written. Open the file in Traktor to see BPM, key and cues.': 'Tags gravadas. Abra o arquivo no Traktor para ver BPM, tonalidade e cue points.',
@@ -306,6 +305,13 @@
     'Write Traktor tags (crate)': 'Gravar tags do Traktor (lista)',
     'Download to device (zip)': 'Baixar para o aparelho (zip)',
     'Copy playback log': 'Copiar registro de reprodução',
+    'Up to date.': 'Em dia.',
+    'Updated. Restarting…': 'Atualizado. Reiniciando…',
+    'Updated; MUSICFY is restarting': 'Atualizado; o MUSICFY está reiniciando',
+    'Update pulled; restart MUSICFY to apply it': 'Atualização baixada; reinicie o MUSICFY para aplicar',
+    'Update MUSICFY now? The new version is downloaded first; a restart is needed before it is active.':
+      'Atualizar o MUSICFY agora? A nova versão é baixada primeiro; é preciso reiniciar para ela valer.',
+
     'For a stop in the car: what the phone and the server saw': 'Para uma parada no carro: o que o celular e o servidor viram',
     'Playback log copied': 'Registro de reprodução copiado',
     'Copy the playback log': 'Copie o registro de reprodução',
@@ -439,6 +445,11 @@
     [/^(\d+) by “(.+)” in your library, (\d+) new from the catalogue\.$/, (m) => `${m[1]} de “${m[2]}” na sua biblioteca, ${m[3]} novas do catálogo.`],
     [/^(.+): under (\d+) BPM\.$/, (m) => `${m[1]}: abaixo de ${m[2]} BPM.`],
     [/^(.+) — choose a cover$/, (m) => `${m[1]} — escolha uma capa`],
+    [/^Version (.+) is available\.$/, (m) => `A versão ${m[1]} está disponível.`],
+    [/^Updated to (.+)\. Restarting…$/, (m) => `Atualizado para ${m[1]}. Reiniciando…`],
+    [/^Updated to (.+)\. Restart with: (.+)$/, (m) => `Atualizado para ${m[1]}. Reinicie com: ${m[2]}`],
+    [/^Updated\. Restart with: (.+)$/, (m) => `Atualizado. Reinicie com: ${m[1]}`],
+
     [/^Cover of “(.+)” goes to$/, (m) => `A capa de “${m[1]}” vai para`],
     [/^Add "(.+)" to$/, (m) => `Adicionar “${m[1]}” a`],
 
