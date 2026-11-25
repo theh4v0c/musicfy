@@ -451,7 +451,7 @@ Environment=PATH=/usr/local/bin:/usr/bin:/bin
 ExecStart=${process.execPath} --no-warnings ${CORE}
 Restart=always
 RestartSec=3
-User=${process.env.USER || os.userInfo().username}
+User=${process.env.SUDO_USER || process.env.USER || os.userInfo().username}
 
 [Install]
 WantedBy=multi-user.target

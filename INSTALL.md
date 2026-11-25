@@ -170,8 +170,8 @@ If you want MUSICFY to come back after a restart:
 musicfy service install
 ```
 
-On macOS this writes a launchd job. On Linux this writes a systemd unit. It does not need
-sudo on macOS; on Linux it prints the `sudo` command if it cannot install it itself.
+On macOS this writes a launchd job. On Linux this writes a systemd unit. Run it as your
+normal user, not with `sudo`; it prints the `sudo` command if it cannot install it itself.
 
 ### 3.9 Use it from your phone (optional)
 

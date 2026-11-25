@@ -8,24 +8,35 @@ REPO=${MUSICFY_REPO:-https://github.com/theh4v0c/musicfy.git}
 REF=${MUSICFY_REF:-main}
 ROOT=${MUSICFY_HOME:-$HOME/.musicfy}
 APP="$ROOT/app"
-SKIP=""
+SETUP_ARGS=""
 FROM=""
 
-for arg in "$@"; do
+while [ "$#" -gt 0 ]; do
+  arg=$1
   case "$arg" in
-    --root=*) ROOT=${arg#--root=}; APP="$ROOT/app" ;;
-    --repo=*) REPO=${arg#--repo=} ;;
-    --ref=*) REF=${arg#--ref=} ;;
-    --skip-deps) SKIP="--skip-deps" ;;
-    --local) FROM=$(pwd) ;;
-    --from=*) FROM=${arg#--from=} ;;
+    --root) [ "$#" -ge 2 ] || { echo "--root needs a folder" >&2; exit 2; }; ROOT=$2; shift 2 ;;
+    --root=*) ROOT=${arg#--root=}; shift ;;
+    --repo) [ "$#" -ge 2 ] || { echo "--repo needs a URL" >&2; exit 2; }; REPO=$2; shift 2 ;;
+    --repo=*) REPO=${arg#--repo=}; shift ;;
+    --ref) [ "$#" -ge 2 ] || { echo "--ref needs a branch" >&2; exit 2; }; REF=$2; shift 2 ;;
+    --ref=*) REF=${arg#--ref=}; shift ;;
+    --from) [ "$#" -ge 2 ] || { echo "--from needs a folder" >&2; exit 2; }; FROM=$2; shift 2 ;;
+    --from=*) FROM=${arg#--from=}; shift ;;
+    --bind) [ "$#" -ge 2 ] || { echo "--bind needs an address" >&2; exit 2; }; SETUP_ARGS="$SETUP_ARGS --bind=$2"; shift 2 ;;
+    --bind=*) SETUP_ARGS="$SETUP_ARGS --bind=${arg#--bind=}"; shift ;;
+    --port) [ "$#" -ge 2 ] || { echo "--port needs a number" >&2; exit 2; }; SETUP_ARGS="$SETUP_ARGS --port=$2"; shift 2 ;;
+    --port=*) SETUP_ARGS="$SETUP_ARGS --port=${arg#--port=}"; shift ;;
+    --skip-deps) SETUP_ARGS="$SETUP_ARGS --skip-deps"; shift ;;
+    --token) SETUP_ARGS="$SETUP_ARGS --token"; shift ;;
+    --local) FROM=$(pwd); shift ;;
     -h|--help)
-      echo "Usage: install.sh [--root=DIR] [--repo=URL] [--ref=BRANCH] [--local|--from=DIR] [--skip-deps]"
-      echo "  --local/--from  install the source in this folder instead of cloning GitHub"
+      echo "Usage: install.sh [--root DIR] [--repo URL] [--ref BRANCH] [--local | --from DIR] [--bind ADDR] [--port N] [--token] [--skip-deps]"
+      echo "  --local / --from  install the source in this folder instead of cloning GitHub"
       exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
+APP="$ROOT/app"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "MUSICFY needs $1 on PATH." >&2; exit 1; }; }
 need node
@@ -53,7 +64,7 @@ else
   git clone --depth 1 --branch "$REF" "$REPO" "$APP"
 fi
 
-node "$APP/bin/musicfy.mjs" setup --root "$ROOT" $SKIP
+node "$APP/bin/musicfy.mjs" setup --root "$ROOT" $SETUP_ARGS
 
 ln -sf "$APP/bin/musicfy.mjs" "$HOME/.local/bin/musicfy"
 echo ""

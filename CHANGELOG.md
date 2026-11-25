@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.4 — 2026-11-25
+
+- VPS.md: safe test install on a VPS with a local-only bind, a token, an SSH tunnel, an
+  optional Caddy HTTPS proxy, systemd, firewall, backup and update commands.
+- install.sh accepts `--root DIR` / `--bind ADDR` / `--port N` with a space as well as `=`,
+  and passes `--bind`, `--port` and `--token` to setup.
+- The systemd installer uses the invoking user when run through sudo, so the service does
+  not default to root.
+
 ## 0.1.3 — 2026-11-25
 
 - `install.sh --local` (and `--from=DIR`) installs a source folder without cloning GitHub,
