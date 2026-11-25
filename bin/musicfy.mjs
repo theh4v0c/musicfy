@@ -455,6 +455,11 @@ function token() {
 }
 
 async function update() {
+  // an update can change this file; the process in memory is still the old one, so when
+  // it did change, hand over to the new code instead of running the rest of the old logic
+  const self = fileURLToPath(import.meta.url);
+  const hashOf = () => { try { return crypto.createHash('sha1').update(fs.readFileSync(self)).digest('hex'); } catch { return ''; } };
+  const before = hashOf();
   if (fs.existsSync(path.join(APP, '.git'))) {
     const head = capture('git', ['-C', APP, 'rev-parse', '--abbrev-ref', 'HEAD']);
     const ok = head === 'HEAD'
@@ -469,6 +474,11 @@ async function update() {
   } else {
     console.log('This is not a git checkout. Update with your package manager, then run: musicfy restart');
     return 0;
+  }
+  if (hashOf() !== before) {
+    // restart() would run the old code; the new CLI does the right thing
+    const r = spawnSync(process.execPath, [self, ...argv], { stdio: 'inherit', env: process.env });
+    return r.status == null ? 1 : r.status;
   }
   const wrapper = ensureYtdlpWrapper(rootDir);
   if (wrapper) {

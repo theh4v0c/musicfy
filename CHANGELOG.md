@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.27 — 2026-11-25
+
+- When an update changes `bin/musicfy.mjs`, `musicfy update` re-runs itself with the new
+  code before restarting, so an old updater never finishes the job with old logic.
+
 ## 0.1.26 — 2026-11-25
 
 - `musicfy update` no longer dies with `The "code" argument must be of type number` after
