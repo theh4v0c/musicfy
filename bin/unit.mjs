@@ -214,3 +214,16 @@ test('a rate limit or bot check stops the client ladder', () => {
   assert.equal(L.blockedByAddress('WARNING: Signature solving failed: some formats may be missing'), false);
   assert.equal(L.blockedByAddress(''), false);
 });
+
+test('the last-resort search is not double prefixed', () => {
+  const plan = L.searchPlan('Afterclapp', 'Capitão de Areia');
+  assert.deepEqual(plan, [
+    'scsearch5:Afterclapp Capitão de Areia',
+    'scsearch5:Capitão de Areia',
+    'ytsearch1:Afterclapp Capitão de Areia',
+  ]);
+  for (const q of plan) assert.equal((q.match(/search\d+:/g) || []).length, 1, q);
+  assert.equal(L.searchPlan('', '').length, 0);
+  // an artist-only seed still produces a usable title query, never an empty one
+  assert.deepEqual(L.searchPlan('Afterclapp', ''), ['scsearch5:Afterclapp', 'ytsearch1:Afterclapp']);
+});

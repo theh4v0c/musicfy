@@ -109,4 +109,15 @@ function blockedByAddress(text) {
   return ADDRESS_BLOCKED.test(String(text || ''));
 }
 
-module.exports = { normalize, artistTokens, scoreCandidate, titleForVersion, QUALITY_RANK, blockedByAddress };
+
+// The last-resort search plan. SoundCloud first because it answers an address YouTube
+// wants a login for, then a plain YouTube search. Prefixes are added exactly once: an
+// earlier version prefixed a string that already started with "ytsearch1:", so every
+// query was nonsense and the retry could never succeed.
+function searchPlan(artist, title) {
+  const base = [artist, title].filter(Boolean).join(' ').trim();
+  const queries = [...new Set([base, String(title || '').trim()].filter((q) => q.length > 2))];
+  return queries.map((q) => `scsearch5:${q}`).concat(queries[0] ? [`ytsearch1:${queries[0]}`] : []);
+}
+
+module.exports = { normalize, artistTokens, scoreCandidate, titleForVersion, QUALITY_RANK, blockedByAddress, searchPlan };

@@ -9,7 +9,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { createHash, timingSafeEqual } = require('node:crypto');
 const { execFile, execFileSync, spawn } = require('node:child_process');
-const { normalize, scoreCandidate, titleForVersion, QUALITY_RANK, blockedByAddress } = require('./ladder');
+const { normalize, scoreCandidate, titleForVersion, QUALITY_RANK, blockedByAddress, searchPlan } = require('./ladder');
 const ytdlp = require('./ytdlp');
 const bandcamp = require('./bandcamp');
 const mb = require('./mb');
@@ -1268,6 +1268,9 @@ const MAX_DOWNLOADS = Number(process.env.MUSICFY_DOWNLOAD_CONCURRENCY || 4);
 const YTDLP_IPV4 = /^(1|true|yes)$/i.test(String(process.env.MUSICFY_YTDLP_IPV4 || ''));
 // SoundCloud is far more forgiving of a server address than YouTube
 const PREFER_SOUNDCLOUD = /^(1|true|yes)$/i.test(String(process.env.MUSICFY_PREFER_SOUNDCLOUD || ''));
+// a flagged address needs a logged-in session for YouTube; yt-dlp takes a cookies.txt
+const YTDLP_COOKIES = String(process.env.MUSICFY_YTDLP_COOKIES || '');
+const cookieArgs = () => (YTDLP_COOKIES && fs.existsSync(YTDLP_COOKIES) ? ['--cookies', YTDLP_COOKIES] : []);
 const netArgs = () => (YTDLP_IPV4 ? ['--force-ipv4'] : []);
 // failures are reported for this run of the service only, not for all time
 const BOOTED_AT = Math.floor(Date.now() / 1000);
@@ -1526,7 +1529,7 @@ function startLadderDownload(jobId, b, onDone) {
     const NO_COVER = 'duration > 2 & title !~= "(?i)(cover|karaoke|tutorial|lesson|backing track|\\btabs?\\b)"';
     const trySource = (source, next) => {
       const child = spawn(paths.YTDLP, [
-        '--no-warnings', '--newline', ...audioArgs(), ...netArgs(),
+        '--no-warnings', '--newline', ...audioArgs(), ...netArgs(), ...cookieArgs(),
         '--concurrent-fragments', '8', '--retries', '3', '--fragment-retries', '3',
         '--max-downloads', '1', '--match-filter', NO_COVER,
         '-o', path.join(dir, '%(title)s.%(ext)s'), source,
@@ -1556,7 +1559,7 @@ function startLadderDownload(jobId, b, onDone) {
       ? b.url
       : `https://www.youtube.com/watch?v=${b.id}`;
     const child = spawn(paths.YTDLP, [
-      '--no-warnings', '--newline', ...audioArgs(), ...netArgs(),
+      '--no-warnings', '--newline', ...audioArgs(), ...netArgs(), ...cookieArgs(),
       '--concurrent-fragments', '8', '--retries', '3', '--fragment-retries', '3',
       '-o', path.join(dir, '%(title)s.%(ext)s'), yt,
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -1572,16 +1575,16 @@ function startLadderDownload(jobId, b, onDone) {
       const clients = ['android', 'ios', 'web_safari', 'tv'];
       const tryClient = (index) => {
         if (index >= clients.length) {
-          // last resort: let yt-dlp search and take the first that works
-          const query = `ytsearch1:${[b.artist, b.title].filter(Boolean).join(' ')}`;
-          // SoundCloud first, then a plain YouTube search. A datacenter IP is often
-          // blocked by every YouTube client but can still reach SoundCloud.
+          // Last resort: search. This used to prefix an already prefixed query, so the
+          // downloader was asked for "scsearch1:ytsearch1:Artist Title" and could never
+          // find anything; the failure then reported the stale YouTube error.
+          const base = [b.artist, b.title].filter(Boolean).join(' ').trim();
           const tryQuery = (source, next) => {
+            lastYtError = '';
             const retry = spawn(paths.YTDLP, [
-              '--no-warnings', '--newline', ...audioArgs(), ...netArgs(),
-              '--concurrent-fragments', '8',
-              '--match-filter', 'duration > 2',
-              '--extractor-args', 'youtube:player_client=android',
+              '--no-warnings', '--newline', ...audioArgs(), ...netArgs(), ...cookieArgs(),
+              '--concurrent-fragments', '8', '--retries', '2', '--fragment-retries', '2',
+              '--max-downloads', '1', '--match-filter', 'duration > 2',
               '-o', path.join(dir, '%(title)s.%(ext)s'), source,
             ], { stdio: ['ignore', 'pipe', 'pipe'] });
             watch(retry);
@@ -1596,15 +1599,19 @@ function startLadderDownload(jobId, b, onDone) {
               ingestDownloaded();
             }));
           };
-          tryQuery(`scsearch1:${query}`, () => tryQuery(`ytsearch1:${query}`, () => {
-            finish('error', `yt-dlp exit ${code}, clients and search failed`);
-          }));
+          // SoundCloud first: it answers a server address that YouTube wants a login for,
+          // and its search handles the accented titles. YouTube is the last attempt.
+          const plan = searchPlan(b.artist, b.title);
+          const step = (i) => (i >= plan.length
+            ? finish('error', `yt-dlp exit ${code}, no source for "${base}"`)
+            : tryQuery(plan[i], () => step(i + 1)));
+          step(0);
           return;
         }
         // the ladder used to transcode to mp3 whatever the owner had chosen
         lastYtError = '';
         const attempt = spawn(paths.YTDLP, [
-          '--no-warnings', '--newline', ...audioArgs(), ...netArgs(),
+          '--no-warnings', '--newline', ...audioArgs(), ...netArgs(), ...cookieArgs(),
           '--extractor-args', `youtube:player_client=${clients[index]}`,
           '-o', path.join(dir, '%(title)s.%(ext)s'), yt,
         ], { stdio: ['ignore', 'pipe', 'pipe'] });

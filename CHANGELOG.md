@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.25 — 2026-11-25
+
+- Fix the last-resort search: it prefixed an already prefixed query, so it asked for
+  `scsearch1:ytsearch1:Artist Title` and could never find anything. This is why every
+  failed download ended in "clients and search failed" even when SoundCloud had the track.
+- The fallback tries SoundCloud first with the full query and the title alone, takes one
+  hit per query, and reports the real reason instead of the stale YouTube error.
+- `MUSICFY_YTDLP_COOKIES=/path/cookies.txt` passes `--cookies` to yt-dlp, for an address
+  YouTube requires a login on.
+- Unit tests for the search plan and the blocked-address rule.
+
 ## 0.1.24 — 2026-11-25
 
 - A YouTube 429, bot check or 403 stops the client ladder: the downloader goes to
