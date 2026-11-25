@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.19 — 2026-11-25
+
+- Download errors now include the last yt-dlp reason instead of only "clients and search
+  failed".
+- If every YouTube client fails, the download retries a SoundCloud search before giving up;
+  a VPS IP that YouTube blocks can still reach another free source.
+- version 0.1.19.
+
 ## 0.1.18 — 2026-11-25
 
 - Home mast: the greeting aligns to the top of the Flow/Resume stack instead of floating

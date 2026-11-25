@@ -1343,11 +1343,13 @@ function startLadderDownload(jobId, b, onDone) {
   // cover fetch is still in flight: one attempt gets one completion, or the queue
   // advances twice and the concurrency counter goes negative
   let finished = false;
+  let lastYtError = '';
   const finish = (state, detail) => {
     if (finished) return;
     finished = true;
     runningChildren.delete(jobId);
     if (cancelledJobs.has(jobId)) { state = 'cancelled'; detail = ''; }
+    if (state === 'error' && lastYtError) detail = `${detail || 'download failed'} · ${lastYtError}`.slice(0, 260);
     db.prepare('UPDATE jobs SET state=?, detail=?, progress=?, finished_at=? WHERE payload LIKE ?')
       .run(state, detail || '', state === 'done' ? 100 : 0, now(), `%${jobId}%`);
     fs.rmSync(dir, { recursive: true, force: true });
@@ -1358,8 +1360,14 @@ function startLadderDownload(jobId, b, onDone) {
   };
   const watch = (child) => {
     const onChunk = (buf) => {
-      const m = String(buf).match(/(\d+(?:\.\d+)?)%/);
+      const text = String(buf);
+      const m = text.match(/(\d+(?:\.\d+)?)%/);
       if (m) setProgress(Number(m[1]));
+      // keep the real extractor reason: "Sign in to confirm you're not a bot" is a
+      // different problem from a missing format, and both used to say the same thing
+      if (/(ERROR|Sign in|not a bot|unavailable|blocked|429|403)/i.test(text)) {
+        lastYtError = text.trim().split('\n').filter(Boolean).slice(-1)[0].slice(0, 180);
+      }
     };
     if (child.stdout) child.stdout.on('data', onChunk);
     if (child.stderr) child.stderr.on('data', onChunk);
@@ -1552,22 +1560,29 @@ function startLadderDownload(jobId, b, onDone) {
         if (index >= clients.length) {
           // last resort: let yt-dlp search and take the first that works
           const query = `ytsearch1:${[b.artist, b.title].filter(Boolean).join(' ')}`;
-          const retry = spawn(paths.YTDLP, [
-            '--no-warnings', '--newline', '-x', '--audio-format', 'mp3', '--audio-quality', '0',
-            '--match-filter', 'duration > 2',
-            '--extractor-args', 'youtube:player_client=android',
-            '-o', path.join(dir, '%(title)s.%(ext)s'), query,
-          ], { stdio: ['ignore', 'pipe', 'pipe'] });
-          watch(retry);
-          runningChildren.set(jobId, retry);
-          let retrySettled = false;
-          const settleRetry = (fn) => { if (retrySettled) return; retrySettled = true; fn(); };
-          retry.on('error', (e) => settleRetry(() => finish('error', String(e.message).slice(0, 160))));
-          retry.on('close', () => settleRetry(() => {
-            // same 101 quirk: judge by the file on disk, not the exit code
-            const got = fs.readdirSync(dir).some((f) => /\.(mp3|m4a|aac|opus|ogg|flac|wav)$/i.test(f) && !/\.part$/i.test(f));
-            if (!got) return finish('error', `yt-dlp exit ${code}, clients and search failed`);
-            ingestDownloaded();
+          // SoundCloud first, then a plain YouTube search. A datacenter IP is often
+          // blocked by every YouTube client but can still reach SoundCloud.
+          const tryQuery = (source, next) => {
+            const retry = spawn(paths.YTDLP, [
+              '--no-warnings', '--newline', ...audioArgs(),
+              '--match-filter', 'duration > 2',
+              '--extractor-args', 'youtube:player_client=android',
+              '-o', path.join(dir, '%(title)s.%(ext)s'), source,
+            ], { stdio: ['ignore', 'pipe', 'pipe'] });
+            watch(retry);
+            runningChildren.set(jobId, retry);
+            let retrySettled = false;
+            const settleRetry = (fn) => { if (retrySettled) return; retrySettled = true; fn(); };
+            retry.on('error', () => settleRetry(next));
+            retry.on('close', () => settleRetry(() => {
+              // same 101 quirk: judge by the file on disk, not the exit code
+              const got = fs.readdirSync(dir).some((f) => /\.(mp3|m4a|aac|opus|ogg|flac|wav|webm|mp4)$/i.test(f) && !/\.part$/i.test(f));
+              if (!got) return next();
+              ingestDownloaded();
+            }));
+          };
+          tryQuery(`scsearch1:${query}`, () => tryQuery(`ytsearch1:${query}`, () => {
+            finish('error', `yt-dlp exit ${code}, clients and search failed`);
           }));
           return;
         }
