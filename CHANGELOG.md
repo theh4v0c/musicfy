@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.13 — 2026-11-25
+
+- Translate the remaining "Fresh in your library" rail and the small "NEWEST FIRST" label
+  inside section headings.
+
 ## 0.1.12 — 2026-11-25
 
 - Listener keeps A&R and Settings → Model endpoint. A&R is how playlists are requested in

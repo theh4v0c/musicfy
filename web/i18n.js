@@ -25,6 +25,8 @@
     'Flow': 'Flow', 'endless mix from what you play': 'mix sem fim com o que você ouve',
     'Your rotation': 'Sua rotação', 'ON DECK': 'NA FILA', 'SHUFFLE': 'ALEATÓRIO',
     'Recently played': 'Tocadas recentemente', 'Your playlists': 'Suas listas',
+    'Fresh in your library': 'Novidades na sua biblioteca',
+    'Recently downloaded': 'Baixadas recentemente',
     'artist of the week, unheard lately': 'artista da semana, pouco ouvido',
     'more from': 'mais de', 'same key as': 'mesma tonalidade de',
     'in the library, never heard': 'na biblioteca, nunca ouvida',
@@ -140,7 +142,7 @@
     '.crate-name', '.lrow-t b', '.crate-row-t b', '.mpick-t b', '.mast-name',
     '.album-chip b', '.q-title', '.q-sub', '.ai-said', '.ask-action-meta', '.avoid-term',
     '.genrechip', '.keychip', '.tno', '.tdur', '.tbpm', '.trbadge', '.tadded',
-    '.sec-title small', 'script', 'style', 'textarea',
+    'script', 'style', 'textarea',
   ].join(',');
 
   function isUserContent(node) {
