@@ -6,6 +6,27 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-25 · Meshuggah library repaired: albums and covers (`v491`, data)
+
+Twenty-four Meshuggah rows had no album and two had `NULL`; their titles were unambiguous
+but the album page could not place them. Mapped against Deezer/MusicBrainz release data:
+
+| album | tracks | year |
+|---|---:|---|
+| **Rare Trax** | 10 (Abnegating Cecity, Cadaverous Mastication, Internal Evidence, By Emptyness Abducted, Debt of Nature, Don't Speak, Sovereigns Morbidity, War, The Ayahuasca Experience, Conatenation Remix) | 2001 |
+| **None** | 5 (Humiliative, Sickening, Ritual, Gods of Rapture, Aztec Two-Step) | 1994 |
+| **Alive** | 12 (the Live in Montreal / Toronto / Tokyo recordings) | 2010 |
+| **I** | 1 (I, 21 minute track) | 2004 |
+
+`Humiliative` had been sitting under *Contradictions Collapse (Reloaded)*; it belongs to
+*None*. After the update there are **0 Meshuggah rows with a blank or NULL album**.
+
+Covers set for the four affected albums: None (Deezer scan), Rare Trax (Deezer), Alive
+(Apple), I (Deezer). `has_art` is 5/5, 10/10, 12/12 and 1/1 respectively.
+
+`None` is the 1994 EP title, not a placeholder; repair leaves it and the album page's
+**Edit album** is the control for changing it.
+
 ### 2026-11-25 · Correcting an album is possible, for one track or twenty (`v490`)
 
 Meshuggah tracks sit in the wrong albums, and correcting one at a time was the only
