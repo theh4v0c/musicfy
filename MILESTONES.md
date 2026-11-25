@@ -6,6 +6,20 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-25 · Settings cards flow instead of leaving holes (`v498`)
+
+The settings page used `repeat(auto-fit, minmax(260px, 1fr))` with `align-items: start`.
+Three short cards sat in a row whose height was set by the tall Taste card, so You and
+Location ended with ~200px of empty space, and the next row started below that hole.
+
+- the cards now flow in independent CSS columns: three at desktop, two below 1100px, one
+  on a phone. A card keeps its own height and the column stacks the next one directly.
+- notes that introduce a field or checkbox get 10px before it; the Playback card no longer
+  runs "Display only" straight into the Normalize checkbox.
+- documented in DESIGN.md §5.1: no stretched rows, no holes.
+
+Verified at 1440, 1100 and 390: cards are top-aligned per column with no dead bands;
+design checks static and runtime pass.
 ### 2026-11-25 · Duplicates that are actually duplicates; delete an album (`v497`)
 
 The old "Remove duplicate files" only collapsed several files attached to one track, so a

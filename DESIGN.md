@@ -161,6 +161,11 @@ readable before the label:
 | positive | `--ok` | taste, and anything the engine learns |
 | neutral | `--fg-mute` | housekeeping (maintenance, library) |
 
+Settings cards flow in independent columns (three on a wide screen, two at 1100px, one on
+a phone). They are not a row grid: a short card must not leave a 200px hole under itself
+because the card beside it is taller, and a card must not stretch to a neighbour's height.
+A note directly above a field or checkbox keeps 10px of separation.
+
 ### 5.2 Exclusion chips
 
 "Keep out of picks" is shown back as the terms the engine will use: pill chips,
