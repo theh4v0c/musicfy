@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.42 — 2026-11-25
+
+- "Based on X" uses X to search the catalogue without hard-filtering every result by that
+  word. Only "by X" filters strictly. This keeps English requests such as "music like
+  Berghain" from being emptied by a word that is not an artist.
+- No English text or behaviour was changed for the Portuguese work: the English prompt is
+  the same string, the Portuguese sentences only run when the request is Portuguese, and
+  the English path is the default.
+
 ## 0.1.41 — 2026-11-25
 
 - The agent answers in the interface language. Every request carries `x-mf-lang`; the model

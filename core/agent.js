@@ -787,6 +787,10 @@ async function propose(db, plan, lang = 'en') {
     // substitute for X, and neither is whatever the catalogue returned for a name it did
     // not recognise — the honest answer is that there is nothing.
     const byName = (q.match(/\bby\s+([a-z0-9][a-z0-9 .&'\-]{1,48})/i) || [])[1];
+    // "by X" means only X. "based on X" / "like X" means use X to search, not a hard
+    // filter: an English request like "a playlist like Berghain" names a club, and
+    // filtering every catalogue result by that word returned nothing.
+    const strictArtist = !!byName;
     const wantedArtist = byName
       ? byName.replace(/\b(i|we|you|don'?t|do not|have|has|not|my|the|library|please|now|that|which|are|is|and|or|new|unheard)\b.*$/i, '').trim()
       : seedArtist(q);
@@ -862,7 +866,7 @@ async function propose(db, plan, lang = 'en') {
         onlineQuery);
     }
     // "by X" means X is the artist. A song called "Meshuggah" by someone else is not one.
-    if (wantedArtist && online.length) {
+    if (strictArtist && online.length) {
       const needle = wantedArtist.toLowerCase();
       online = online.filter((t) => String(t.artist || '').toLowerCase().includes(needle));
     }
