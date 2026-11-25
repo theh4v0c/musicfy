@@ -548,10 +548,11 @@ stored one; changing the base URL clears the key.
 
 ### Security
 
-- Default install listens on `0.0.0.0` so a phone on the same network can reach it. Set a
-  token before doing that: `musicfy token --rotate`, then restart.
-- Better: bind to `127.0.0.1` and put a TLS reverse proxy or VPN in front. HTTPS is also
-  required for offline playback on iOS.
+- A new install listens on `127.0.0.1`. For a trusted LAN, run
+  `musicfy setup --root ~/.musicfy --bind=0.0.0.0`, then set a token:
+  `musicfy token --rotate`, and restart. This is not for public internet exposure.
+- On a VPS, keep `127.0.0.1` and use an SSH tunnel or an authenticated HTTPS proxy. HTTPS
+  is also required for offline playback on iOS.
 - Do not port-forward it directly to the internet. There are no per-user accounts.
 - `SECURITY.md` explains how to report a vulnerability.
 

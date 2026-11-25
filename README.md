@@ -10,7 +10,8 @@ Runs on 64-bit Linux and macOS. Windows works through Docker Desktop or WSL2. Se
 ## Install
 
 You need a terminal and about 10 minutes. MUSICFY runs on your computer; you use it in a
-browser. You do not need an account, a cloud service or a second computer.
+browser. You do not need an account or a cloud service. A VPS or home server is a computer
+too: install it the same way, keep it on `127.0.0.1`, and reach it through SSH or a VPN.
 
 ### macOS
 
@@ -107,6 +108,7 @@ fails.
 | **Linux** 64-bit, Debian/Ubuntu and similar | `install.sh`, systemd or the `musicfy` command | supported and tested on Debian/Ubuntu |
 | **Windows 10/11** | Docker Desktop, or WSL2 with Ubuntu and then the Linux steps | supported through Linux; native Windows is not supported |
 | **NAS / home server** | Docker, 64-bit amd64 or arm64 | supported when the NAS can run Linux containers |
+| **VPS / cloud server** | the Linux steps on the server; keep the bind on `127.0.0.1` and use an SSH tunnel or VPN | supported; do not expose 8710 directly |
 | **Phone or tablet** | no; it is a browser client for the computer above | use the browser |
 
 You need Node 22.13 or newer, Python 3.10 or newer, `ffmpeg`, `ffprobe` and `yt-dlp`.
@@ -198,8 +200,10 @@ directory and are never committed.
 - Serve it behind HTTPS. The service worker, and therefore offline playback, requires a
   secure context; plain LAN HTTP cannot register it.
 - Audio uses range requests, so a reverse proxy must pass `Range` and `206` through.
-- Set `MUSICFY_TOKEN` to add a shared-secret gate; the app also checks the Origin header on
-  state-changing requests.
+- The installer binds to `127.0.0.1`. For a trusted LAN, `--bind=0.0.0.0` plus a token is
+  supported. Do not expose 8710 directly to the public internet; use a VPN or an
+  authenticated HTTPS proxy. The app also checks the Origin header on state-changing
+  requests.
 
 ## Design rules
 

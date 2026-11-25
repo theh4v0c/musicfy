@@ -28,6 +28,8 @@ Rules:
 - Use only open-source tools and the commands in this prompt. Do not use paid services.
 - If a step needs sudo, show me the exact command and wait for my approval before running it.
 - Do not overwrite an existing ~/.musicfy directory or database. If one exists, stop and tell me.
+- Installing on a VPS is allowed as long as it stays on 127.0.0.1; I will use an SSH tunnel.
+  Do not refuse only because the machine is remote.
 - Do not bind MUSICFY to 0.0.0.0, do not open firewall ports, and do not print tokens.
 - If you cannot do a step, stop and give me the command and the exact error.
 
