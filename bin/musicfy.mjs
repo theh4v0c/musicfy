@@ -454,7 +454,7 @@ function token() {
   return 0;
 }
 
-function update() {
+async function update() {
   if (fs.existsSync(path.join(APP, '.git'))) {
     const head = capture('git', ['-C', APP, 'rev-parse', '--abbrev-ref', 'HEAD']);
     const ok = head === 'HEAD'
@@ -479,7 +479,8 @@ function update() {
     console.log('Updated. Restart with: sudo systemctl restart musicfy');
     return 0;
   }
-  if (alive(pid())) return restart();
+  // restart() is async: returning it here put a Promise into process.exitCode
+  if (alive(pid())) return await restart();
   console.log('Updated. Start with: musicfy start');
   return 0;
 }
@@ -589,7 +590,7 @@ try {
     case 'backup': code = backup(); break;
     case 'restore': code = await restore(); break;
     case 'token': code = token(); break;
-    case 'update': code = update(); break;
+    case 'update': code = await update(); break;
     case 'service': code = service(); break;
     case 'open': code = open(); break;
     case 'version': case '--version': console.log(version()); break;

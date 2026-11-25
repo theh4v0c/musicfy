@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.26 — 2026-11-25
+
+- `musicfy update` no longer dies with `The "code" argument must be of type number` after
+  restarting a running app: it awaited `restart()` but the dispatcher did not await `update()`.
+- Search rejects a hit shorter than 60% of the known track length at selection time, so a
+  30 second SoundCloud preview no longer wins and gets thrown away; yt-dlp moves to the
+  next result.
+- INSTALL.md documents `MUSICFY_YTDLP_COOKIES` for the YouTube bot check.
+
 ## 0.1.25 — 2026-11-25
 
 - Fix the last-resort search: it prefixed an already prefixed query, so it asked for

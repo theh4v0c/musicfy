@@ -528,6 +528,7 @@ The first boot creates `data/`, `logs/` and the schema. Nothing has to be seeded
 | `MUSICFY_DOWNLOAD_CONCURRENCY` | `4` | downloads at once; 1–2 on a server address YouTube throttles |
 | `MUSICFY_YTDLP_IPV4` | unset | `1` adds `--force-ipv4`; use it when a VPS IPv6 route is slow |
 | `MUSICFY_PREFER_SOUNDCLOUD` | unset | `1` asks SoundCloud first, for addresses YouTube blocks |
+| `MUSICFY_YTDLP_COOKIES` | unset | path to a `cookies.txt`; yt-dlp then logs in to YouTube |
 
 ### Downloads on a server address
 
@@ -549,7 +550,24 @@ MUSICFY_PREFER_SOUNDCLOUD=1
 
 Then `musicfy restart`. Concurrency 1 is the safest for a rate limit but it also means one
 slow retry blocks every other job; 2 usually finishes a queue faster without tripping the
-limit again. If `MUSICFY_YTDLP_IPV4=1` makes no difference, your IPv6 route was not the
+limit again.
+
+When YouTube answers `Sign in to confirm you're not a bot`, the address itself is flagged and
+no player client gets past it. SoundCloud is tried first for that reason. Tracks that only
+exist on YouTube need a session: export `cookies.txt` from a browser where you are logged
+in to YouTube (a private window, export, then close it), copy it to the server, and point
+MUSICFY at it:
+
+```ini
+MUSICFY_YTDLP_COOKIES=/root/.musicfy/cookies.txt
+```
+
+```sh
+chmod 600 /root/.musicfy/cookies.txt
+musicfy restart
+```
+
+Treat that file as a password: it is a live session. Export it again when it expires. If `MUSICFY_YTDLP_IPV4=1` makes no difference, your IPv6 route was not the
 problem and you can drop it.
 
 `musicfy.env` under the data root holds the same values and is written with mode 600.

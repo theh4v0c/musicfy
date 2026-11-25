@@ -1518,6 +1518,13 @@ function startLadderDownload(jobId, b, onDone) {
   };
   const ingestDownloaded = () => ingestFrom(dir).catch((e) => finish('error', `ingest: ${String(e && e.message || e).slice(0, 160)}`));
 
+  // a search hit that is a 30 second preview or a clip is not the recording. When the
+  // queue knows the real length, reject anything under 60% of it at selection time, so
+  // yt-dlp moves on to the next result instead of downloading a preview we then discard.
+  const durationFloor = () => {
+    const declared = Number(b.duration) || 0;
+    return declared > 30 ? Math.floor(declared * 0.6) : 2;
+  };
   if (b.rung === 'search') {
     const query = [b.artist, b.title].filter(Boolean).join(' ');
     // yt-dlp exits 101 when --max-downloads stops after the first hit, even though that
@@ -1526,7 +1533,7 @@ function startLadderDownload(jobId, b, onDone) {
       .some((f) => !f.startsWith('.') && /\.(mp3|m4a|aac|opus|ogg|flac|wav)$/i.test(f) && !/\.part$/i.test(f));
     // skip covers and lessons while searching: the first hit for a track is often a
     // cover, and downloading it only to reject it left the track without audio
-    const NO_COVER = 'duration > 2 & title !~= "(?i)(cover|karaoke|tutorial|lesson|backing track|\\btabs?\\b)"';
+    const NO_COVER = `duration > ${durationFloor()} & title !~= "(?i)(cover|karaoke|tutorial|lesson|backing track|\\btabs?\\b)"`;
     const trySource = (source, next) => {
       const child = spawn(paths.YTDLP, [
         '--no-warnings', '--newline', ...audioArgs(), ...netArgs(), ...cookieArgs(),
@@ -1584,7 +1591,7 @@ function startLadderDownload(jobId, b, onDone) {
             const retry = spawn(paths.YTDLP, [
               '--no-warnings', '--newline', ...audioArgs(), ...netArgs(), ...cookieArgs(),
               '--concurrent-fragments', '8', '--retries', '2', '--fragment-retries', '2',
-              '--max-downloads', '1', '--match-filter', 'duration > 2',
+              '--max-downloads', '1', '--match-filter', `duration > ${durationFloor()}`,
               '-o', path.join(dir, '%(title)s.%(ext)s'), source,
             ], { stdio: ['ignore', 'pipe', 'pipe'] });
             watch(retry);
