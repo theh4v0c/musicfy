@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.39 — 2026-11-25
+
+- The next track's audio is fetched into memory while the current one plays, so changing
+  track at the end needs no new connection. This is what a locked phone actually fails at,
+  and it works for Flow and radio, where the next track is not known in advance.
+- Two tracks of runway at most; a saved track still comes from disk.
+- The play log keeps its timestamp again: a position field named `t` was overwriting it.
+
 ## 0.1.38 — 2026-11-25
 
 - Audio responses carry `ETag`, `Last-Modified` and `Accept-Ranges`, honour `If-Range` and

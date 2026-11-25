@@ -5136,7 +5136,8 @@ function maybePrefetch() {
 function logPlay(ev, extra = {}) {
   try {
     const log = JSON.parse(localStorage.getItem('mf_play_log') || '[]');
-    log.push({ t: new Date().toISOString().slice(11, 19), ev, ...extra });
+    // the timestamp goes last: a caller's own `t` (a position) used to overwrite it
+    log.push({ ...extra, ev, t: new Date().toISOString().slice(11, 19) });
     localStorage.setItem('mf_play_log', JSON.stringify(log.slice(-60)));
   } catch {}
 }
@@ -5227,6 +5228,32 @@ function warmUpcoming() {
     const t = state.queue[state.qi + k];
     if (t) warmTrack(t);
   }
+  // The next track's bytes, not only its URL. A locked phone changing source at the end
+  // of a track has to open a new connection at the worst possible moment; with the bytes
+  // already in memory the change is local and instant.
+  if (ahead >= 1) prefetchNextBytes(state.queue[state.qi + 1]);
+}
+
+/* one track of runway, held as a blob. Two entries at most: a phone in a car has better
+   things to do with its memory than hold the whole queue. */
+const prefetchBlobs = new Map();
+let prefetching = false;
+async function prefetchNextBytes(t) {
+  if (!t || !t.id || prefetching) return;
+  if (!hasAudio(t) || prefetchBlobs.has(t.id)) return;
+  if (t.saved || (state.offlineIds && state.offlineIds.has(t.id))) return; // already on disk
+  prefetching = true;
+  try {
+    const r = await fetch(`/api/stream/${t.id}`);
+    if (!r.ok) return;
+    const url = URL.createObjectURL(await r.blob());
+    prefetchBlobs.set(t.id, url);
+    while (prefetchBlobs.size > 2) {
+      const [k, u] = prefetchBlobs.entries().next().value;
+      try { URL.revokeObjectURL(u); } catch {}
+      prefetchBlobs.delete(k);
+    }
+  } catch {} finally { prefetching = false; }
 }
 
 /* A saved track plays from the device, always. Not "only when the OS says offline":
@@ -5234,6 +5261,8 @@ function warmUpcoming() {
  * navigator.onLine says true the whole time. The stream is the fallback. */
 async function offlineSrcIfNeeded(t, src) {
   if (!t || !t.id) return src;
+  // a prefetched track is already in memory: use it before any network path
+  if (prefetchBlobs.has(t.id)) return prefetchBlobs.get(t.id);
   const saved = state.offlineIds && state.offlineIds.has(t.id);
   if (!saved) return src;
   return (await savedAudioUrl(t.id)) || src;
@@ -5337,7 +5366,7 @@ function bindMediaSession() {
 bindMediaSession();
 document.addEventListener('visibilitychange', () => {
   logPlay(document.hidden ? 'lock' : 'unlock', {
-    id: state.current && state.current.id, paused: audio.paused, t: Math.round(audio.currentTime || 0),
+    id: state.current && state.current.id, paused: audio.paused, at: Math.round(audio.currentTime || 0),
   });
   if (document.hidden) return;
   bindMediaSession();
@@ -5487,8 +5516,13 @@ function advanceAtEnd() {
   const i = state.qi + 1;
   const t = state.queue[i];
   if (t) {
-    const ready = warmSrc.get(t.id);
-    if (ready) { logPlay('advance', { to: t.id, src: String(ready).startsWith('blob:') ? 'blob' : 'stream' }); startAudio(i, ready); return; }
+    // the prefetched blob wins: it needs no connection at the moment the screen is off
+    const ready = prefetchBlobs.get(t.id) || warmSrc.get(t.id);
+    if (ready) {
+      logPlay('advance', { to: t.id, src: String(ready).startsWith('blob:') ? 'blob' : 'stream' });
+      startAudio(i, ready);
+      return;
+    }
   }
   logPlay('advance-cold', { next: t ? t.id : null });
   nextTrack();
