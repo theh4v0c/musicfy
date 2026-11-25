@@ -19,8 +19,13 @@ option — and even that could fail.
 - `repair.apply()` only checks the artist+title duplicate key when the **title or artist
   actually changed**. An album/year edit is not an identity change and is no longer
   blocked by a duplicate elsewhere in the library.
+- The album page itself has **Edit album**, which opens the same form for every track on
+  that album — no row selection needed.
+- *None* is the title of Meshuggah's 1994 EP, not a placeholder; repair deliberately does
+  not clear it. The page can still move those three tracks with Edit album.
 - Verified: two blank-album Meshuggah rows select, the dialog opens with the album field,
-  and a bulk set/revert round-trip updates the database.
+  and a bulk set/revert round-trip updates the database; the album page opens the same
+  form for its three *None* tracks.
 
 Tests 56 → 57 (selection required), unit 13/13, design-check and smoke green.
 

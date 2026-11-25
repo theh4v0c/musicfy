@@ -78,8 +78,14 @@ removed on request: this project does not depend on paid services.
 
 A track's context menu has **Edit metadata** (title, artist, album, year). For a group —
 the usual case when YouTube files land in the wrong album — select the rows and press
-**Edit album** in the selection bar: tick *Set album* (and optionally *Set year*), type the
-value, save. `POST /api/tracks/edit {ids, album?, year?, genre?}` does the update.
+**Edit album** in the selection bar, or open an album and press **Edit album** to move
+every track on it at once: tick *Set album* (and optionally *Set year*), type the value,
+save. Clearing the album field removes the album. `POST /api/tracks/edit
+{ids, album?, year?, genre?}` does the update.
+
+`None` is not treated as a placeholder: it is the title of Meshuggah's 1994 EP. The
+repair pass clears `Web`, `Unknown`, `NA`, `N/A`, `YouTube` and `Untitled`, and leaves a
+real one-word title alone.
 
 An album change is not an identity change. `repair.apply()` only checks the
 artist+title duplicate key when the title or artist actually changed, so a row with a

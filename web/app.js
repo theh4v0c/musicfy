@@ -4393,6 +4393,7 @@ async function renderAlbum(name, push = true) {
           <button class="btn btn-ghost" id="g-dl">Download album</button>
           <button class="btn btn-ghost" id="g-pick">Choose tracks</button>
           <button class="btn btn-ghost" id="g-repair">Fix metadata</button>
+          <button class="btn btn-ghost" id="g-album-edit">Edit album</button>
           <button class="btn btn-ghost" id="g-covers">Choose cover</button>
           <button class="btn btn-ghost" id="g-upgrade">Find higher quality</button>
         </div>
@@ -4422,6 +4423,11 @@ async function renderAlbum(name, push = true) {
     btn.disabled = false;
   };
   $('g-repair').onclick = () => watchRepair(`/api/albums/${encodeURIComponent(name)}/repair`);
+  const albumEdit = $('g-album-edit');
+  if (albumEdit) albumEdit.onclick = () => openBulkEdit(list.map((t) => t.id), (body) => {
+    if (body.album !== undefined && body.album) renderAlbum(body.album);
+    else refreshView();
+  });
   $('g-covers').onclick = () => openAlbumCoverPicker(name, (first && first.artist) || '');
   $('g-upgrade').onclick = async () => {
     try { const r = await api(`/api/albums/${encodeURIComponent(name)}/upgrade`, { method: 'POST' }); toast(r.queued ? `${r.queued} higher quality downloads queued` : 'No low-bitrate tracks to upgrade', 6000); if (r.queued) toast(`${r.queued} queued — see Downloads for progress`, 6000); } catch { toast('Could not queue upgrades', 4000); }
@@ -4504,8 +4510,8 @@ function renderSelectionBar() {
 
 /* Move a selection to the right album. An album is not part of a track's identity, so
    this cannot collide with another row; it is one UPDATE per selected track. */
-function openBulkEdit() {
-  const ids = [...state.selectedIds];
+function openBulkEdit(idsArg, afterSave) {
+  const ids = Array.isArray(idsArg) ? idsArg : [...state.selectedIds];
   if (!ids.length) return;
   const rows = ids.map((id) => (state._rows && state._rows.get(id)) || {}).filter(Boolean);
   const same = (key) => {
@@ -4541,7 +4547,7 @@ function openBulkEdit() {
       bustCache();
       clearSelection();
       toast(`${r.updated} track${r.updated === 1 ? '' : 's'} updated`, 4000);
-      refreshView();
+      if (typeof afterSave === 'function') afterSave(body); else refreshView();
     } catch { toast('Could not update those tracks', 4000); }
   };
 }
