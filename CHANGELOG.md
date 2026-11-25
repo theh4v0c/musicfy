@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.44 — 2026-11-25
+
+- The catalogue query is built from the normalised sentence, so "10 faixas electronic que
+  não tenho" searches "electronic" and returns 10, not 4 from the whole Portuguese sentence.
+  "Fora da biblioteca" is recognised on the normalised text as well. English is unchanged.
+
 ## 0.1.43 — 2026-11-25
 
 - Portuguese artist names are read from the normalised sentence: "10 faixas de Aphex Twin"

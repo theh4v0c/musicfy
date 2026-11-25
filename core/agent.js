@@ -739,7 +739,9 @@ async function propose(db, plan, lang = 'en') {
     const count = Math.max(1, Math.min(Number(plan.args.count) || 20, 100));
     const artists = (plan.args.artists || []).map((a) => String(a).trim()).filter(Boolean).slice(0, 4);
     const themes = (plan.args.themes || []).map((t) => String(t).trim()).filter(Boolean).slice(0, 4);
-    const onlyLocalEarly = /\b(only|just|from)\s+(my|the)\s+library\b|\bno new\b/i.test(q);
+    let normQ0 = q;
+    try { normQ0 = require('./query').normalizePortuguese(q); } catch {}
+    const onlyLocalEarly = /\b(only|just|from)\s+(my|the)\s+library\b|\bno new\b/i.test(normQ0);
     const BRIEF_RE = /\b(for my|she likes|he likes|they like|who likes|shes into|hes into|don'?t limit|birthday|wedding|kids?|children|toddler|for (?:my|our|the) baby|story time|year old|\d+\s*yo|about (unicorns?|robots?|dinosaurs?|space|animals?))\b/i;
     // the same occasions in Portuguese; without these a Portuguese brief fell through to
     // a plain library search
@@ -777,15 +779,17 @@ async function propose(db, plan, lang = 'en') {
       if (label) name = label.charAt(0).toUpperCase() + label.slice(1);
     }
 
-    const onlyLocal = /\b(only|just|from)\s+(my|the)\s+library\b|\bno new\b/i.test(q);
-    const wantsNew = /\b(new|discover|online|unreleased|not in my library|find more|don'?t limit)\b/i.test(q);
+    const onlyLocal = /\b(only|just|from)\s+(my|the)\s+library\b|\bno new\b/i.test(normQ0);
+    const wantsNew = /\b(new|discover|online|unreleased|not in my library|find more|don'?t limit)\b/i.test(normQ0);
     // "something I don't have" is a request for music that is NOT here. Without this the
     // answer was the user's own shelf, which is the opposite of what was asked.
-    const outsideOnly = /\b(?:not in (?:my|the) library|outside (?:my|the) library|don'?t have|do not have|i don'?t own|unheard|new to me|discover)\b/i.test(q);
+    const outsideOnly = /\b(?:not in (?:my|the) library|outside (?:my|the) library|don'?t have|do not have|i don'?t own|unheard|new to me|discover)\b/i.test(normQ0);
     const discovery = onlyLocal ? 0 : (wantsNew || outsideOnly) ? 1 : 0.25;
     // catalogue queries must not carry the instruction words
-    const searchQ = q
-      .replace(/\b(i|we|you|do|does|don'?t|do not|not|have|has|own|my|the|outside|in|library|unheard|discover|new|to|me|from|with|some|any|that|which|are|is|and|or|of|for|please|create|make|build|playlist|crate|set|tracks?|songs?)\b/gi, ' ')
+    // the catalogue query is built from the normalised sentence: "10 faixas de X" has
+    // already become "10 tracks by X", so the instruction words actually match
+    const searchQ = normQ0
+      .replace(/\b(i|we|you|do|does|don'?t|do not|not|have|has|own|my|the|outside|in|library|unheard|discover|new|to|me|from|with|some|any|that|which|are|is|and|or|of|for|please|create|make|build|playlist|crate|set|tracks?|songs?|uma|um|lista|para|minha|meu|nossa|nosso|criar|montar|fazer|com|das?|dos?|que)\b/gi, ' ')
       .replace(/\s+/g, ' ').trim();
     // "tracks by X" names one artist. If X is not here, the mood of the sentence is not a
     // substitute for X, and neither is whatever the catalogue returned for a name it did
