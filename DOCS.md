@@ -840,6 +840,22 @@ There is also a bare `.../export/rekordbox.xml` and `.../export/traktor.nml` for
 - the module is kept but disabled. If a URL ever resolves from outside this network, the
   generic yt-dlp rung can download it
 
+## Album covers
+
+`/api/cover-album/:name` serves the first track's cover on that album, extracting it from
+the file if needed, then a generated letter tile.
+
+Lookup is exact: `covers.artworkForAlbum()` asks Deezer's album search first (it returns
+the artist with the title, which a one-word album like *Green* needs), then iTunes, and
+requires both the album title and the artist to match. It no longer falls back to
+"whatever the search returned first" — that is how a Forbidden album got another
+record's cover.
+
+The album page has **Choose cover**: `/api/albums/:name/cover-options?artist=` returns the
+matching Deezer scans, and `POST /api/albums/:name/cover {url}` applies the chosen image to
+every track on the album (same 600px JPEG on disk, `has_art=1`). Only catalogue image hosts
+are accepted, and `fetchBuffer` caps a remote image at 15 MB.
+
 ## Playlist covers
 
 `/api/cover-playlist/:id` walks the playlist in order, takes the first track artwork it can

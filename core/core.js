@@ -1000,15 +1000,20 @@ function saveImageCover(buf, destJpg) {
   });
 }
 
-function fetchBuffer(url, timeout = 20000) {
+function fetchBuffer(url, timeout = 20000, maxBytes = 12 * 1024 * 1024) {
   return new Promise((resolve) => {
     if (!url) return resolve(null);
-    https.get(url, { headers: { 'user-agent': 'Mozilla/5.0' }, timeout }, (r) => {
+    const req = https.get(url, { headers: { 'user-agent': 'Mozilla/5.0' }, timeout }, (r) => {
       if (r.statusCode !== 200) { r.resume(); return resolve(null); }
       const chunks = [];
-      r.on('data', (c) => chunks.push(c));
+      let size = 0;
+      r.on('data', (c) => {
+        size += c.length;
+        if (size > maxBytes) { req.destroy(); return resolve(null); }
+        chunks.push(c);
+      });
       r.on('end', () => resolve(Buffer.concat(chunks)));
-    }).on('error', () => resolve(null));
+    }).on('timeout', () => { req.destroy(); resolve(null); }).on('error', () => resolve(null));
   });
 }
 
@@ -3589,6 +3594,57 @@ const server = http.createServer(async (req, res) => {
       const r = upgradeTracks(playlistTrackIds(decodeURIComponent(mPlUpgrade[1])));
       return json(res, 202, { started: true, ...r });
     }
+    // album cover candidates: a one-word title needs the artist attached, and the
+    // person decides which scan is the right one
+    const mAlCoverOpts = u.pathname.match(/^\/api\/albums\/([^/]+)\/cover-options$/);
+    if (mAlCoverOpts && req.method === 'GET') {
+      const album = decodeURIComponent(mAlCoverOpts[1]);
+      let artist = String(u.searchParams.get('artist') || '').trim();
+      if (!artist) {
+        const row = db.prepare(`SELECT artist FROM tracks WHERE lower(COALESCE(album,''))=lower(?) AND artist IS NOT NULL AND artist != ''
+          GROUP BY artist ORDER BY COUNT(*) DESC LIMIT 1`).get(album);
+        artist = row ? row.artist : '';
+      }
+      const want = album.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const who = artist.toLowerCase().split(/[,&]/)[0].trim();
+      let hits = [];
+      try { hits = await deezer.searchAlbums(`${artist} ${album}`.trim(), 20); } catch {}
+      const seen = new Set();
+      const options = hits.filter((x) => {
+        const name = String(x.name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        if (name !== want || !x.cover) return false;
+        if (who && !String(x.artist || '').toLowerCase().includes(who)) return false;
+        if (seen.has(x.cover)) return false;
+        seen.add(x.cover);
+        return true;
+      }).map((x) => ({ name: x.name, artist: x.artist, cover: x.cover, tracks: x.tracks }));
+      return json(res, 200, { album, artist, options });
+    }
+    // apply one chosen cover to every track on the album
+    const mAlCover = u.pathname.match(/^\/api\/albums\/([^/]+)\/cover$/);
+    if (mAlCover && req.method === 'POST') {
+      const album = decodeURIComponent(mAlCover[1]);
+      let body = ''; req.on('data', c => body += c);
+      req.on('end', async () => {
+        let url = '';
+        try { url = String(JSON.parse(body || '{}').url || ''); } catch { return json(res, 400, { error: 'bad request body' }); }
+        if (!/^https:\/\/(cdn-images\.dzcdn\.net|is\d-ssl\.mzstatic\.com)\//.test(url)) {
+          return json(res, 400, { error: 'only a catalogue image can be used here' });
+        }
+        const ids = db.prepare(`SELECT id FROM tracks WHERE lower(COALESCE(album,''))=lower(?)`).all(album).map((r) => r.id);
+        if (!ids.length) return json(res, 404, { error: 'no such album' });
+        const buf = await fetchBuffer(url, 20000, 15 * 1024 * 1024);
+        if (!buf || !buf.length) return json(res, 502, { error: 'that image could not be fetched' });
+        let done = 0;
+        for (const id of ids) {
+          try { await saveImageCover(buf, coverFile(id)); db.prepare('UPDATE tracks SET has_art=1 WHERE id=?').run(id); done += 1; }
+          catch {}
+        }
+        return json(res, 200, { ok: true, count: done });
+      });
+      return;
+    }
+
     const mAlRepair = u.pathname.match(/^\/api\/albums\/([^/]+)\/repair$/);
     if (mAlRepair && req.method === 'GET') {
       const j = repairJobs.get('album:' + decodeURIComponent(mAlRepair[1]));
@@ -4210,7 +4266,8 @@ const server = http.createServer(async (req, res) => {
     const mCover = u.pathname.match(/^\/api\/cover\/(\d+)$/);
     if (mCover) {
       const f = coverFile(Number(mCover[1]));
-      if (fs.existsSync(f)) { res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' }); return res.end(fs.readFileSync(f)); }
+      // a cover file can be replaced (album picker); never serve the previous one for a day
+      if (fs.existsSync(f)) { res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'no-cache' }); return res.end(fs.readFileSync(f)); }
       res.writeHead(204); return res.end();
     }
 
@@ -4220,7 +4277,7 @@ const server = http.createServer(async (req, res) => {
       if (row) {
         const cf = coverFile(row.track_id);
         if (!fs.existsSync(cf)) await extractCover(row.track_id, row.path);
-        if (fs.existsSync(cf)) { res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' }); return res.end(fs.readFileSync(cf)); }
+        if (fs.existsSync(cf)) { res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'no-cache' }); return res.end(fs.readFileSync(cf)); }
       }
       // no playlist context here: nothing to fall back to
       res.writeHead(204); return res.end();
@@ -4390,7 +4447,7 @@ const server = http.createServer(async (req, res) => {
       for (const r of rows) {
         const cf = coverFile(r.id);
         if (!fs.existsSync(cf) && r.path) { try { await extractCover(r.id, r.path); } catch {} }
-        if (fs.existsSync(cf)) { res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' }); return res.end(fs.readFileSync(cf)); }
+        if (fs.existsSync(cf)) { res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'no-cache' }); return res.end(fs.readFileSync(cf)); }
       }
       const letter = String(album || '?').trim().charAt(0).toUpperCase() || '?';
       const hue = [...String(album)].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
@@ -4413,7 +4470,7 @@ const server = http.createServer(async (req, res) => {
       for (const m of members) {
         const cf = coverFile(m.id);
         if (!fs.existsSync(cf) && m.path) { try { await extractCover(m.id, m.path); } catch {} }
-        if (fs.existsSync(cf)) { res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' }); return res.end(fs.readFileSync(cf)); }
+        if (fs.existsSync(cf)) { res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'no-cache' }); return res.end(fs.readFileSync(cf)); }
       }
       // mirrored playlists have no audio yet: use the playlist art saved at import time
       const plArt = plCoverFile(pid);

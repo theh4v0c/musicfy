@@ -97,6 +97,20 @@ async function search(q, limit = 8) {
   }));
 }
 
+// albums, not tracks: used by the album cover picker where a name like "Green"
+// needs the artist attached to mean anything
+async function searchAlbums(q, limit = 12) {
+  await throttle();
+  const data = await getJson(`https://api.deezer.com/search/album?q=${encodeURIComponent(q)}&limit=${limit}`).catch(() => null);
+  return ((data && data.data) || []).map((it) => ({
+    id: it.id,
+    name: it.title || '',
+    artist: (it.artist && it.artist.name) || '',
+    cover: (it.cover_xl || it.cover_big || it.cover_medium) || null,
+    tracks: it.nb_tracks || null,
+  }));
+}
+
 // best Deezer artist for a name, then their related artists and top tracks
 async function artistSearch(name) {
   const key = 'artist:' + norm(name);
@@ -127,4 +141,4 @@ async function artistTop(id, limit = 8) {
   return data;
 }
 
-module.exports = { canon, search, artistSearch, relatedArtists, artistTop };
+module.exports = { canon, search, searchAlbums, artistSearch, relatedArtists, artistTop };

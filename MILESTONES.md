@@ -6,6 +6,29 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-24 · Album covers: exact artist+album, and a person chooses (`v487`)
+
+Forbidden's *Green* had the wrong cover on every track, and the album page only offered
+"Fix cover" — which used the same bad lookup again. Two causes:
+
+- `artworkForAlbum()` ended with `results[0]`. iTunes does not carry Forbidden's *Green*,
+  so the first result (a different "Green" album) became the cover of every track.
+- There was no way to say "this scan, not that one": the only control was automatic.
+
+Fixed:
+- Deezer's album search runs first; it returns the artist with the title, so a one-word
+  album can be resolved. iTunes is second. Both require the album title and artist to
+  match. No `results[0]` fallback; no exact match means no cover rather than a wrong one.
+- **Choose cover** on the album page lists the matching scans (Deezer) with thumbnails;
+  `POST /api/albums/:name/cover` applies the chosen image to every track on the album.
+  `GET /api/albums/:name/cover-options?artist=` is the candidate list.
+- Remote image fetch is capped at 15 MB and only catalogue image hosts are accepted.
+- Forbidden — *Green* was set to the correct cover on its 6 local tracks.
+
+Verification: options return both Forbidden *Green* scans; applying one wrote six cover
+files and the album header/rows render it. Design-check, unit 13/13, API 55/55, smoke
+green.
+
 ### 2026-11-24 · The original is not the remaster (`v486`)
 
 "Glints Collide" downloaded as the 2006 remaster every time, including after deleting and

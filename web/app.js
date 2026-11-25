@@ -4379,7 +4379,7 @@ async function renderAlbum(name, push = true) {
           <button class="btn btn-ghost" id="g-dl">Download album</button>
           <button class="btn btn-ghost" id="g-pick">Choose tracks</button>
           <button class="btn btn-ghost" id="g-repair">Fix metadata</button>
-          <button class="btn btn-ghost" id="g-covers">Fix cover</button>
+          <button class="btn btn-ghost" id="g-covers">Choose cover</button>
           <button class="btn btn-ghost" id="g-upgrade">Find higher quality</button>
         </div>
       </div></div>
@@ -4408,9 +4408,7 @@ async function renderAlbum(name, push = true) {
     btn.disabled = false;
   };
   $('g-repair').onclick = () => watchRepair(`/api/albums/${encodeURIComponent(name)}/repair`);
-  $('g-covers').onclick = async () => {
-    try { const r = await api(`/api/albums/${encodeURIComponent(name)}/covers`, { method: 'POST' }); toast(`Updating covers for ${r.count} tracks in the background`, 7000); setTimeout(() => { state.artV = Date.now(); refreshView(); }, 6000); } catch { toast('Could not start cover repair', 4000); }
-  };
+  $('g-covers').onclick = () => openAlbumCoverPicker(name, (first && first.artist) || '');
   $('g-upgrade').onclick = async () => {
     try { const r = await api(`/api/albums/${encodeURIComponent(name)}/upgrade`, { method: 'POST' }); toast(r.queued ? `${r.queued} higher quality downloads queued` : 'No low-bitrate tracks to upgrade', 6000); if (r.queued) toast(`${r.queued} queued — see Downloads for progress`, 6000); } catch { toast('Could not queue upgrades', 4000); }
   };
@@ -5609,6 +5607,43 @@ async function openCoverPicker(pid) {
       refreshView();
       toast('Playlist cover updated', 4000);
     } catch { toast('Could not use that cover', 4000); }
+  };
+}
+
+/* album covers: a one-word album needs the artist in the query, and more than one scan
+   can exist. Show the candidates; the person picks. */
+async function openAlbumCoverPicker(album, artist) {
+  let d = null;
+  try {
+    d = await api(`/api/albums/${encodeURIComponent(album)}/cover-options?artist=${encodeURIComponent(artist || '')}`, { nocache: true });
+  } catch {}
+  const options = (d && d.options) || [];
+  if (!options.length) {
+    toast(`No cover candidates for ${artist ? `${artist} — ` : ''}${album}`, 6000);
+    return;
+  }
+  markCtxOpen();
+  const m = $('ctx');
+  m.innerHTML = `<div class="ctx-title">${esc(album)} — choose a cover</div>` +
+    options.map((o) => `<button class="ctx-cover" data-cover="${esc(o.cover)}">
+      <span class="ctx-cover-art" style="background-image:url('${esc(o.cover)}')"></span>
+      <span class="ctx-cover-name">${esc(o.artist || '')} · ${esc(o.name || '')}${o.tracks ? ` · ${o.tracks} tracks` : ''}</span>
+    </button>`).join('');
+  m.classList.add('open');
+  m.style.left = '50%'; m.style.top = '45%'; m.style.transform = 'translate(-50%,-50%)';
+  m.onclick = async (e) => {
+    const b = e.target.closest('button[data-cover]'); if (!b) return;
+    closeCtx(true); m.style.transform = ''; m.onclick = null;
+    const pill = progressPill('Setting the cover…');
+    try {
+      const r = await api(`/api/albums/${encodeURIComponent(album)}/cover`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: b.dataset.cover }),
+      });
+      pill.done();
+      state.artV = Date.now();
+      toast(`Cover set on ${r.count} track${r.count === 1 ? '' : 's'}`, 4000);
+      refreshView();
+    } catch { pill.done(); toast('Could not set that cover', 4000); }
   };
 }
 
