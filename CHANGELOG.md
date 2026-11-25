@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.41 — 2026-11-25
+
+- The agent answers in the interface language. Every request carries `x-mf-lang`; the model
+  prompt is written in that language (same endpoint, same model, same JSON schema), and the
+  agent's own sentences come from a Portuguese set instead of being translated afterwards.
+- Playlist summaries and reasons are Portuguese end to end ("17 faixas · 0 locais · 17
+  novas", "0 de Bedouin na sua biblioteca, 17 novas do catálogo"), as is the report line
+  and the "created" confirmation.
+
 ## 0.1.40 — 2026-11-25
 
 - "Create a playlist based on Bedouin" now reads Bedouin as the artist. The rules planner

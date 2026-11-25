@@ -232,6 +232,7 @@ test('portuguese requests reach the same planner as english', () => {
   const Q = require('../core/query.js');
   // parse() only asks the database for genre/artist resolution; the filters do not need it
   const db = { prepare: () => ({ get: () => null, all: () => [] }) };
+  assert.equal(A.planLocally('no estilo de Bedouin').intent, 'build_playlist');
   const build = A.planLocally('criar uma lista com 10 faixas ambient');
   assert.equal(build.intent, 'build_playlist');
   assert.equal(build.args.count, 10);
@@ -262,4 +263,26 @@ test('a playlist "based on" an artist names that artist', () => {
   assert.equal(A.seedArtist('a playlist for a warehouse'), '');
   assert.equal(A.seedArtist('10 ambient tracks'), '');
   assert.equal(A.seedArtist('tracks like this'), '');
+});
+
+test('the plan prompt follows the request language', () => {
+  const en = A.planPrompt('en', '', 'make a playlist');
+  const pt = A.planPrompt('pt-BR', '', 'criar uma lista');
+  assert.match(en, /Turn a music request into JSON/);
+  assert.match(pt, /Transforme um pedido de música em JSON/);
+  // the schema and the intent names are identical in both: one contract, one model
+  assert.match(en, /artist_albums/);
+  assert.match(pt, /artist_albums/);
+  assert.match(pt, /schema exatamente/);
+});
+
+test('the agent writes its own sentences in the request language', () => {
+  const pt = (s) => A.localizeReason(s, 'pt-BR');
+  assert.equal(pt('None of these are in your library. 10 found in the catalogue for “Bedouin”. Confirm and I will fetch them.'),
+    'Nenhuma destas está na sua biblioteca. 10 encontradas no catálogo para “Bedouin”. Confirme e eu baixo.');
+  assert.equal(pt('1 of 1 tracks have audio. Families: electronic 1.'),
+    '1 de 1 faixa tem áudio. Famílias: electronic 1.');
+  assert.equal(pt('4 of 5 you already play.'), '4 de 5 você já toca.');
+  // english is left alone
+  assert.equal(A.localizeReason('Nothing new turned up this time.', 'en'), 'Nothing new turned up this time.');
 });

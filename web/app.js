@@ -113,9 +113,12 @@ async function api(p, opts) {
   // no request may hang the interface forever
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), (opts && opts.timeout) || 60000);
+  // the interface language travels with every request: the agent answers in it, and a
+  // server that knows the language does not need the page to translate its prose
+  const lang = (window.I18N && window.I18N.lang) || 'en';
   let r;
   try {
-    r = await fetch(p, { signal: ctl.signal, ...(opts || {}) });
+    r = await fetch(p, { signal: ctl.signal, ...(opts || {}), headers: { 'x-mf-lang': lang, ...((opts && opts.headers) || {}) } });
   } catch (e) {
     if (cached) return cached.body;
     throw e;

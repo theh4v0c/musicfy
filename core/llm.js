@@ -28,7 +28,8 @@ Schema:
 "year":{"min":number,"max":number},"genre":"string","owned":true|false,"plays":{"min":number,"max":number},
 "order":"relevance|random|newest|oldest|plays","limit":number,"text":["words"]},
 "title":"playlist name if the user asked for a playlist, else null"}
-Rules: omit any filter not requested. "in Dm" means key D and scale minor. "around 128 bpm" means min 124 max 132.
+The question may be written in Portuguese or in English; map it to the same schema and the
+same English filter keys. Rules: omit any filter not requested. "in Dm" means key D and scale minor. "around 128 bpm" means min 124 max 132.
 "not downloaded" means owned false. "never played" means plays {"max":0}. Use order "random" for shuffled or mixed requests,
 "plays" for most played or trending. limit is the number of songs requested, default 50, maximum 200.`;
 

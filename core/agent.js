@@ -94,6 +94,8 @@ function planLocally(text) {
     || /\b(create|build|make|curate|put together|throw together|assemble)\b/.test(t)
     || /\b(give me|i need|i want|can you get|can i get)\b/.test(t)
     || /\b(something|anything)\b/.test(t) || /\bmusic for\b/.test(t)
+    // "no estilo de X" / "baseado em X" is a request for music, not a library report
+    || /\b(?:no estilo de|estilo|basead[oa] (?:em|no)|parecid[oa] com)\b/.test(t)
     || countedRequest || (bareCount && !reportish) || styledTempo || (childAudience(t) && !reportish);
   const wantsDownload = /\bdownload\b/.test(t);
   // "albums by Fear Factory" / "Fear Factory's discography" is a catalogue listing
@@ -130,15 +132,7 @@ function planLocally(text) {
   return { intent: 'report_library', args: { query: text } };
 }
 
-async function planWithModel(llm, text, previous) {
-  const context = previous && previous.plan
-    ? `\nThis is a follow-up. The previous request was: ${previous.question}\nIts plan was: ${JSON.stringify(previous.plan)}\nReturn the updated plan: keep what still applies, change only what the new instruction changes, and keep the same intent unless it says otherwise.\n`
-    : '';
-  const prompt = `Turn a music request into JSON. Reply with JSON only, no prose.
-The request may be written in Portuguese or in English. Read it as it is written, keep the
-intent names and the JSON schema exactly as below, and put artist and theme names in their
-normal spelling.${context}
-{"intent":"build_playlist|search_tracks|artist_albums|download_album|download_missing|report_library","args":{...}}
+const PLAN_SCHEMA = `{"intent":"build_playlist|search_tracks|artist_albums|download_album|download_missing|report_library","args":{...}}
 args by intent:
 - build_playlist: {"query":"the request as written","count":20,"download":false,
    "brief":true|false,
@@ -158,10 +152,93 @@ Rules:
 - themes must be things a catalogue can actually search: not 'unicorns' alone but "unicorn song for kids".
 - artists only real artists; never invent.
 - allowExternal is true when they say not to limit to the library, or ask for things they do not have.
-- count defaults to 20. download is true only if they ask to download.
+- count defaults to 20. download is true only if they ask to download.`;
+
+/* The agent speaks the interface language: same endpoint, same model, a prompt written in
+   the language the request arrives in, instead of translating the answer afterwards. */
+/* The agent's own sentences, written in the language of the request. Nothing here is
+   translated from a previous answer: each sentence has a Portuguese form and an English
+   one, and the request decides which set is used. */
+const PT_SENTENCES = [
+  [/^For a brief: (.+)\.$/, 'Para um briefing: $1.'],
+  [/^(\d+) clean catalogue tracks; nothing from your library, which has no explicit flag\.$/,
+    '$1 faixas limpas do catálogo; nada da sua biblioteca, que não tem marcação de conteúdo explícito.'],
+  [/^(\d+) from your library — it has no explicit flag, so check these before playing them to a child\.$/,
+    '$1 da sua biblioteca — ela não tem marcação de conteúdo explícito, então confira antes de tocar para uma criança.'],
+  [/^(\d+) in your library, (\d+) new\.$/, '$1 na sua biblioteca, $2 novas.'],
+  [/^The catalogue did not answer just now, so this is your library only\.$/,
+    'O catálogo não respondeu agora, então isto é só a sua biblioteca.'],
+  [/^(\d+) of (\d+) you already play\.$/, '$1 de $2 você já toca.'],
+  [/^None of these are in your library\.$/, 'Nenhuma destas está na sua biblioteca.'],
+  [/^Nothing in your library matched\.$/, 'Nada na sua biblioteca correspondeu.'],
+  [/^(\d+) tracks? match (.+), (\d+) with audio\.$/, '$1 faixas correspondem a $2, $3 com áudio.'],
+  [/^(\d+) tracks? in your library, (\d+) in the catalogue\.$/, '$1 faixas na sua biblioteca, $2 no catálogo.'],
+  [/^Queued (\d+) downloads?\.$/, '$1 downloads na fila.'],
+  [/^(\d+) of (\d+) tracks have audio\. Families: (.+)\.$/, (m, a, b, c) => `${a} de ${b} ${b === '1' ? 'faixa tem' : 'faixas têm'} áudio. Famílias: ${c}.`],
+  [/^I could not find that album in the catalogue\.$/, 'Não encontrei esse álbum no catálogo.'],
+  [/^(\d+) found in the catalogue for “(.+)”\.$/, '$1 encontradas no catálogo para “$2”.'],
+  [/^(\d+) found in the catalogue\.$/, '$1 encontradas no catálogo.'],
+  [/^Confirm and I will fetch them\.$/, 'Confirme e eu baixo.'],
+  [/^Nothing by “(.+)” is in your library, and the catalogue returned no match for that name\.$/,
+    'Nada de “$1” está na sua biblioteca, e o catálogo não achou esse nome.'],
+  [/^(\d+) by “(.+)” in your library, nothing new found\.$/, '$1 de “$2” na sua biblioteca, nada novo encontrado.'],
+  [/^(\d+) by “(.+)” in your library, (\d+) new from the catalogue\.$/, '$1 de “$2” na sua biblioteca, $3 novas do catálogo.'],
+  [/^(\d+) new from artists around your rotation\.$/, '$1 novas de artistas da sua rotação.'],
+  [/^(\d+) new from “(.+)”\.$/, '$1 novas de “$2”.'],
+  [/^(\d+) new from the catalogue\.$/, '$1 novas do catálogo.'],
+  [/^Nothing new turned up this time\.$/, 'Nada novo apareceu desta vez.'],
+  [/^All from your library\.$/, 'Tudo da sua biblioteca.'],
+  [/^nothing in your library matched$/i, 'nada na sua biblioteca correspondeu'],
+  [/^(\d+) in your library fit$/, '$1 na sua biblioteca servem'],
+  [/^(.+) from your library$/, '$1 da sua biblioteca'],
+  [/^You do not have (.+) yet, so this follows the request instead$/,
+    'Você ainda não tem $1, então isto segue o pedido'],
+  [/^follows (.+): (\d+) BPM, (.+)$/, 'segue $1: $2 BPM, $3'],
+  [/^(.+): under (\d+) BPM\.$/, '$1: abaixo de $2 BPM.'],
+];
+
+function localizeReason(text, lang) {
+  const raw = String(text || '');
+  if (!isPt(lang) || !raw) return raw;
+  // a rule may cover the whole answer (two sentences: a count and a family breakdown)
+  for (const [re, to] of PT_SENTENCES) {
+    if (re.test(raw.trim())) return raw.trim().replace(re, to);
+  }
+  return raw.split(/(?<=[.!?])\s+/).map((sentence) => {
+    const trimmed = sentence.trim();
+    for (const [re, to] of PT_SENTENCES) {
+      if (re.test(trimmed)) return trimmed.replace(re, to);
+    }
+    return sentence;
+  }).join(' ');
+}
+
+const isPt = (lang) => String(lang || '').toLowerCase().startsWith('pt');
+// the agent's own words: two templates, chosen by the request's language
+function say(lang, en, pt) { return isPt(lang) ? pt : en; }
+
+function planPrompt(lang, context, text) {
+  const pt = String(lang || '').toLowerCase().startsWith('pt');
+  const head = pt
+    ? `Transforme um pedido de música em JSON. Responda apenas JSON, sem texto.
+O pedido pode estar em português ou em inglês. Leia como está escrito, mantenha os nomes de
+intent e o schema exatamente como abaixo, e escreva artistas e temas na grafia normal.
+Um pedido de playlist em português devolve "query" em português e um "name" curto em
+português.`
+    : `Turn a music request into JSON. Reply with JSON only, no prose.
+The request may be written in Portuguese or in English. Read it as it is written, keep the
+intent names and the JSON schema exactly as below, and put artist and theme names in their
+normal spelling.`;
+  return `${head}${context}
+${PLAN_SCHEMA}
 Request: ${text}`;
-  // the endpoint occasionally returns an empty completion or wraps the JSON in prose;
-  // one retry, then take the first object found instead of failing outright
+}
+
+async function planWithModel(llm, text, previous, lang = 'en') {
+  const context = previous && previous.plan
+    ? `\nThis is a follow-up. The previous request was: ${previous.question}\nIts plan was: ${JSON.stringify(previous.plan)}\nReturn the updated plan: keep what still applies, change only what the new instruction changes, and keep the same intent unless it says otherwise.\n`
+    : '';
+  const prompt = planPrompt(lang, context, text);
   let parsed = null;
   for (let attempt = 0; attempt < 2 && !parsed; attempt += 1) {
     let raw = '';
@@ -178,7 +255,7 @@ Request: ${text}`;
   return parsed;
 }
 
-async function execute(db, plan, deps) {
+async function execute(db, plan, deps, lang = 'en') {
   const { enqueueTrackDownload } = deps;
   if (plan.intent === 'report_library') {
     const total = db.prepare('SELECT COUNT(*) c FROM tracks').get().c;
@@ -655,7 +732,7 @@ function seedArtist(text) {
   return name;
 }
 
-async function propose(db, plan) {
+async function propose(db, plan, lang = 'en') {
   if (plan.intent === 'build_playlist') {
     const q = String(plan.args.query || '').trim();
     const count = Math.max(1, Math.min(Number(plan.args.count) || 20, 100));
@@ -858,11 +935,13 @@ async function propose(db, plan) {
       download: !!plan.args.download,
       title: name,
       // fragments are sentences: every one of them starts with a capital
-      reason: reasonBits.join(' ')
+      reason: localizeReason(reasonBits.join(' ')
         .replace(/\s*\.\s*/g, '. ')
         .replace(/(^|[.!?]\s+)([a-z])/g, (m, pre, c) => pre + c.toUpperCase())
-        .trim(),
-      summary: `${tracks.length} track${tracks.length === 1 ? '' : 's'} · ${tracks.length - missing} local · ${missing} new`,
+        .trim(), lang),
+      summary: say(lang,
+        `${tracks.length} track${tracks.length === 1 ? '' : 's'} · ${tracks.length - missing} local · ${missing} new`,
+        `${tracks.length} ${tracks.length === 1 ? 'faixa' : 'faixas'} · ${tracks.length - missing} ${tracks.length - missing === 1 ? 'local' : 'locais'} · ${missing} ${missing === 1 ? 'nova' : 'novas'}`),
     };
   }
 
@@ -934,7 +1013,7 @@ async function propose(db, plan) {
   return null;
 }
 
-function commit(db, proposal, deps) {
+function commit(db, proposal, deps, lang = 'en') {
   const at = Math.floor(Date.now() / 1000);
   let queued = 0;
   if (proposal.kind === 'playlist') {
@@ -961,7 +1040,9 @@ function commit(db, proposal, deps) {
         WHERE pt.playlist_id=? AND NOT EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')`).all(pid);
       for (const t of rows) { if (deps.enqueueTrackDownload(t)) queued += 1; }
     }
-    return { spoken: `Created "${proposal.name}" with ${ids.length} tracks${queued ? `, ${queued} downloading` : ''}.`,
+    return { spoken: say(lang,
+      `Created "${proposal.name}" with ${ids.length} tracks${queued ? `, ${queued} downloading` : ''}.`,
+      `Criei “${proposal.name}” com ${ids.length} ${ids.length === 1 ? 'faixa' : 'faixas'}${queued ? `, ${queued} baixando` : ''}.`),
       data: { playlist: { id: pid, name: proposal.name, tracks: ids.length }, queued } };
   }
   if (proposal.kind === 'album') {
@@ -999,5 +1080,5 @@ function commit(db, proposal, deps) {
   return { spoken: 'Nothing to do.', data: {} };
 }
 
-module.exports = { planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan, relevanceGate, childAudience, artistAlbums, briefWords, briefMatches, cleanQuery, seedArtist };
+module.exports = { planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan, relevanceGate, childAudience, artistAlbums, briefWords, briefMatches, cleanQuery, seedArtist, planPrompt, localizeReason };
 

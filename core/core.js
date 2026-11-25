@@ -3662,6 +3662,9 @@ const server = http.createServer(async (req, res) => {
       req.on('end', async () => {
         let b = {};
         try { b = JSON.parse(body || '{}'); } catch {}
+        // the interface language travels with the request; the agent answers in it rather
+        // than the page translating the answer afterwards
+        const lang = String(b.lang || req.headers['x-mf-lang'] || 'en').toLowerCase().startsWith('pt') ? 'pt-BR' : 'en';
         const q = agent.cleanQuery(String(b.q || '')).trim();
         if (!q) return json(res, 400, { error: 'q required' });
         // a short "make it darker" points at the previous draft, not at the library
@@ -3681,7 +3684,7 @@ const server = http.createServer(async (req, res) => {
         const askModel = llm.available() && ((plan.intent === 'build_playlist' && richBrief) || moodyFollow);
         if (askModel) {
           try {
-            const modelPlan = await Promise.race([agent.planWithModel(llm, q, previous), new Promise((r) => setTimeout(() => r(null), 9000))]);
+            const modelPlan = await Promise.race([agent.planWithModel(llm, q, previous, lang), new Promise((r) => setTimeout(() => r(null), 9000))]);
             if (modelPlan && modelPlan.intent) {
               modelPlan.args = { ...(plan.args || {}), ...(modelPlan.args || {}), query: plan.args.query || q };
               // the model sometimes calls an occasion a plain genre. The local heuristic
@@ -3694,7 +3697,7 @@ const server = http.createServer(async (req, res) => {
         }
         if (plan.intent === 'artist_albums') {
           const r = await agent.artistAlbums(db, plan.args.artist || plan.args.query);
-          return json(res, 200, { question: q, plan, source, ...r, action: r });
+          return json(res, 200, { question: q, plan, source, lang, ...r, action: r });
         }
         /* "I don't have" is a request for music that is not here. The model sometimes
            files it as a library search; that answer is the opposite of the question. */
@@ -3706,26 +3709,27 @@ const server = http.createServer(async (req, res) => {
         }
         // read-only intents answer now; mutations become a proposal until confirmed
         if (plan.intent === 'report_library' || plan.intent === 'search_tracks') {
-          const result = await agent.execute(db, plan, { enqueueTrackDownload });
+          const result = await agent.execute(db, plan, { enqueueTrackDownload }, lang);
+          if (result && result.spoken) result.spoken = agent.localizeReason(result.spoken, lang);
           // a discovery draft needs the same one-time id a playlist draft gets, or the
           // confirm button has nothing to confirm
           if (result && result.action) result.action = { ...result.action, id: stashAction(result.action) };
-          return json(res, 200, { question: q, plan, source, ...result });
+          return json(res, 200, { question: q, plan, source, lang, ...result });
         }
-        const proposal = await agent.propose(db, plan);
+        const proposal = await agent.propose(db, plan, lang);
         if (!proposal) {
           if (plan.intent === 'build_playlist') {
             return json(res, 200, { question: q, plan, source, spoken: 'I could not find tracks for that, in the library or online.', data: {} });
           }
-          const result = await agent.execute(db, plan, { enqueueTrackDownload });
-          return json(res, 200, { question: q, plan, source, ...result });
+          const result = await agent.execute(db, plan, { enqueueTrackDownload }, lang);
+          return json(res, 200, { question: q, plan, source, lang, ...result });
         }
         // a proposal that turned out to need nothing: answer, do not offer a draft
         if (proposal.kind === 'none') {
           return json(res, 200, { question: q, plan, source, spoken: proposal.reason, data: {} });
         }
         const id = stashAction(proposal);
-        return json(res, 200, { question: q, plan, source, spoken: proposal.reason, action: { id, ...proposal } });
+        return json(res, 200, { question: q, plan, source, spoken: proposal.reason, lang, action: { id, ...proposal } });
       });
       return;
     }
@@ -3741,7 +3745,8 @@ const server = http.createServer(async (req, res) => {
         if (b.cancel) return json(res, 200, { ok: true, cancelled: true });
         // the client may choose "playlist only" or "create and download" at confirm time
         if (b.download === true) a.proposal.download = true;
-        const result = agent.commit(db, a.proposal, { enqueueTrackDownload });
+        const lang = String(req.headers['x-mf-lang'] || 'en').toLowerCase().startsWith('pt') ? 'pt-BR' : 'en';
+        const result = agent.commit(db, a.proposal, { enqueueTrackDownload }, lang);
         return json(res, 200, { ok: true, ...result });
       });
       return;
