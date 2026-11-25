@@ -709,7 +709,7 @@ function openAddPl(t) {
     const b = e.target.closest('button'); if (!b) return;
     closeCtx(true); m.style.transform = ''; m.onclick = null;
     if (b.dataset.newpl) {
-      const name = prompt('Playlist name:'); if (!name) return;
+      const name = prompt(tr('Playlist name:')); if (!name) return;
       const np = await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
       await api(`/api/playlists/${np.id}/tracks`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ track_id: t.id }) });
       await loadPlaylists();
@@ -839,7 +839,7 @@ function renderSidebar() {
   add.className = 'slib-add';
   add.textContent = '+ New playlist';
   add.onclick = async () => {
-    const name = prompt('New playlist name:'); if (!name) return;
+    const name = prompt(tr('New playlist name:')); if (!name) return;
     await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, kind: 'listen' }) });
     afterWrite();
     await loadPlaylists();
@@ -850,7 +850,7 @@ function renderSidebar() {
   imp.className = 'slib-add';
   imp.textContent = '+ Import Spotify playlist';
   imp.onclick = async () => {
-    const url = prompt('Paste a Spotify playlist link or ID:');
+    const url = prompt(tr('Paste a Spotify playlist link or ID:'));
     if (!url) return;
     toast('Mirroring playlist...');
     try {
@@ -974,14 +974,14 @@ function openPlaylistMenu(p, x, y) {
     }
     if (act === 'pl-zip') { toast('Building the zip, this can take a minute', 6000); window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/zip`; return; }
     if (act === 'pl-rename') {
-      const name = prompt('Rename playlist:', p.name); if (!name) return;
+      const name = prompt(tr('Rename playlist:'), p.name); if (!name) return;
       await api(`/api/playlists/${encodeURIComponent(p.id)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
       afterWrite(); await loadPlaylists(); toast('Renamed');
       if (state.playlistId === p.id) openPlaylist(p.id, false);
       return;
     }
     if (act === 'pl-delete') {
-      if (!confirm(`Delete playlist "${p.name}"? Tracks stay in your library.`)) return;
+      if (!confirm(tr(`Delete playlist "${p.name}"? Tracks stay in your library.`))) return;
       await api(`/api/playlists/${encodeURIComponent(p.id)}`, { method: 'DELETE' });
       afterWrite(); await loadPlaylists();
       toast('Playlist deleted. Tracks are still in Songs.');
@@ -1978,7 +1978,7 @@ async function renderLibrary() {
   bindViewSwitch('library', (v) => drawGrid(v));
   bindOrderControls(() => renderLibrary());
   $('hist-import').onclick = async () => {
-    const name = prompt('Playlist name for your most played tracks:', 'From your history');
+    const name = prompt(tr('Playlist name for your most played tracks:'), tr('From your history'));
     if (!name) return;
     toast('Building playlist from history');
     try {
@@ -2074,7 +2074,7 @@ async function renderDjExport() {
   const btn = document.getElementById('dj-analyze');
   if (btn) btn.onclick = async () => {
     if (!remaining) { toast('Every track with audio has been analysed at least once'); return; }
-    if (!confirm(`Analyze ${remaining} track${remaining === 1 ? '' : 's'}? This runs on the Pi and takes a while.`)) return;
+    if (!confirm(tr(`Analyze ${remaining} track${remaining === 1 ? '' : 's'}? This runs on this machine and takes a while.`))) return;
     btn.disabled = true;
     try {
       const r = await api('/api/analyze/run?limit=500&workers=2', { method: 'POST' });
@@ -2090,7 +2090,7 @@ async function renderDjExport() {
       cb.hidden = false;
       cb.textContent = `Make ${t.count} playable`;
       cb.onclick = async () => {
-        if (!confirm(`${t.count} file${t.count === 1 ? '' : 's'} are in a format rekordbox and Traktor cannot open. Convert them to m4a now? The originals are replaced.`)) return;
+        if (!confirm(tr(`${t.count} file${t.count === 1 ? '' : 's'} are in a format rekordbox and Traktor cannot open. Convert them to m4a now? The originals are replaced.`))) return;
         cb.disabled = true;
         try {
           const r = await api('/api/maintenance/transcode', { method: 'POST' });
@@ -2396,7 +2396,7 @@ async function renderSongs(push = true) {
         return;
       }
       if (b.dataset.browse === 'covers') {
-        if (!confirm('Replace album covers with the official artwork? This overwrites existing covers for albums with more than one track.')) return;
+        if (!confirm(tr('Replace album covers with the official artwork? This overwrites existing covers for albums with more than one track.'))) return;
         toast('Fetching official album art', 6000);
         (async () => {
           let albums = 0, tracks = 0;
@@ -2443,7 +2443,7 @@ async function renderSongs(push = true) {
         return;
       }
       if (b.dataset.browse === 'dedupe') {
-        if (!confirm('Merge duplicate tracks? The best quality copy is kept and playlists, likes and plays move to it.')) return;
+        if (!confirm(tr('Merge duplicate tracks? The best quality copy is kept and playlists, likes and plays move to it.'))) return;
         toast('Checking for duplicates', 4000);
         api('/api/maintenance/dedupe', { method: 'POST' }).then((r) => {
           bustCache();
@@ -2627,7 +2627,7 @@ async function renderSongs(push = true) {
 }
 
 async function importSpotifyTrack() {
-  const url = prompt('Paste a Spotify track link or ID:');
+  const url = prompt(tr('Paste a Spotify track link or ID:'));
   if (!url) return;
   toast('Looking up the track', 4000);
   try {
@@ -2936,7 +2936,7 @@ async function renderSettings() {
   };
   if (checkBtn) checkBtn.onclick = checkUpdate;
   if (updateBtn) updateBtn.onclick = async () => {
-    if (!confirm('Update MUSICFY now? The code is pulled first; a restart is needed before the new version is active.')) return;
+    if (!confirm(tr('Update MUSICFY now? The code is pulled first; a restart is needed before the new version is active.'))) return;
     updateBtn.disabled = true;
     try {
       const res = await fetch('/api/update', { method: 'POST' });

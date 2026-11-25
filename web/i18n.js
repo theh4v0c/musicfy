@@ -288,6 +288,38 @@
     'Hide the list': 'Ocultar a lista', 'Not now': 'Agora não',
     'Queued': 'Na fila', 'Failed': 'Falhou',
     'catalogue-only': 'só no catálogo',
+    // track and playlist menus
+    'Change cover': 'Trocar capa', 'Use this cover for a playlist': 'Usar esta capa numa lista',
+    'Let catalogue fix metadata': 'Deixar o catálogo corrigir',
+    'Remove from Liked Songs': 'Remover das Curtidas',
+    'Download this track': 'Baixar esta faixa',
+    'Save for offline': 'Salvar para offline', 'Remove from offline': 'Remover do offline',
+    'Start track radio': 'Rádio desta faixa', 'Rename': 'Renomear',
+    "Use a track's cover": 'Usar a capa de uma faixa',
+    'Fix metadata (crate)': 'Corrigir metadados (lista)',
+    'Fix album covers (crate)': 'Corrigir capas dos álbuns (lista)',
+    'Find higher quality (crate)': 'Buscar qualidade melhor (lista)',
+    'Export M3U': 'Exportar M3U',
+    'Export for Rekordbox (.xml)': 'Exportar para Rekordbox (.xml)',
+    'Export for Traktor (.nml)': 'Exportar para Traktor (.nml)',
+    'Export for CDJ USB': 'Exportar para USB de CDJ',
+    'Write Traktor tags (crate)': 'Gravar tags do Traktor (lista)',
+    'Download to device (zip)': 'Baixar para o aparelho (zip)',
+    'Delete playlist': 'Excluir lista',
+    'Search this artist': 'Buscar este artista',
+    'Download their latest album': 'Baixar o álbum mais recente',
+
+    // prompts and confirmations
+    'Playlist name:': 'Nome da lista:', 'New playlist name:': 'Nome da nova lista:',
+    'Rename playlist:': 'Renomear lista:',
+    'Paste a Spotify playlist link or ID:': 'Cole o link ou o ID de uma lista do Spotify:',
+    'Paste a Spotify track link or ID:': 'Cole o link ou o ID de uma faixa do Spotify:',
+    'Playlist name for your most played tracks:': 'Nome da lista com as suas faixas mais tocadas:',
+    'From your history': 'Do seu histórico',
+    'Tracks stay in your library.': 'As faixas continuam na sua biblioteca.',
+    'Merge duplicate tracks? The best quality copy is kept and playlists, likes and plays move to it.': 'Juntar faixas duplicadas? A cópia de melhor qualidade fica, e listas, curtidas e reproduções passam para ela.',
+    'Replace album covers with the official artwork? This overwrites existing covers for albums with more than one track.': 'Substituir as capas pela arte oficial? Isso sobrescreve as capas atuais dos álbuns com mais de uma faixa.',
+    'Update MUSICFY now? The code is pulled first; a restart is needed before the new version is active.': 'Atualizar o MUSICFY agora? O código é baixado primeiro; é preciso reiniciar para a nova versão valer.',
     // A&R draft card
     'Nothing is saved until you pick one.': 'Nada é salvo até você escolher.',
     'Playlist only': 'Somente a lista', 'Download missing': 'Baixar faltantes',
@@ -398,6 +430,24 @@
     [/^(\d+) by “(.+)” in your library, nothing new found\.$/, (m) => `${m[1]} de “${m[2]}” na sua biblioteca, nada novo encontrado.`],
     [/^(\d+) by “(.+)” in your library, (\d+) new from the catalogue\.$/, (m) => `${m[1]} de “${m[2]}” na sua biblioteca, ${m[3]} novas do catálogo.`],
     [/^(.+): under (\d+) BPM\.$/, (m) => `${m[1]}: abaixo de ${m[2]} BPM.`],
+    [/^(.+) — choose a cover$/, (m) => `${m[1]} — escolha uma capa`],
+    [/^Cover of “(.+)” goes to$/, (m) => `A capa de “${m[1]}” vai para`],
+    [/^Add "(.+)" to$/, (m) => `Adicionar “${m[1]}” a`],
+
+
+    // the menu label carries an arrow or a plus before the words
+    [/^\u2192 Play next$/, () => '→ Tocar em seguida'],
+    [/^\+ Add to queue$/, () => '+ Adicionar à fila'],
+
+    [/^Add (\d+) to playlist$/, (m) => `Adicionar ${m[1]} à lista`],
+    [/^Delete (\d+) selected$/, (m) => `Excluir ${m[1]} selecionadas`],
+    [/^Delete playlist "(.+)"\? Tracks stay in your library\.$/, (m) => `Excluir a lista “${m[1]}”? As faixas continuam na sua biblioteca.`],
+    [/^Analyze (\d+) tracks?\? This runs on the Pi and takes a while\.$/, (m) => `Analisar ${m[1]} faixas? Isso roda nesta máquina e leva um tempo.`],
+    [/^Analyze (\d+) tracks?\? This runs on this machine and takes a while\.$/, (m) => `Analisar ${m[1]} faixas? Isso roda nesta máquina e leva um tempo.`],
+    [/^(\d+) files? are in a format rekordbox and Traktor cannot open\. Convert them to m4a now\? The originals are replaced\.$/,
+      (m) => `${m[1]} arquivos estão num formato que o rekordbox e o Traktor não abrem. Converter para m4a agora? Os originais são substituídos.`],
+
+
 
     [/^No answer: (.+)$/, (m) => `Sem resposta: ${m[1] === 'empty response' ? 'resposta vazia' : m[1]}`],
     [/^(\d+) tracks$/, (m) => `${m[1]} ${m[1] === '1' ? 'faixa' : 'faixas'}`],

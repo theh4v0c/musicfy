@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.36 — 2026-11-25
+
+- The track and playlist context menus are translated: Play next, Add to queue, Change
+  cover, Use this cover for a playlist, Let catalogue fix metadata, the playlist exports
+  (M3U, Rekordbox, Traktor, CDJ USB), Delete playlist and the rest.
+- The cover pickers, "Add N to playlist", "Cover of X goes to" and "Add X to" titles are
+  translated.
+- Native prompt and confirm dialogs receive translated text: create/rename playlist, delete
+  playlist, merge duplicates, replace covers, update MUSICFY, analyze. "runs on the Pi"
+  now reads "runs on this machine".
+
 ## 0.1.35 — 2026-11-25
 
 - A message the server composes from several sentences is translated sentence by sentence,
