@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.40 — 2026-11-25
+
+- "Create a playlist based on Bedouin" now reads Bedouin as the artist. The rules planner
+  only understood "by X", so the whole sentence went to the catalogue, which answered with
+  nothing and the playlist came back empty. "Inspired by", "in the style of", "no estilo
+  de", "baseada em" and "songs like" are read the same way, and descriptors ("electronic
+  duo") are dropped.
+- When the catalogue is down and nothing came back, the reason says so instead of
+  "Nothing new turned up".
+
 ## 0.1.39 — 2026-11-25
 
 - The next track's audio is fetched into memory while the current one plays, so changing

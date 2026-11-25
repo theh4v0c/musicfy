@@ -249,3 +249,17 @@ test('portuguese requests reach the same planner as english', () => {
   assert.equal(album.intent, 'artist_albums');
   assert.match(album.args.artist, /Fear Factory/);
 });
+
+test('a playlist "based on" an artist names that artist', () => {
+  // the exact request that returned 0 tracks
+  assert.equal(A.seedArtist('create a playlist based on Bedouin'), 'Bedouin');
+  assert.equal(A.seedArtist('a playlist based on electronic duo Bedouin'), 'Bedouin');
+  assert.equal(A.seedArtist('tracks inspired by Floating Points'), 'Floating Points');
+  assert.equal(A.seedArtist('playlist no estilo de Bedouin'), 'Bedouin');
+  assert.equal(A.seedArtist('uma lista baseada em Bedouin'), 'Bedouin');
+  assert.equal(A.seedArtist('songs like Burial'), 'Burial');
+  // no seed named: the sentence is not an artist
+  assert.equal(A.seedArtist('a playlist for a warehouse'), '');
+  assert.equal(A.seedArtist('10 ambient tracks'), '');
+  assert.equal(A.seedArtist('tracks like this'), '');
+});

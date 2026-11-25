@@ -632,6 +632,29 @@ async function artistAlbums(db, artist) {
   };
 }
 
+// "create a playlist based on Bedouin" names an artist without the word "by". The rules
+// planner only looked for "by X", so the whole sentence went to the catalogue, which
+// answered with nothing and the playlist came back empty.
+function seedArtist(text) {
+  const m = String(text || '').match(
+    /(?:\bbased on\b|\binspired by\b|\bin the style of\b|\bsimilar to\b|\bsounds? like\b|\b(?:artists?|music|something|songs?|tracks?)\s+like\b|\bby\b|\bno estilo de\b|\bbasead[oa] (?:em|no)\b|\bparecid[oa] com\b|\bpor\b)\s+(.{2,60})/i);
+  if (!m) return '';
+  let name = m[1]
+    .replace(/\b(?:please|for me|now|the|all|download|get|grab|playlist|crate|set|mix|tracks?|songs?)\b/gi, ' ')
+    .replace(/[?.!]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  // "tracks like this" points at nothing: do not turn it into an artist name
+  if (/^(?:this|that|these|those|it|them|mine|yours|theirs|his|hers)$/i.test(name)) return '';
+  // "electronic duo Bedouin" is a description of the artist, not the artist
+  for (let i = 0; i < 5; i += 1) {
+    const next = name.replace(/^(?:an?|the|electronic|techno|house|ambient|downtempo|indie|duo|trio|band|group|artist|producer|dj|singer|composer|brasileir[oa])\s+/i, '').trim();
+    if (next === name) break;
+    name = next;
+  }
+  return name;
+}
+
 async function propose(db, plan) {
   if (plan.intent === 'build_playlist') {
     const q = String(plan.args.query || '').trim();
@@ -689,7 +712,7 @@ async function propose(db, plan) {
     const byName = (q.match(/\bby\s+([a-z0-9][a-z0-9 .&'\-]{1,48})/i) || [])[1];
     const wantedArtist = byName
       ? byName.replace(/\b(i|we|you|don'?t|do not|have|has|not|my|the|library|please|now|that|which|are|is|and|or|new|unheard)\b.*$/i, '').trim()
-      : '';
+      : seedArtist(q);
     let local = [];
     if (brief) {
       // the brief names people and things: match those, not the sentence
@@ -825,7 +848,9 @@ async function propose(db, plan) {
     } else if (wantedArtist) {
       reasonBits = [`${local.length} by “${wantedArtist}” in your library, ${online.length ? `${online.length} new from the catalogue.` : 'nothing new found.'}`];
     } else if (!brief) {
-      reasonBits.push(online.length ? (local.length ? `${online.length} new from artists around your rotation.` : `${online.length} new from ${sourceName ? `“${sourceName}”` : 'the catalogue'}.`) : (targetOnline ? 'Nothing new turned up this time.' : 'All from your library.'));
+      if (online.length) reasonBits.push(local.length ? `${online.length} new from artists around your rotation.` : `${online.length} new from ${sourceName ? `“${sourceName}”` : 'the catalogue'}.`);
+      else if (targetOnline && identity.recentError()) reasonBits.push('The catalogue did not answer just now, so this is your library only.');
+      else reasonBits.push(targetOnline ? 'Nothing new turned up this time.' : 'All from your library.');
     }
     if (!tracks.length && wantedArtist) name = `Nothing by ${wantedArtist}`;
     return {
@@ -974,5 +999,5 @@ function commit(db, proposal, deps) {
   return { spoken: 'Nothing to do.', data: {} };
 }
 
-module.exports = { planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan, relevanceGate, childAudience, artistAlbums, briefWords, briefMatches, cleanQuery };
+module.exports = { planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan, relevanceGate, childAudience, artistAlbums, briefWords, briefMatches, cleanQuery, seedArtist };
 
