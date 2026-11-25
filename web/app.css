@@ -772,6 +772,7 @@ main.main { transition: margin-right .18s ease; }
 .crate-row-t { min-width: 0; flex: 1; display: flex; flex-direction: column; }
 .crate-row-t b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .crate-row-t i { font-style: normal; font-size: 11px; color: var(--fg-mute); }
+.crate-row-controls { display: flex; align-items: center; gap: 10px; flex: none; margin-left: auto; }
 .crate-row-acts { display: flex; gap: 6px; flex: none; }
 .crate-row-acts .crate-btn { width: auto; height: var(--h-tab); padding: 0 10px; font-size: var(--fs-tab); }
 .crate-row .crate-analyze { flex: none; display: inline-flex; align-items: center; justify-content: center;
@@ -1336,11 +1337,19 @@ main.main { transition: margin-right .18s ease; }
 /* prep rows on a phone: two lines, controls under the title, nothing off-screen */
 @media (max-width: 920px) {
   .crate-row { display: grid; grid-template-columns: 20px 40px minmax(0, 1fr);
-    grid-template-areas: "idx art name" ". . state" ". . acts"; column-gap: 10px; row-gap: 8px; align-items: center; }
+    grid-template-areas: "idx art name" ". . controls"; column-gap: 10px; row-gap: 8px; align-items: center; }
   .crate-row .lrow-idx { grid-area: idx; width: auto; }
   .crate-row-art { grid-area: art; }
   .crate-row-t { grid-area: name; }
-  .crate-row .crate-analyze, .crate-row-state { grid-area: state; justify-self: end; }
-  .crate-row-acts { grid-area: acts; justify-content: flex-end; flex-wrap: wrap; }
-  .crate-row-acts .crate-btn { font-size: var(--fs-tab); height: var(--h-tab); padding: 0 10px; }
+  /* four controls, two even columns: no pill stranded on a line of its own */
+  .crate-row-controls { grid-area: controls; display: grid; grid-template-columns: 1fr 1fr;
+    gap: 6px; width: 100%; margin-left: 0; }
+  .crate-row-controls > .crate-row-acts { display: contents; }
+  .crate-row-controls .crate-btn, .crate-row-controls .crate-analyze,
+  .crate-row-controls .crate-again { width: 100%; height: var(--h-tab); min-width: 0;
+    padding: 0 8px; font-size: var(--fs-tab); }
+  .crate-row-controls .crate-btn[data-usb] { grid-column: auto; }
+  .crate-row .crate-row-state { width: 100%; justify-content: flex-start; gap: 5px; }
+  .crate-row .crate-row-state .crate-again { width: auto; flex: 0 0 auto; padding: 0 6px; }
+  .crate-row .crate-row-state, .crate-row .crate-analyze { margin: 0; }
 }

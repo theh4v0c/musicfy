@@ -2121,12 +2121,14 @@ async function renderDjExport() {
           <span class="lrow-idx">${pad(p.idx)}</span>
           <img class="crate-row-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=120&v=${state.artV || 0}" alt="" loading="lazy">
           <div class="crate-row-t"><b>${esc(p.name)}</b><i>${listening ? `${p.n_tracks || 0} tracks · listening only` : prepMeta(p)}</i></div>
-          ${prepState(p)}
-          ${listening ? '' : `<div class="crate-row-acts">
-            <button class="crate-btn" data-rb title="rekordbox XML + audio">Rekordbox</button>
-            <button class="crate-btn" data-tr title="Traktor NML + audio">Traktor</button>
-            <button class="crate-btn" data-usb title="CDJ USB">USB</button>
-          </div>`}`;
+          <div class="crate-row-controls">
+            ${prepState(p)}
+            ${listening ? '' : `<div class="crate-row-acts">
+              <button class="crate-btn" data-rb title="rekordbox XML + audio">Rekordbox</button>
+              <button class="crate-btn" data-tr title="Traktor NML + audio">Traktor</button>
+              <button class="crate-btn" data-usb title="CDJ USB">USB</button>
+            </div>`}
+          </div>`;
       } else {
         card.innerHTML = `
         <div class="crate-artwrap">

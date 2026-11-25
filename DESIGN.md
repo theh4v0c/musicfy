@@ -122,6 +122,9 @@ Anatomy rules:
   a pill-shaped segmented control of the same 30px height, so the two sit on one line.
 - In a flex row, control heights never stretch to a taller neighbour: the row centres its
   children (`align-items: center`), so a 30px icon and a 36px action stay 30 and 36.
+- A row of four actions on a phone is a two-column grid of equal pills starting at the
+  text edge, not one pill alone on a right-aligned line. A card's full-width USB button is
+  a card rule; in a row it is one cell of four.
 - A control that appears only sometimes is a bug: if the action cannot run, keep it
   visible and make it say why.
 

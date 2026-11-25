@@ -6,6 +6,23 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-25 · Prep rows: one action grid on a phone (`v495`)
+
+The Prep list on a phone put *Update 26* on a line of its own, right-aligned, with the
+three exports on a second right-aligned line: half the row was empty and the primary
+action looked stranded. The phone row now uses one control cluster under the title,
+aligned to the text's left edge, as a two-column grid of equal pills:
+
+```
+[ Update 26 ] [ Rekordbox ]
+[ Traktor   ] [ USB       ]
+```
+
+`ready` + *Re-analyse* share the first cell when a set is current; USB no longer spans the
+whole width on phones (that rule was written for the card, not the row). Desktop keeps its
+single line. Rows are 133px at 390 (was 135 with the old stack) and the buttons measure
+130px each instead of 96px floating in space.
+
 ### 2026-11-25 · One primary per view (`v494`)
 
 The fourth design audit's objective defects, plus the items its evidence supported.
