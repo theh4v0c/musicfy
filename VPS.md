@@ -11,7 +11,7 @@ The recommended test setup is:
 - Port 8710 is never opened to the internet.
 - A token is set anyway.
 
-Once you like it, add a domain and a reverse proxy (section 6).
+Once you like it, add a domain and a reverse proxy (section 7).
 
 ---
 
@@ -93,7 +93,65 @@ cd ~/musicfy-install
 
 ---
 
-## 4. Install with a local-only bind and a token
+## 4. Testing the exact GitHub one-liner while the repo is private
+
+The README command downloads `install.sh` from `raw.githubusercontent.com`. A private
+repository returns 404 there, so the exact command cannot work until the repository is
+public. There are two ways to evaluate it now.
+
+### Option A: make the repository public for the test (truest)
+
+This is the only way to test the exact copy-paste command from the README. The repository
+contains no database, music, settings or tokens.
+
+On your own computer, with the GitHub CLI logged in:
+
+```sh
+gh repo edit theh4v0c/musicfy --visibility public --accept-visibility-change-consequences
+```
+
+On the **VPS**, make sure the firewall blocks 8710 first. The installer binds to
+`127.0.0.1` by default, but this makes it explicit:
+
+```sh
+sudo ufw allow OpenSSH
+sudo ufw deny 8710/tcp
+sudo ufw enable
+```
+
+Now follow the README exactly, including the prerequisites, then the one-liner:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/theh4v0c/musicfy/main/install.sh | sh
+musicfy start
+```
+
+Reach it through the tunnel in section 6. When you are finished evaluating:
+
+```sh
+gh repo edit theh4v0c/musicfy --visibility private --accept-visibility-change-consequences
+```
+
+Testers who already viewed or forked the public repository may keep a copy. The source is
+AGPL, so that is allowed, but do not leave the repository public if you did not mean to.
+
+### Option B: rehearse with GitHub authentication (does not test the raw URL)
+
+If you do not want to change visibility, use the GitHub CLI. This tests the installer and
+the clone step, but not the `raw.githubusercontent.com` hop.
+
+```sh
+sudo apt install -y gh
+gh auth login
+gh auth setup-git
+gh api repos/theh4v0c/musicfy/contents/install.sh --jq .content | base64 -d > /tmp/install.sh
+sh /tmp/install.sh
+```
+
+`gh auth setup-git` makes the private `git clone` inside the installer use your account.
+The missing piece is only the public raw download; everything after it is the real script.
+
+## 5. Install with a local-only bind and a token
 
 ```sh
 ./install.sh --local --root ~/.musicfy --bind=127.0.0.1 --token
@@ -113,7 +171,7 @@ Wait 5 to 10 minutes for the Python packages.
 
 ---
 
-## 5. Start it and check it locally
+## 6. Start it and check it locally
 
 ```sh
 musicfy start
@@ -159,7 +217,7 @@ Press `Control + C` on the tunnel when you are done. The server on the VPS keeps
 
 ---
 
-## 6. Optional: a real HTTPS URL
+## 7. Optional: a real HTTPS URL
 
 Do this only when you want to use the VPS from a phone or share it. You need a domain name
 whose DNS **A record** points at the VPS IP.
@@ -217,7 +275,7 @@ are the right shape for a public server.
 
 ---
 
-## 7. Run it as a service
+## 8. Run it as a service
 
 ```sh
 musicfy service install
@@ -247,7 +305,7 @@ The service reads `~/.musicfy/musicfy.env`. Keep that file mode 600.
 
 ---
 
-## 8. Backups, updates and removal
+## 9. Backups, updates and removal
 
 Back up the database and settings:
 
@@ -280,7 +338,7 @@ touch files elsewhere.
 
 ---
 
-## 9. What to expect on a fresh VPS
+## 10. What to expect on a fresh VPS
 
 - The first page is empty. Add music with **Library → Upload files**. There is no folder
   scanner yet.

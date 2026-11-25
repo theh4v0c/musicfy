@@ -158,7 +158,8 @@ function version() {
 async function setup() {
   ensureDirs();
   const port = String(options.port || valueOf('port', readEnv().MUSICFY_PORT || '8710'));
-  const bind = options.bind || valueOf('bind', readEnv().MUSICFY_BIND || '0.0.0.0');
+  // a fresh install is reachable only on this computer until the owner asks for LAN
+  const bind = options.bind || valueOf('bind', readEnv().MUSICFY_BIND || '127.0.0.1');
   const ownedArg = options.owned || valueOf('owned', readEnv().MUSICFY_OWNED || path.join(rootDir, 'owned'));
   const owned = path.resolve(ownedArg);
   fs.mkdirSync(owned, { recursive: true });

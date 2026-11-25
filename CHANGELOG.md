@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.5 — 2026-11-25
+
+- New installs bind to `127.0.0.1` by default. The phone step now runs
+  `musicfy setup --bind=0.0.0.0` and sets a token explicitly.
+- VPS.md adds the exact procedure for testing the public GitHub one-liner while the
+  repository is private: temporary public visibility with the firewall blocked, or an
+  authenticated rehearsal that only skips the raw download.
+- The systemd installer uses the invoking user when run through sudo, not root.
+
 ## 0.1.4 — 2026-11-25
 
 - VPS.md: safe test install on a VPS with a local-only bind, a token, an SSH tunnel, an

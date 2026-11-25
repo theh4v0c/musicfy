@@ -175,9 +175,19 @@ normal user, not with `sudo`; it prints the `sudo` command if it cannot install 
 
 ### 3.9 Use it from your phone (optional)
 
-Your phone must be on the same Wi-Fi as the computer.
+Your phone must be on the same Wi-Fi as the computer. The installer binds MUSICFY to the
+computer only; the first command below opens it to your home network.
 
-1. Find the computer's local address:
+1. Allow other devices on your network, then set a token:
+
+   ```sh
+   musicfy setup --root ~/.musicfy --bind=0.0.0.0
+   musicfy token --rotate
+   ```
+
+   The token is printed once. Copy it somewhere safe.
+
+2. Find the computer's local address:
 
    macOS:
 
@@ -193,14 +203,6 @@ Your phone must be on the same Wi-Fi as the computer.
 
    It prints something like `192.168.1.50`.
 
-2. Set a token, so someone else on the Wi-Fi cannot change your library:
-
-   ```sh
-   musicfy token --rotate
-   ```
-
-   It prints the token once. Copy it somewhere safe.
-
 3. Restart and open the address on the phone:
 
    ```sh
@@ -208,7 +210,7 @@ Your phone must be on the same Wi-Fi as the computer.
    ```
 
    On the phone, open `http://192.168.1.50:8710/?token=PASTE-YOUR-TOKEN`. Replace the
-   address with the one from step 1 and the token with yours.
+   address with the one from step 2 and the token with yours.
 
 If the phone cannot connect, check that both devices are on the same Wi-Fi and that the
 computer's firewall allows port 8710. Plain `http://` on the LAN is enough for browsing;
@@ -511,8 +513,9 @@ The first boot creates `data/`, `logs/` and the schema. Nothing has to be seeded
 | `MUSICFY_ORIGINS` | unset | extra allowed origins behind a proxy |
 
 `musicfy.env` under the data root holds the same values and is written with mode 600.
-The `install.sh` and `musicfy setup` routes use `~/.musicfy` as `MUSICFY_HOME`; `/opt/musicfy`
-is only the default when the program is started without the wrapper.
+The `install.sh` and `musicfy setup` routes use `~/.musicfy` as `MUSICFY_HOME` and write
+`MUSICFY_BIND=127.0.0.1`; `/opt/musicfy` and `0.0.0.0` are only the defaults when the
+program is started without the wrapper. Pass `--bind=0.0.0.0` when you want the LAN.
 
 ### systemd
 
