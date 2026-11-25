@@ -2403,7 +2403,7 @@ const server = http.createServer(async (req, res) => {
         dest = path.join(dir, `${stem} (${i})${ext}`);
       }
       const part = `${dest}.part`;
-      // streamed, not buffered: a 60MB wav used to be 60MB of RAM on a Raspberry Pi
+      // streamed, not buffered: a 60MB wav used to be 60MB of RAM on a small server
       const sha = createHash('sha256');
       const written = await new Promise((resolve, reject) => {
         let n = 0;

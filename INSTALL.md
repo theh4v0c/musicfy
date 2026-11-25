@@ -1,27 +1,497 @@
 # Installing MUSICFY
 
-MUSICFY is a single-user, self-hosted music library and DJ-prep server. It runs on one box,
-for one person; every path it uses comes from the environment, so a clone on another
-machine finds its own data, audio and venvs. Below is what a fresh install needs, and the
-honest distance between that and a public release.
+MUSICFY is a music library that runs on a computer you own. You use it in a web browser on
+the same computer, or on your phone over your home network. It does not need an account,
+a subscription or a cloud service.
+
+This guide assumes you have never used a terminal. Do the steps in order. Copy one block
+at a time, paste it, press Enter, and wait for it to finish before moving on.
+
+If you only want the shortest path and your computer is a Mac or Linux, the
+[README quick start](README.md#install) is four steps. This file explains every step and
+what to do when something fails.
 
 ---
 
-## 1. Requirements
+## 1. Check you have the right computer
 
-- **Node 22.13+** (`node:sqlite` is unflagged from 22.13; no npm dependencies).
-- **Python 3.11+** with `librosa` in a venv (audio analysis).
-- **ffmpeg**, **ffprobe**, **zip** on PATH.
-- **yt-dlp** in a venv (the download/stream resolver).
-- A place to keep audio (ideally a mount that is always present).
+MUSICFY runs on a computer, not on a phone or tablet. The phone is only a browser you use
+to reach the computer.
+
+| Your computer | What to do |
+|---|---|
+| **macOS 13+** (Apple Silicon or Intel) | Follow **Mac** below. |
+| **64-bit Linux** (Debian, Ubuntu, Mint, Pop!_OS, Fedora, Arch and similar) | Follow **Linux** below. |
+| **Windows 10 or 11** | Follow **Windows** below. Native Windows is not supported; use Docker Desktop or WSL2. |
+| **NAS / home server** | Follow **Docker** below if it can run Linux containers. |
+| **Phone or tablet** | Do not install the server here. Open the address of the computer that runs it. |
+
+You need a **64-bit** machine. MUSICFY also needs:
+
+- **Node.js 22.13 or newer**
+- **Python 3.10 or newer** with `python3-venv`
+- **ffmpeg** and **ffprobe**
+- **yt-dlp** (for downloads and streaming from the web)
+- About **2 GB free** for the program, Python packages and database. Your music needs its
+  own space.
+
+The installer creates two Python environments under `~/.musicfy`:
+
+- `ytdlp-venv` for downloading
+- `essentia-venv` for audio analysis (BPM, key, loudness)
+
+It does **not** install ffmpeg or Node. Those come from your operating system.
 
 ---
 
-## 2. Configuration
+## 2. Words used in this guide
 
-There is no config file to edit. Every path comes from an environment variable, read once
-at boot by `core/paths.js`; the defaults are the reference Pi's, so a second machine sets
-the few it differs on and inherits the rest of the behaviour.
+- **Terminal**: the black window where you type commands. On macOS it is called Terminal.
+  On Windows it is PowerShell.
+- **Command**: a line of text you paste into the terminal and run with Enter.
+- **`~`**: your home folder. On macOS this is `/Users/yourname`; on Linux
+  `/home/yourname`.
+- **`localhost`**: this computer. `http://localhost:8710` means "port 8710 on the machine
+  you are sitting at".
+- **Port**: a numbered door on the computer. MUSICFY uses door `8710` by default.
+- **Copy and paste**: select the text with the mouse, press `Command + C` on macOS or
+  `Control + C` on Linux/Windows, click the terminal, then press `Command + V` or
+  `Control + V`. Press Enter to run a command.
+
+---
+
+## 3. Mac
+
+### 3.1 Open Terminal
+
+Press `Command + Space`, type `Terminal`, and press Enter. A window with a prompt appears.
+
+### 3.2 Install the helper programs
+
+MUSICFY uses Homebrew to install Node, Python and ffmpeg. Check whether Homebrew is
+already installed:
+
+```sh
+brew --version
+```
+
+If that prints a version, skip to the next block. If it says `command not found`, install
+Homebrew first:
+
+```sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+Homebrew may ask for your password. It is the same password you use to unlock the Mac.
+When it finishes, it prints two commands to add Homebrew to your PATH; run the two lines
+it shows, then close and reopen Terminal.
+
+Now install the helpers:
+
+```sh
+brew install node ffmpeg python git
+```
+
+This can take several minutes. When it returns to the prompt, continue.
+
+### 3.3 Check the versions
+
+Run each line. You should see a version number for each.
+
+```sh
+node -v
+python3 --version
+ffmpeg -version
+```
+
+`node -v` must print **v22.13.0 or higher**. If it prints an older version, run
+`brew upgrade node` and check again.
+
+### 3.4 Install MUSICFY
+
+Paste this whole line and press Enter:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/theh4v0c/musicfy/main/install.sh | sh
+```
+
+What this does:
+
+1. downloads the MUSICFY source into `~/.musicfy/app`
+2. runs `musicfy setup`, which creates `~/.musicfy` for your data and the two Python
+   environments
+3. links the `musicfy` command into `~/.local/bin`
+
+It can take 5 to 10 minutes because it downloads Python packages. **Leave the window
+open.** When it finishes you should see a line like:
+
+```
+MUSICFY is at http://localhost:8710
+```
+
+### 3.5 Start MUSICFY
+
+```sh
+musicfy start
+```
+
+You should see:
+
+```
+Started  pid 12345 · http://localhost:8710
+```
+
+The terminal can now be closed; the server keeps running in the background. To stop it
+later, run `musicfy stop`.
+
+If you see `musicfy: command not found`, close Terminal, open it again, and run
+`musicfy start`. If it still fails, run this once and try again:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### 3.6 Open it
+
+Open <http://localhost:8710> in Safari, Chrome, Firefox or Edge. The first page is Home.
+The first start creates the database automatically.
+
+### 3.7 Add music
+
+Open **Library** in the left sidebar. Use **Upload files** or **Upload a folder**. At the
+moment there is no scanner for an existing music folder; files have to be uploaded through
+the app. Uploaded files are copied into `~/.musicfy/owned`.
+
+### 3.8 Make it start automatically (optional)
+
+If you want MUSICFY to come back after a restart:
+
+```sh
+musicfy service install
+```
+
+On macOS this writes a launchd job. On Linux this writes a systemd unit. It does not need
+sudo on macOS; on Linux it prints the `sudo` command if it cannot install it itself.
+
+### 3.9 Use it from your phone (optional)
+
+Your phone must be on the same Wi-Fi as the computer.
+
+1. Find the computer's local address:
+
+   macOS:
+
+   ```sh
+   ipconfig getifaddr en0
+   ```
+
+   Linux:
+
+   ```sh
+   hostname -I
+   ```
+
+   It prints something like `192.168.1.50`.
+
+2. Set a token, so someone else on the Wi-Fi cannot change your library:
+
+   ```sh
+   musicfy token --rotate
+   ```
+
+   It prints the token once. Copy it somewhere safe.
+
+3. Restart and open the address on the phone:
+
+   ```sh
+   musicfy restart
+   ```
+
+   On the phone, open `http://192.168.1.50:8710/?token=PASTE-YOUR-TOKEN`. Replace the
+   address with the one from step 1 and the token with yours.
+
+If the phone cannot connect, check that both devices are on the same Wi-Fi and that the
+computer's firewall allows port 8710. Plain `http://` on the LAN is enough for browsing;
+offline playback and "install app" need HTTPS (a reverse proxy or VPN).
+
+---
+
+## 4. Linux
+
+These commands are for **Debian, Ubuntu, Mint, Pop!_OS** and similar. For Fedora or Arch,
+see the notes after the block.
+
+### 4.1 Open Terminal
+
+Press `Control + Alt + T`. If that does nothing, open your applications menu and search
+for **Terminal**.
+
+### 4.2 Install the helper programs
+
+Copy this whole block, paste it, and press Enter:
+
+```sh
+sudo apt update
+sudo apt install -y curl git ffmpeg python3 python3-venv
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+```
+
+`sudo` asks for your login password. You will not see dots while typing; that is normal.
+
+**Fedora:**
+
+```sh
+sudo dnf install -y curl git ffmpeg python3 nodejs
+```
+
+If `node -v` is below 22.13 after this, install Node 22 from
+<https://nodejs.org/en/download> or use NodeSource for RPM-based systems.
+
+**Arch:**
+
+```sh
+sudo pacman -S --needed curl git ffmpeg python nodejs npm
+```
+
+### 4.3 Check the versions
+
+```sh
+node -v
+python3 --version
+ffmpeg -version
+```
+
+`node -v` must be **v22.13.0 or higher**.
+
+### 4.4 Install MUSICFY
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/theh4v0c/musicfy/main/install.sh | sh
+```
+
+Wait until it prints `MUSICFY is at http://localhost:8710`. The Python step takes several
+minutes.
+
+### 4.5 Start it
+
+```sh
+musicfy start
+```
+
+You should see `Started pid ...` and `http://localhost:8710`. The terminal can be closed.
+To stop it later, run `musicfy stop`.
+
+If `musicfy` is not found, close the terminal, open it again, and run `musicfy start`.
+Alternatively:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### 4.6 Open it, add music, optional service
+
+Open <http://localhost:8710>, then follow **3.6**, **3.7**, **3.8** and **3.9** above. The
+commands are the same on Linux.
+
+---
+
+## 5. Windows
+
+Native Windows is not supported because MUSICFY expects Unix-style Python environments
+and ffmpeg. There are two working routes.
+
+### Windows option A: Docker Desktop (recommended)
+
+1. Install **Docker Desktop** from <https://www.docker.com/products/docker-desktop/>.
+   Restart the computer when it asks.
+2. Open the Start menu, type `PowerShell`, and open **Windows PowerShell**.
+3. Download the project. The easiest way without Git:
+   - open <https://github.com/theh4v0c/musicfy>
+   - click the green **Code** button
+   - click **Download ZIP**
+   - extract the ZIP, then rename or move the extracted folder so the path is
+     `C:\musicfy` (that folder must contain `package.json`)
+4. In PowerShell, go to that folder:
+
+   ```powershell
+   cd C:\musicfy
+   ```
+
+5. Build the image. This downloads Node, ffmpeg and Python packages and can take
+   10 minutes or more:
+
+   ```powershell
+   docker build -t musicfy .
+   ```
+
+6. Make a folder for your music, for example `C:\music`, then start the container:
+
+   ```powershell
+   docker run -d --name musicfy -p 8710:8710 -v musicfy-data:/data -v C:\music:/music musicfy
+   ```
+
+7. Open <http://localhost:8710>.
+
+Useful Docker commands:
+
+```powershell
+docker logs musicfy
+docker stop musicfy
+docker start musicfy
+docker rm -f musicfy
+```
+
+If port 8710 is busy, change the first number: `-p 8711:8710`, then open
+<http://localhost:8711>.
+
+On a home network, add a token so other devices must authenticate. Replace
+`replace-with-a-long-random-text` with a long phrase only you know:
+
+```powershell
+docker rm -f musicfy
+docker run -d --name musicfy -p 8710:8710 -v musicfy-data:/data -v C:\music:/music -e MUSICFY_TOKEN=replace-with-a-long-random-text musicfy
+```
+
+### Windows option B: WSL2
+
+1. Install WSL2 and Ubuntu from the Microsoft Store or with `wsl --install` in PowerShell.
+2. Open the Ubuntu app.
+3. Follow the **Linux** steps above inside Ubuntu.
+
+The files inside WSL2 are separate from `C:\`; use the Ubuntu home folder for
+`~/.musicfy`.
+
+---
+
+## 6. Docker on Linux or macOS
+
+```sh
+git clone https://github.com/theh4v0c/musicfy.git
+cd musicfy
+docker build -t musicfy .
+docker run -d --name musicfy -p 127.0.0.1:8710:8710 \
+  -v musicfy-data:/data -v "$HOME/Music":/music musicfy
+```
+
+Open <http://localhost:8710>. The image runs as the `node` user; the music folder must be
+readable by it. For access from another device, publish `8710:8710` instead of
+`127.0.0.1:8710:8710` and set `MUSICFY_TOKEN`.
+
+There is no prebuilt image on Docker Hub yet; the `docker build` step builds it locally.
+
+---
+
+## 7. If something goes wrong
+
+First run:
+
+```sh
+musicfy doctor
+```
+
+It prints a line for Node, ffmpeg, yt-dlp, the analyser, the database, HTTP and disk, and
+tells you which one failed.
+
+| What you see | What it means | What to do |
+|---|---|---|
+| `musicfy: command not found` | `~/.local/bin` is not in your PATH | `export PATH="$HOME/.local/bin:$PATH"`, or close and reopen Terminal |
+| `Failed to start` | the server could not stay up | `musicfy logs`, then `musicfy doctor` |
+| `EADDRINUSE` or "port in use" | another program uses 8710 | `musicfy start --port=8711`; open <http://localhost:8711> |
+| `ffmpeg` or `ffprobe` missing | the helper is not installed | install it (section 3.2 or 4.2), then `musicfy doctor` |
+| `yt-dlp` missing | downloads will not work | run `musicfy setup` again without `--skip-deps` |
+| analyser missing | BPM/key analysis will not run | run `musicfy setup` again; it creates `essentia-venv` |
+| Permission denied on a music folder | the user cannot read that folder | move the files to a folder you own, or fix permissions |
+| Phone cannot reach it | different network, firewall, or wrong address | use the computer's LAN IP, the same Wi-Fi, and allow port 8710 |
+| Page loads but is empty | no music has been added | Library → **Upload files** |
+| Old interface after an update | the browser cached the old files | hard reload (`Command + Shift + R` or `Control + Shift + R`) |
+
+Logs live in `~/.musicfy/logs/musicfy.log`:
+
+```sh
+musicfy logs
+musicfy logs -f
+```
+
+`-f` follows new lines; press `Control + C` to stop following.
+
+---
+
+## 8. Updating and removing
+
+### Update
+
+Take a backup first:
+
+```sh
+musicfy backup
+```
+
+Then, if you installed with `install.sh`:
+
+```sh
+musicfy update
+```
+
+If you installed with npm:
+
+```sh
+npm i -g musicfy@latest
+musicfy restart
+```
+
+If you use Docker, download the new source and run `docker build` and `docker run` again.
+The `musicfy-data` volume keeps your database.
+
+### Remove
+
+```sh
+musicfy service uninstall
+musicfy stop
+rm -rf ~/.musicfy
+rm -f ~/.local/bin/musicfy
+```
+
+**This deletes the database, settings and uploaded audio inside `~/.musicfy`.** If
+`MUSICFY_OWNED` points at another folder, that music is separate and is not removed by
+this command. Keep a `musicfy backup` first if you might return.
+
+Docker:
+
+```sh
+docker rm -f musicfy
+docker volume rm musicfy-data
+```
+
+Your music in `C:\music` or `~/Music` is not touched.
+
+---
+
+## 9. Advanced: manual install, settings and services
+
+<details>
+<summary>Show the manual route and every environment variable</summary>
+
+### Manual install
+
+```sh
+git clone https://github.com/theh4v0c/musicfy.git
+cd musicfy
+
+python3 -m venv essentia-venv
+./essentia-venv/bin/pip install librosa numpy scipy
+
+python3 -m venv ytdlp-venv
+./ytdlp-venv/bin/pip install -U yt-dlp
+
+export MUSICFY_HOME="$PWD"
+export MUSICFY_OWNED="/path/to/your/music"
+node core/core.js
+```
+
+The first boot creates `data/`, `logs/` and the schema. Nothing has to be seeded.
+
+### Environment variables
 
 | variable | default | what it is |
 |---|---|---|
@@ -37,175 +507,49 @@ the few it differs on and inherits the rest of the behaviour.
 | `MUSICFY_BACKUP_DIR` | `$MUSICFY_HOME/backups` | nightly snapshots |
 | `MUSICFY_PORT` | `8710` | listen port |
 | `MUSICFY_BIND` | `0.0.0.0` | listen address |
+| `MUSICFY_TOKEN` | unset | optional shared secret |
+| `MUSICFY_ORIGINS` | unset | extra allowed origins behind a proxy |
 
-The LLM endpoint is not an env var: it lives in `data/settings.json` and is edited in
-Settings → Model endpoint (section 4).
-
-At boot the server prints what it resolved, and names anything missing:
-
-```
-[deps] ffmpeg /opt/homebrew/bin/ffmpeg
-[deps] analyser /opt/musicfy/essentia-venv/bin/python
-[deps] MISSING analyser interpreter … — create the venv or set MUSICFY_PYTHON
-```
-
----
-
-## 3. Install
-
-The short route:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/theh4v0c/musicfy/main/install.sh | sh
-musicfy start
-```
-
-or `npm i -g musicfy && musicfy setup --root ~/.musicfy && musicfy start`.
-
-`install.sh` clones into `~/.musicfy/app`, runs `musicfy setup` (directories, venvs,
-checks, `musicfy.env`) and links `~/.local/bin/musicfy`. It never uses sudo. Pass
-`--root=DIR`, `--repo=URL`, `--ref=BRANCH` or `--skip-deps`.
-
-The manual route, if you want to see every step:
-
-```bash
-git clone https://github.com/theh4v0c/musicfy && cd musicfy
-
-# Node: no dependencies, Node 22.13+ (node:sqlite is unflagged there).
-# Python: the analyser. The directory name matters, or set MUSICFY_PYTHON.
-python3 -m venv essentia-venv
-./essentia-venv/bin/pip install librosa numpy scipy
-
-# yt-dlp, in its own venv (the default MUSICFY_BIN)
-python3 -m venv ytdlp-venv
-./ytdlp-venv/bin/pip install -U yt-dlp
-
-# where the audio and the database live
-export MUSICFY_HOME="$PWD"
-export MUSICFY_OWNED="/path/to/your/music"
-
-node core/core.js
-```
-
-The first boot creates `data/`, `logs/` and the schema, then serves on `:8710`. Nothing
-has to be seeded.
-
-### The CLI
-
-| command | what it does |
-|---|---|
-| `musicfy setup` | dirs, venvs, `.env`, dependency check, URL |
-| `musicfy serve` | foreground, the way a service runs it |
-| `musicfy start/stop/restart/status` | detached process, PID file, `logs/musicfy.log` |
-| `musicfy logs [-f]` | last 100 lines, or follow |
-| `musicfy doctor` | Node, ffmpeg, yt-dlp, Python, DB integrity, HTTP, disk, token warning |
-| `musicfy backup [--keep N]` | `VACUUM INTO` snapshot + settings/covers archive |
-| `musicfy restore <snapshot.db>` | replace the database (stop first) |
-| `musicfy token [--rotate]` | write or rotate `MUSICFY_TOKEN` |
-| `musicfy service install` | systemd (Linux) or launchd (macOS) |
-| `musicfy update` | git pull, then restart if running |
+`musicfy.env` under the data root holds the same values and is written with mode 600.
+The `install.sh` and `musicfy setup` routes use `~/.musicfy` as `MUSICFY_HOME`; `/opt/musicfy`
+is only the default when the program is started without the wrapper.
 
 ### systemd
 
 ```ini
 [Unit]
-Description=MUSICFY core
+Description=MUSICFY
 After=network-online.target
 
 [Service]
-WorkingDirectory=/opt/musicfy
-ExecStart=/usr/bin/node --no-warnings /opt/musicfy/core/core.js
-Environment=MUSICFY_HOME=/opt/musicfy
-Environment=MUSICFY_OWNED=/media/yourdisk/musicfy/owned
+WorkingDirectory=/opt/musicfy/app
+EnvironmentFile=/opt/musicfy/musicfy.env
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/node --no-warnings /opt/musicfy/app/core/core.js
 Restart=always
-Environment=MUSICFY_PORT=8710
+RestartSec=3
+User=musicfy
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-### Docker (optional)
+`musicfy service install` writes this for you and prints the `sudo` commands when it is not
+running as root.
 
-One image with Node 22, ffmpeg and a shared Python venv (yt-dlp + librosa), built from the
-included `Dockerfile`:
+### Adding your own model endpoint
 
-```sh
-docker build -t musicfy .
-docker run -d --name musicfy -p 127.0.0.1:8710:8710 \
-  -v musicfy-data:/data -v /path/to/music:/music musicfy
-```
+Settings → **Model endpoint** stores `llm_base_url`, `llm_model` and `llm_api_key` in
+`data/settings.json`. Any OpenAI-compatible server works. Leave the key blank to keep the
+stored one; changing the base URL clears the key.
 
-`/data` holds the database and settings; the Python venv is inside the image. `/music` is
-the library root (`MUSICFY_OWNED`). The image runs as the `node` user, so the mounted music
-directory must be readable by it. For a LAN install, publish `8710:8710` and set a token;
-otherwise keep the `127.0.0.1` binding above.
+### Security
 
----
+- Default install listens on `0.0.0.0` so a phone on the same network can reach it. Set a
+  token before doing that: `musicfy token --rotate`, then restart.
+- Better: bind to `127.0.0.1` and put a TLS reverse proxy or VPN in front. HTTPS is also
+  required for offline playback on iOS.
+- Do not port-forward it directly to the internet. There are no per-user accounts.
+- `SECURITY.md` explains how to report a vulnerability.
 
-## 4. Adding your own LLM
-
-Two ways, both writing the same `settings.json`:
-
-- **UI:** Settings → Model endpoint. Set **Base URL** (`https://api.openai.com/v1`,
-  `http://localhost:11434/v1` for Ollama, any OpenAI-compatible server), **Model**, and
-  **API key**. Leave the key blank to keep the stored one.
-- **File:** `data/settings.json` → `llm_base_url`, `llm_model`, `llm_api_key`.
-
-The Ask/Agent features use this endpoint only to parse a request into an intent; the
-library query itself is deterministic (`core/query.js`). If the endpoint is unreachable,
-everything still works with the local planner.
-
-**Security note:** there are no per-user accounts or password reset; authentication is one
-optional shared token (`MUSICFY_TOKEN`). Do not expose the port to the internet without a
-VPN or an authenticated proxy, and bind it to `127.0.0.1` if the proxy is on the same host.
-
----
-
-## 5. Pointing at your own folders
-
-- **Library audio:** `MUSICFY_OWNED`. New downloads land here.
-- **Downloads root:** Settings → Downloads → "Download folder".
-- **Existing library:** the DB is SQLite at `MUSICFY_DB`. To import an existing folder,
-  the clean approach is a one-off scanner (not built yet) that walks the folder and inserts
-  `tracks` + `files` rows. Today, audio enters via download or upload.
-
----
-
-## 6. What a public release still has open
-
-1. **Accounts** — a single-user token exists (`MUSICFY_TOKEN`), and `setup --token` creates
-   one, but there is no per-user account or first-run password flow.
-2. **A scanner for an existing folder** — so people do not have to re-upload their library.
-3. **Platform matrix** — the analysis venv and yt-dlp are Linux/macOS; Windows has not been
-   tested.
-4. **Authentication is still opt-in** — the default install warns at boot when it listens
-   on every interface without a token. Use `musicfy setup --token`, or bind to localhost
-   behind a TLS proxy.
-
-Packaging now ships `package.json`, `bin/musicfy.mjs`, `install.sh`, systemd/launchd
-installers, a Dockerfile, LICENSE, SECURITY and CI for unit, design and boot smoke.
-
-Paths, the schema-on-boot, the CDJ USB export (`export.pdb` + ANLZ) and the test suite are
-done; see `MILESTONES.md`.
-
-## Security switches (env)
-
-- **`MUSICFY_TOKEN`** — set a shared secret and every request needs it. Visit
-  `http://host:8710/?token=<secret>` once; the server sets an HttpOnly cookie and
-  redirects to the clean URL. API clients can send `Authorization: Bearer <secret>`.
-  Unset leaves the app open; only do that on a trusted LAN.
-- **`MUSICFY_ORIGINS`** — comma-separated extra origins allowed to make writes
-  (needed when a proxy rewrites `Host`, e.g. `https://musicfy.example.com`).
-- **`MUSICFY_BIND`** — bind host, default `0.0.0.0`. Set `127.0.0.1` when a reverse proxy
-  on the same machine is the only client; the server warns at boot when it is listening on
-  every interface without a token.
-
-## Where things live (env)
-
-The complete table is in §2; it is the only list, so it cannot drift from itself.
-Nothing in the code spells an absolute path. A second machine needs only those variables;
-it inherits behaviour, not your paths.
-
-Built-in defences: writes require a same-origin `Origin`; request bodies are capped
-(4 MB, 64 MB uploads); the generic streamer refuses loopback/private/metadata URLs;
-changing the LLM base URL clears the stored key.
+</details>

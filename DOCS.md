@@ -1,8 +1,8 @@
 # MUSICFY handoff
 
-Self hosted music platform on a Raspberry Pi 5. Own catalogue, own metadata, no third party account in the playback chain.
+Self-hosted music platform. Own catalogue, own metadata, no third party account in the playback chain.
 
-- Host: one Raspberry Pi 5 class machine (Debian 12, aarch64), LAN `http://<host>:8710`, public behind a reverse proxy with SSO
+- Host: one 64-bit Linux or macOS machine, LAN `http://<host>:8710`, optionally behind an authenticated reverse proxy
 - Code `/opt/musicfy/{core,web}` on the host
 - Data `/opt/musicfy/data` (sqlite + covers + history), audio `<library root>/{web,upload,playlist-*}`
 
@@ -900,13 +900,13 @@ listening ones with a `· listening` note. `PATCH /api/playlists/:id` accepts `{
 An installation that only wants to play music can mark everything listening and Prep
 stops asking for work that will never be needed.
 
-Essentia itself does not install here: there is no aarch64 wheel for Python 3.11 and the
-source build fails after six minutes. librosa covers BPM, key, loudness and energy without
-compilation, which is why it was chosen. Genre tags are not produced; they would need a
-model, and Essentia on another machine.
+Essentia itself does not install here: there is no wheel for this Python version and the
+source build is slow. librosa covers BPM, key, loudness and energy without compilation,
+which is why it was chosen. Genre tags are not produced; they would need a model, and
+Essentia on another machine.
 
-To spread the work across the Macs, the missing piece is a small worker that accepts a file
-path and returns the same JSON. The analyser already talks JSON lines, so a worker is a thin
+To spread the work across several machines, the missing piece is a small worker that accepts
+a file path and returns the same JSON. The analyser already talks JSON lines, so a worker is a thin
 wrapper, and `analyze.js` would post to it when configured and fall back to local otherwise.
 
 ## DJ export (Rekordbox, Traktor)

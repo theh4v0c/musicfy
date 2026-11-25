@@ -3,27 +3,109 @@
 Self-hosted music library with a browser player, a DJ prep bench, and a library you own.
 One Node service, one SQLite database, no npm dependencies, no account in the playback path.
 
-Developed on a Raspberry Pi 5 (Debian 12, aarch64). Any Node 22.13+ host with ffmpeg works.
+Runs on 64-bit Linux and macOS. Windows works through Docker Desktop or WSL2. See **Which computers it runs on** below.
 
-## Quick start
+**Jump to:** [Install](#install) · [Which computers](#which-computers-it-runs-on) · [Screenshots](#a-look) · [What it does](#what-it-does) · [Requirements](#requirements) · [License](#license)
 
-```sh
-# clone, create ~/.musicfy, the two Python venvs, and put `musicfy` on PATH
-curl -fsSL https://raw.githubusercontent.com/theh4v0c/musicfy/main/install.sh | sh
-musicfy start
-```
+## Install
 
-or, with npm:
+You need a terminal and about 10 minutes. MUSICFY runs on your computer; you use it in a
+browser. You do not need an account, a cloud service or a second computer.
 
-```sh
-npm i -g musicfy
-musicfy setup --root ~/.musicfy
-musicfy start
-```
+### macOS
 
-`musicfy status`, `musicfy logs -f`, `musicfy doctor` and `musicfy service install` cover
-the rest. The service still runs on one port and reads every path from the environment;
-see `INSTALL.md` for the manual route and the env table.
+1. Open **Terminal**: press `Command + Space`, type `Terminal`, press Enter.
+
+2. Install the helper programs. If `brew` is not installed, see
+   [INSTALL.md section 3.2](INSTALL.md#32-install-the-helper-programs) first.
+
+   ```sh
+   brew install node ffmpeg python git
+   ```
+
+3. Install MUSICFY. Copy this whole line, paste it, press Enter, and wait 5 to 10 minutes:
+
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/theh4v0c/musicfy/main/install.sh | sh
+   ```
+
+   It creates `~/.musicfy`, installs the two Python environments, and puts the `musicfy`
+   command in `~/.local/bin`. You should see `MUSICFY is at http://localhost:8710`.
+
+4. Start it:
+
+   ```sh
+   musicfy start
+   ```
+
+5. Open <http://localhost:8710> in your browser.
+
+If step 4 says `musicfy: command not found`, close Terminal, open it again, and run
+`musicfy start`. If it still fails, run `export PATH="$HOME/.local/bin:$PATH"` and try
+again.
+
+### Linux (Debian, Ubuntu, Mint, Pop!_OS)
+
+1. Open **Terminal**: press `Control + Alt + T`.
+
+2. Install the helper programs. Copy this whole block, paste it, press Enter:
+
+   ```sh
+   sudo apt update
+   sudo apt install -y curl git ffmpeg python3 python3-venv
+   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+   sudo apt install -y nodejs
+   ```
+
+   `sudo` asks for your login password. You will not see dots while typing.
+
+3. Install MUSICFY. Copy this whole line, paste it, press Enter, and wait 5 to 10 minutes:
+
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/theh4v0c/musicfy/main/install.sh | sh
+   ```
+
+   You should see `MUSICFY is at http://localhost:8710`.
+
+4. Start it:
+
+   ```sh
+   musicfy start
+   ```
+
+5. Open <http://localhost:8710> in your browser.
+
+If step 4 says `musicfy: command not found`, close the terminal, open it again, and run
+`musicfy start`.
+
+**Fedora or Arch:** see [INSTALL.md section 4.2](INSTALL.md#42-install-the-helper-programs)
+for the package names.
+
+### Windows
+
+Native Windows is not supported. Use **Docker Desktop** or **WSL2** and follow the
+step-by-step guide: [Windows instructions in INSTALL.md](INSTALL.md#5-windows).
+
+### Full instructions
+
+The short version above is enough for most people. If you want every click and every
+command explained, or something did not work, read [INSTALL.md](INSTALL.md). It starts
+from "open the terminal", explains the words, and includes what to do when a command
+fails.
+
+## Which computers it runs on
+
+| Computer | How it runs | Status |
+|---|---|---|
+| **macOS** 13 or newer, Apple Silicon or Intel | `install.sh`, or Docker | supported |
+| **Linux** 64-bit, Debian/Ubuntu and similar | `install.sh`, systemd or the `musicfy` command | supported and tested on Debian/Ubuntu |
+| **Windows 10/11** | Docker Desktop, or WSL2 with Ubuntu and then the Linux steps | supported through Linux; native Windows is not supported |
+| **NAS / home server** | Docker, 64-bit amd64 or arm64 | supported when the NAS can run Linux containers |
+| **Phone or tablet** | no; it is a browser client for the computer above | use the browser |
+
+You need Node 22.13 or newer, Python 3.10 or newer, `ffmpeg`, `ffprobe` and `yt-dlp`.
+`install.sh` and `musicfy setup` install and check what they can; `musicfy doctor` tells
+you what is still missing. A 64-bit machine is required.
 
 ## A look
 
@@ -94,7 +176,7 @@ OPERATIONS.md    deploy, backup, restore, diagnose (generic)
 Every path comes from the environment (`MUSICFY_HOME`, `MUSICFY_OWNED`, `MUSICFY_PYTHON`,
 …); `/opt/musicfy` is only this machine's default. See `INSTALL.md` for the table.
 
-## Running it
+## Development
 
 ```sh
 node core/core.js          # listens on 0.0.0.0:8710

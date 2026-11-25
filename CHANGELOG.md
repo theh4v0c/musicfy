@@ -1,10 +1,19 @@
 # Changelog
 
-## Unreleased
+## 0.1.2 — 2026-11-25
 
+- Installation guide rewritten for someone who has never used a terminal: one numbered step
+  at a time, the commands for macOS and Linux, a Docker route for Windows, expected output,
+  and a troubleshooting table.
+- README quick start now includes the prerequisite command for each OS instead of assuming
+  Node and ffmpeg are already installed.
+- Explicit platform table: macOS and 64-bit Linux are supported; Windows through Docker
+  Desktop or WSL2; NAS through Linux containers; phones are clients only.
+- Removed the remaining Raspberry Pi positioning, keyword and deploy references; the
+  project is described as self-hosted and 64-bit Linux/macOS.
 - Documentation audit: removed the remaining hostname/proxy/personal references, corrected
-  the stale duplicate-key and endpoint descriptions, the test count and the 360px gate,
-  and added demo screenshots to the README.
+  the stale duplicate-key and endpoint descriptions and the test count, and added demo
+  screenshots to the README.
 
 ## 0.1.1 — 2026-11-25
 
