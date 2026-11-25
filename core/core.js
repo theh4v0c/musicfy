@@ -1194,7 +1194,8 @@ function maybeAutoDownload(trackId) {
   if (owned) return;
   const plays = db.prepare('SELECT COUNT(*) c FROM listens WHERE track_id=?').get(trackId).c;
   if (plays < threshold) return;
-  const pending = db.prepare("SELECT id FROM jobs WHERE kind='track-download' AND state='running' AND payload LIKE ?").get(`%\"trackId\":${trackId}%`);
+  const like = trackIdLike(trackId);
+  const pending = db.prepare("SELECT id FROM jobs WHERE kind='track-download' AND state='running' AND (payload LIKE ? OR payload LIKE ?)").get(like.a, like.b);
   if (pending) return;
   const jobId = crypto.randomUUID();
   db.prepare('INSERT INTO jobs (kind,payload,state,created_at) VALUES (?,?,?,?)')
@@ -1215,10 +1216,14 @@ function toggleLike(track_id, on) {
   else db.prepare('DELETE FROM likes WHERE track_id=?').run(track_id);
 }
 
+// "%\"trackId\":1%" also matches track 10, so a busy track ten could block track one
+const trackIdLike = (id) => ({ a: `%\"trackId\":${Number(id)},%`, b: `%\"trackId\":${Number(id)}}%` });
+
 // shared: queue one track download from a plain row
 function enqueueTrackDownload(t) {
   if (!t || !t.id) return false;
-  const busy = db.prepare("SELECT id FROM jobs WHERE (state='queued' OR state='running') AND payload LIKE ?").get(`%\"trackId\":${t.id}%`);
+  const like = trackIdLike(t.id);
+  const busy = db.prepare("SELECT id FROM jobs WHERE (state='queued' OR state='running') AND (payload LIKE ? OR payload LIKE ?)").get(like.a, like.b);
   if (busy) return false;
   const jobId = crypto.randomUUID();
   db.prepare('INSERT INTO jobs (kind,payload,state,progress,created_at) VALUES (?,?,?,0,?)')
@@ -2596,6 +2601,20 @@ const server = http.createServer(async (req, res) => {
       const tid = Number(mTdl[1]);
       const t = db.prepare('SELECT * FROM tracks WHERE id=?').get(tid);
       if (!t) return json(res, 404, { error: 'no such track' });
+      let wantUpgrade = false;
+      try { const raw = await readBody(req); wantUpgrade = !!(raw && JSON.parse(raw).upgrade); } catch {}
+      // a retrying player or a double click used to queue a job every few seconds, each
+      // one running its own catalogue search. One job per track, and no job when the
+      // track already has audio unless the caller asked for a better copy.
+      const like = trackIdLike(tid);
+      const busyJob = db.prepare("SELECT payload FROM jobs WHERE kind='track-download' AND state IN ('queued','running') AND (payload LIKE ? OR payload LIKE ?) ORDER BY id LIMIT 1")
+        .get(like.a, like.b);
+      if (busyJob) {
+        try { return json(res, 200, { job: JSON.parse(busyJob.payload).jobId, joined: true, track: tid }); } catch {}
+      }
+      if (!wantUpgrade && db.prepare("SELECT 1 FROM files WHERE track_id=? AND tier='owned' LIMIT 1").get(tid)) {
+        return json(res, 200, { already: true, track: tid });
+      }
       const jobId = crypto.randomUUID();
       db.prepare('INSERT INTO jobs (kind,payload,state,created_at) VALUES (?,?,?,?)')
         .run('track-download', JSON.stringify({ jobId, trackId: tid }), 'queued', now());

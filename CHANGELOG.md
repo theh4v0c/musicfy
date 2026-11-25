@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.29 — 2026-11-25
+
+- A track download request for a track that already has audio returns `already` instead of
+  queueing another job, and one in-flight request per track is reused. A player retrying
+  playback used to queue a job every twelve seconds, each with its own catalogue search.
+- The upgrade action sends `{ upgrade: true }`, so asking for a better copy still works.
+- Job lookups match `"trackId":1` exactly; the old `LIKE` also matched track 10.
+
 ## 0.1.28 — 2026-11-25
 
 - Selection and ingest use the same 60% duration rule. The 80% ingest floor rejected a

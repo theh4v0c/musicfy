@@ -421,7 +421,9 @@ $('ctx').addEventListener('click', async (e) => {
     if (act === 'upgrade') {
       closeCtx();
       try {
-        const r = await api(`/api/tracks/${t.id}/download`, { method: 'POST' });
+        const r = await api(`/api/tracks/${t.id}/download`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ upgrade: true }),
+        });
         if (!r.job) { toast('Could not queue an upgrade', 4000); return; }
         const pp = progressPill(`Checking for a better copy of ${(t.title || 'track').slice(0, 40)}…`);
         const j = await pollJob(r.job, (job) => { if (job && job.progress) pp.update(`Checking… ${Math.round(job.progress)}%`); });
