@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.34 — 2026-11-25
+
+- A&R suggestion chips no longer fill the box with English. The visible label follows the
+  interface language, the request behind it stays canonical, so a chip works whatever
+  language the model is good at.
+- Portuguese reaches the rules planner: list/create/download/count words, "entre 120 e
+  130 bpm", "nunca tocou", "não baixadas", "em Dm", "álbuns de X". Portuguese filler words
+  no longer become search terms.
+- The model prompt says the request may be written in Portuguese.
+- A&R result lines are translated: the catalogue summary, the per-track reason and the
+  draft card ("Nothing is saved until you pick one", "+N more", the buttons).
+
 ## 0.1.33 — 2026-11-25
 
 - The download format note is accurate: when the source already serves AAC, m4a is a

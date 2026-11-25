@@ -69,7 +69,12 @@ function mergePlan(prev, text) {
 
 function planLocally(text) {
   text = cleanQuery(text);
-  const t = String(text || '').toLowerCase();
+  // the same Portuguese reader the query engine uses: intent words, counts and ranges,
+  // never prepositions, so an artist name survives. Kept in its original case as well:
+  // "albums by Fear Factory" must not become "fear factory".
+  let nt = text;
+  try { nt = require('./query').normalizePortuguese(text); } catch {}
+  const t = String(nt || '').toLowerCase();
   const countMatch = t.match(/(\d{1,3})\s*(?:[a-z-]+\s+){0,4}(?:songs?|tracks?|items?)/i);
   // "10 aphex twin" asks for ten things even without the noun; a unit is not a request
   const leading = t.match(/^\s*(\d{1,3})\s+\S/i);
@@ -94,7 +99,7 @@ function planLocally(text) {
   // "albums by Fear Factory" / "Fear Factory's discography" is a catalogue listing
   // match against the original text, not the lowercased copy: the artist's casing is
   // part of the name ("Fear Factory", not "fear factory")
-  const byAlbums = text.match(/\b(?:albums?|discography)\s+(?:by|from|of)\s+(.+)$/i);
+  const byAlbums = nt.match(/\b(?:albums?|discography)\s+(?:by|from|of|de)\s+(.+)$/i);
   const ownsAlbums = text.match(/^(.+?)(?:'s|’s)\s+(?:albums?|discography)\s*[?.!]*$/i);
   const trailingAlbums = text.match(/^(.+?)\s+(?:albums?|discography)\s*[?.!]*$/i);
   const whatAlbums = text.match(/\bwhat albums (?:does|do) (.+?) have\b/i);
@@ -129,7 +134,10 @@ async function planWithModel(llm, text, previous) {
   const context = previous && previous.plan
     ? `\nThis is a follow-up. The previous request was: ${previous.question}\nIts plan was: ${JSON.stringify(previous.plan)}\nReturn the updated plan: keep what still applies, change only what the new instruction changes, and keep the same intent unless it says otherwise.\n`
     : '';
-  const prompt = `Turn a music request into JSON. Reply with JSON only, no prose.${context}
+  const prompt = `Turn a music request into JSON. Reply with JSON only, no prose.
+The request may be written in Portuguese or in English. Read it as it is written, keep the
+intent names and the JSON schema exactly as below, and put artist and theme names in their
+normal spelling.${context}
 {"intent":"build_playlist|search_tracks|artist_albums|download_album|download_missing|report_library","args":{...}}
 args by intent:
 - build_playlist: {"query":"the request as written","count":20,"download":false,

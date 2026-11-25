@@ -4,8 +4,38 @@
 const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const FLAT = { Db: 'C#', Eb: 'D#', Gb: 'F#', Ab: 'G#', Bb: 'A#' };
 
+// Portuguese is the interface language for the shop, so the rules planner has to read the
+// same requests English does. Each replacement is a whole word or phrase that is not part
+// of an artist or track name in practice; prepositions are left alone on purpose, because
+// rewriting "de" would corrupt every name that contains it.
+const PT_WORDS = [
+  [/\b(?:faixas|m[uú]sicas|can[cç][oõ]es)\b/gi, 'tracks'],
+  [/\b(?:criar|crie|cria|monte|montar|fa[cç]a|fazer|gerar|gere|selecione)\b/gi, 'create'],
+  [/\b(?:lista|sele[cç][aã]o)\b/gi, 'playlist'],
+  [/\b(?:baixar|baixe|baixa|descarregar|descarregue)\b/gi, 'download'],
+  [/\b(?:quantas?|quantos?)\b/gi, 'how many'],
+  [/\b(?:n[aã]o tenho|que n[aã]o tenho|que eu n[aã]o tenho)\b/gi, "I don't have"],
+  [/\bnunca (?:tocou|toquei|tocaram|ouvi|ouviu|escutou)\b/gi, 'never played'],
+  [/\b(?:n[aã]o baixad[ao]s?|sem [aá]udio|n[aã]o baixadas)\b/gi, 'not downloaded'],
+  [/\bentre\s+(\d{2,3})\s*e\s*(\d{2,3})\s*bpm\b/gi, 'between $1 and $2 bpm'],
+  [/\b(?:acima de|mais de)\s*(\d{2,3})\s*bpm\b/gi, 'above $1 bpm'],
+  [/\b(?:abaixo de|menos de)\s*(\d{2,3})\s*bpm\b/gi, 'below $1 bpm'],
+  [/\b(?:por volta de|em torno de|mais ou menos)\s*(\d{2,3})\s*bpm\b/gi, 'around $1 bpm'],
+  // \b does not sit before an accented letter (it is not an ASCII word character),
+  // so these two match on the word tail alone
+  [/[aá]lbuns(?![\p{L}])/giu, 'albums'],
+  [/[aá]lbum(?![\p{L}])/giu, 'album'],
+  [/\bdiscografia\b/gi, 'discography'],
+  [/\btonalidade\b/gi, 'key'],
+];
+function normalizePortuguese(text) {
+  let out = String(text || '');
+  for (const [re, to] of PT_WORDS) out = out.replace(re, to);
+  return out;
+}
+
 function parseKey(text) {
-  const m = text.match(/\b(?:in|key of)\s+([A-G])([#b♯]?)\s*(m|maj|min|minor|major)?\b/i);
+  const m = text.match(/\b(?:in|key of|em|no tom de)\s+([A-G])([#b♯]?)\s*(m|maj|min|minor|major)?\b/i);
   if (!m) return null;
   let note = m[1].toUpperCase() + (m[2] === 'b' ? 'b' : m[2] ? '#' : '');
   note = FLAT[note] || note;
@@ -39,7 +69,7 @@ function parseLimit(text, fallback = 50) {
 }
 
 function parse(text, db) {
-  const q = String(text || '').toLowerCase();
+  const q = normalizePortuguese(String(text || '')).toLowerCase();
   const filters = { limit: parseLimit(q), order: 'relevance' };
   const notes = [];
 
@@ -110,7 +140,9 @@ function parse(text, db) {
   for (const w of ['metal','electronic','techno','house','ambient','jazz','classical','hip','hop']) work = work.replace(new RegExp('\\b' + w + '\\b', 'gi'), ' ');
 
   // whatever is left of the sentence is treated as text over title, artist and album
-  const stop = new Set(['the','a','an','my','me','of','in','for','with','and','or','to','from','that','which','are','is','do','does','did','i','have','has','what','who','when','where','how','any','some','all','please','list','give','show','find','create','make','build','playlist','songs','song','tracks','track','never','played','want','need','like','by','on','at','key','bpm','played','times','not','no','audio','downloaded','local','owned','random','shuffle','newest','oldest','most','top','popular','trending','between','above','below','over','under','around','about','near','kids','kid','children','child','can','could','would','should','you','your','yours','assist','help','able','tell','know','explain','capability','capabilities','commands','command','there','it','this','us','we','rated','rating','ratings','best']);
+  const stop = new Set(['the','a','an','my','me','of','in','for','with','and','or','to','from','that','which','are','is','do','does','did','i','have','has','what','who','when','where','how','any','some','all','please','list','give','show','find','create','make','build','playlist','songs','song','tracks','track','never','played','want','need','like','by','on','at','key','bpm','played','times','not','no','audio','downloaded','local','owned','random','shuffle','newest','oldest','most','top','popular','trending','between','above','below','over','under','around','about','near','kids','kid','children','child','can','could','would','should','you','your','yours','assist','help','able','tell','know','explain','capability','capabilities','commands','command','there','it','this','us','we','rated','rating','ratings','best',
+    // Portuguese filler: without these, 'uma lista com 10 faixas' searched for 'uma com'
+    'uma','um','com','sem','para','por','dos','das','do','da','no','na','nos','nas','que','eu','meu','minha','os','as','e','ou','de','em','ao','aos','mais','menos','sobre','entre','quero','preciso','tenho','nao','não','tocar','tocando','algum','alguma','alguns','algumas','isso','este','esta','esse','essa','aquele','aquela','muito','pouco','pouca','so','só','tambem','também','mas','como','quando','onde','qual','quais','quem','favor','many','much','quantas','quantos']);
   const rest = work.replace(/[^a-z0-9#\s]/g, ' ')
     .split(/\s+/)
     .filter((w) => w.length > 2 && !stop.has(w) && !/^\d+$/.test(w));
@@ -163,4 +195,4 @@ function run(db, filters) {
   return db.prepare(sql).all(...params, filters.limit || 50);
 }
 
-module.exports = { parse, run };
+module.exports = { parse, run, normalizePortuguese };

@@ -227,3 +227,25 @@ test('the last-resort search is not double prefixed', () => {
   // an artist-only seed still produces a usable title query, never an empty one
   assert.deepEqual(L.searchPlan('Afterclapp', ''), ['scsearch5:Afterclapp', 'ytsearch1:Afterclapp']);
 });
+
+test('portuguese requests reach the same planner as english', () => {
+  const Q = require('../core/query.js');
+  // parse() only asks the database for genre/artist resolution; the filters do not need it
+  const db = { prepare: () => ({ get: () => null, all: () => [] }) };
+  const build = A.planLocally('criar uma lista com 10 faixas ambient');
+  assert.equal(build.intent, 'build_playlist');
+  assert.equal(build.args.count, 10);
+  assert.equal(A.planLocally('quantas faixas eu tenho').intent, 'report_library');
+  assert.equal(A.planLocally('baixar o álbum Tal').intent, 'download_album');
+  // a key, a tempo range and "never played" survive the normalisation
+  const f = Q.parse('faixas em Dm entre 120 e 130 bpm', db);
+  assert.equal(f.key, 'D');
+  assert.equal(f.scale, 'minor');
+  assert.deepEqual(f.bpm, { min: 120, max: 130 });
+  assert.deepEqual(Q.parse('faixas que nunca tocou', db).plays, { max: 0 });
+  assert.equal(Q.parse('faixas não baixadas', db).owned, false);
+  // an artist name is not rewritten by the Portuguese reader
+  const album = A.planLocally('albums de Fear Factory');
+  assert.equal(album.intent, 'artist_albums');
+  assert.match(album.args.artist, /Fear Factory/);
+});

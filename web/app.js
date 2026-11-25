@@ -3541,8 +3541,9 @@ async function runAssistant(text, out, stateEl, box) {
         (d.examples || []).forEach((ex) => {
           const b = document.createElement('button');
           b.className = 'ask-ex';
-          b.textContent = ex;
-          b.onclick = () => { box.value = ex; runAssistant(ex, out, stateEl, box); };
+          b.dataset.ask = ex;
+          b.textContent = tr(ex);
+          b.onclick = () => { box.value = b.textContent; runAssistant(ex, out, stateEl, box); };
           hint.appendChild(b);
         });
         out.appendChild(hint);
@@ -3589,10 +3590,10 @@ async function renderAskAi() {
   v.innerHTML = `<h1 class="sr-only">A&amp;R</h1><div class="search-wrap">
       <input class="search" id="ai-q" placeholder="Ask, build or teach: 20 dark techno I don't have · no Imagine Dragons" autocomplete="off">
       <div class="ask-hint">
-        <button class="ask-ex">10 ambient tracks I don't have</button>
-        <button class="ask-ex">build a crate of 10 tracks by Aphex Twin</button>
-        <button class="ask-ex">how much of my library has audio</button>
-        <button class="ask-ex">tracks in Dm between 120 and 130 bpm</button>
+        <button class="ask-ex" data-ask="10 ambient tracks I don't have">10 ambient tracks I don't have</button>
+        <button class="ask-ex" data-ask="build a crate of 10 tracks by Aphex Twin">build a crate of 10 tracks by Aphex Twin</button>
+        <button class="ask-ex" data-ask="how much of my library has audio">how much of my library has audio</button>
+        <button class="ask-ex" data-ask="tracks in Dm between 120 and 130 bpm">tracks in Dm between 120 and 130 bpm</button>
       </div>
       <div class="ladder-state" id="ai-state"></div>
     </div><div id="ai-res"></div><div id="ask-discover"></div>`;
@@ -3624,8 +3625,9 @@ async function renderAskAi() {
     for (const label of d.prompts.slice(0, 4)) {
       const b = document.createElement('button');
       b.className = 'ask-ex';
-      b.textContent = label;
-      b.onclick = () => { box.value = label; run(label); };
+      b.dataset.ask = label;          // canonical English for the planner
+      b.textContent = tr(label);      // what the person reads and keeps in the box
+      b.onclick = () => { box.value = b.textContent; run(label); };
       hint.appendChild(b);
     }
   }).catch(() => {});
@@ -3643,9 +3645,9 @@ async function renderSearch() {
         <span class="search-status status" id="search-status" hidden></span>
       </div>
       <div class="ask-hint" id="search-hints">
-        <button class="ask-ex" data-ar>tracks in Dm between 120 and 130 bpm</button>
-        <button class="ask-ex" data-ar>create a playlist of 10 ambient tracks</button>
-        <button class="ask-ex" data-ar>how much of my library has audio</button>
+        <button class="ask-ex" data-ar data-ask="tracks in Dm between 120 and 130 bpm">tracks in Dm between 120 and 130 bpm</button>
+        <button class="ask-ex" data-ar data-ask="create a playlist of 10 ambient tracks">create a playlist of 10 ambient tracks</button>
+        <button class="ask-ex" data-ar data-ask="how much of my library has audio">how much of my library has audio</button>
       </div>
       <div class="mode-tabs" id="mode-tabs">
         <span class="filters-label">Include</span>
@@ -3703,7 +3705,7 @@ async function renderSearch() {
   // the examples are questions; A&R is where a question is answered
   document.querySelectorAll('#search-hints .ask-ex').forEach((b) => b.onclick = () => {
     q.value = b.textContent;
-    state.arPending = b.textContent;
+    state.arPending = b.dataset.ask || b.textContent;
     nav('askai');
   });
   const paintLS = () => {
