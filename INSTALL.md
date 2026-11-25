@@ -209,8 +209,8 @@ computer only; the first command below opens it to your home network.
    musicfy restart
    ```
 
-   On the phone, open `http://192.168.1.50:8710/?token=PASTE-YOUR-TOKEN`. Replace the
-   address with the one from step 2 and the token with yours.
+   On the phone, open `http://192.168.1.50:8710/`. Replace the address with the one from
+   step 2 and enter the token on the login page.
 
 If the phone cannot connect, check that both devices are on the same Wi-Fi and that the
 computer's firewall allows port 8710. Plain `http://` on the LAN is enough for browsing;
@@ -434,6 +434,11 @@ Then, if you installed with `install.sh`:
 ```sh
 musicfy update
 ```
+
+`musicfy update` runs `git pull` in `~/.musicfy/app`. If the repository is private,
+configure a read-only GitHub deploy key on that machine first, or the pull will fail. If
+MUSICFY runs as a systemd service, the command prints the restart line:
+`sudo systemctl restart musicfy`.
 
 If you installed with npm:
 

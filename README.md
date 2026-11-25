@@ -147,6 +147,8 @@ Screenshots use a small demo library, not a real one.
   playlists, with presets for dance, house, techno, indie dance, downtempo and Burning
   Man, plus a reference artist ("like Burial").
 - **Offline** playback on a phone through a service worker, once served over HTTPS.
+- **English and Portuguese (Brazil)** interface, chosen in Settings or from the browser.
+  Track, artist and album names are never translated.
 
 ## Layout
 
@@ -194,6 +196,12 @@ node bin/test.mjs          # asserts real behaviour, 61 checks
 
 Settings and secrets (`settings.json`, `llm.json`, `soundcloud.json`) live in the data
 directory and are never committed.
+
+## Put it on a domain
+
+For a shop, studio or family install that should be reachable over HTTPS with a login, see
+[DOMAIN.md](DOMAIN.md). It uses Caddy as the only public service and keeps MUSICFY on
+`127.0.0.1`.
 
 ## Deploy notes
 

@@ -7,7 +7,7 @@ const https = require('node:https');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { createHash } = require('node:crypto');
+const { createHash, timingSafeEqual } = require('node:crypto');
 const { execFile, execFileSync, spawn } = require('node:child_process');
 const { normalize, scoreCandidate, titleForVersion, QUALITY_RANK } = require('./ladder');
 const ytdlp = require('./ytdlp');
@@ -1813,6 +1813,106 @@ function applyDuplicatePlan(plan) {
   return { groups: plan.groups.length, removed, files: filesRemoved };
 }
 
+const loginAttempts = new Map();
+function loginKey(req) { return String(req.socket.remoteAddress || 'unknown'); }
+function loginBlocked(req) {
+  const row = loginAttempts.get(loginKey(req));
+  if (!row) return false;
+  if (Date.now() > row.reset) { loginAttempts.delete(loginKey(req)); return false; }
+  return row.count >= 10;
+}
+function loginFailed(req) {
+  const k = loginKey(req);
+  const row = loginAttempts.get(k) || { count: 0, reset: Date.now() + 10 * 60 * 1000 };
+  row.count += 1;
+  loginAttempts.set(k, row);
+}
+function loginClear(req) { loginAttempts.delete(loginKey(req)); }
+function tokenEqual(a, b) {
+  const x = createHash('sha256').update(String(a || '')).digest();
+  const y = createHash('sha256').update(String(b || '')).digest();
+  return timingSafeEqual(x, y);
+}
+function safeNext(value) {
+  const n = String(value || '/');
+  return n.startsWith('/') && !n.startsWith('//') ? n : '/';
+}
+function htmlEscape(s) {
+  return String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function loginLang(req, u) {
+  const q = String(u.searchParams.get('lang') || '').toLowerCase();
+  if (q.startsWith('pt')) return 'pt-BR';
+  const al = String(req.headers['accept-language'] || '').toLowerCase();
+  return al.startsWith('pt') ? 'pt-BR' : 'en';
+}
+function loginPage(error = '', next = '/', lang = 'en') {
+  const L = lang === 'pt-BR' ? {
+    title: 'Entrar no MUSICFY', heading: 'Entrar', intro: 'Digite a senha da loja para abrir a biblioteca.',
+    password: 'Senha', button: 'Abrir MUSICFY', wrong: 'Senha incorreta.',
+    tooMany: 'Muitas tentativas. Tente novamente em alguns minutos.',
+  } : {
+    title: 'MUSICFY login', heading: 'Sign in', intro: 'Enter the store password to open the library.',
+    password: 'Password', button: 'Open MUSICFY', wrong: 'Wrong password.',
+    tooMany: 'Too many attempts. Try again in a few minutes.',
+  };
+  const shown = error === 'wrong' ? L.wrong : error === 'too-many' ? L.tooMany : error;
+  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex"><title>${L.title}</title>
+<style>
+  :root { color-scheme: dark; --bg:#0a0a0b; --card:#121214; --line:rgba(255,255,255,.08); --fg:#f5f4f0; --soft:rgba(245,244,240,.62); --mute:rgba(245,244,240,.5); --acc:#ff5c39; --on:#140a07; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100dvh; display:grid; place-items:center; padding:20px; background:radial-gradient(60% 50% at 20% 0%, rgba(255,92,57,.12), transparent 70%), var(--bg); color:var(--fg); font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  main { width:min(100%,380px); background:var(--card); border:1px solid var(--line); border-radius:16px; padding:24px; box-shadow:0 24px 70px rgba(0,0,0,.55); }
+  .brand { font-weight:700; letter-spacing:-.04em; font-size:26px; margin-bottom:22px; }
+  .brand span { color:var(--acc); }
+  h1 { font-size:18px; margin:0 0 6px; letter-spacing:-.01em; }
+  p { margin:0 0 18px; color:var(--soft); font-size:13px; }
+  label { display:block; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--mute); }
+  input { width:100%; min-height:44px; margin-top:6px; padding:0 12px; border:1px solid var(--line); border-radius:8px; background:#0a0a0b; color:var(--fg); font:inherit; }
+  input:focus { outline:none; border-color:var(--acc); box-shadow:0 0 0 3px rgba(255,92,57,.14); }
+  button { width:100%; min-height:44px; margin-top:16px; border:0; border-radius:99px; background:var(--acc); color:var(--on); font:600 14px/1 inherit; cursor:pointer; }
+  button:hover { filter:brightness(1.08); }
+  .err { margin:14px 0 0; color:#ff9a86; font-size:13px; }
+</style></head><body><main>
+  <div class="brand">MUSIC<span>FY</span></div>
+  <h1>${L.heading}</h1>
+  <p>${L.intro}</p>
+  <form method="post" action="/login">
+    <input type="hidden" name="next" value="${htmlEscape(next)}">
+    <label>${L.password}<input name="password" type="password" autocomplete="current-password" autofocus required></label>
+    <button type="submit">${L.button}</button>
+  </form>
+  ${shown ? `<p class="err">${htmlEscape(shown)}</p>` : ''}
+</main></body></html>`;
+}
+function sendLogin(res, error = '', next = '/', status = 200, lang = 'en') {
+  const body = loginPage(error, next, lang);
+  res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', 'x-frame-options': 'DENY' });
+  res.end(body);
+}
+function readFormBody(req, limit = 4096) {
+  return new Promise((resolve) => {
+    let body = '';
+    let size = 0;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > limit) { try { req.destroy(); } catch {} resolve(''); return; }
+      body += c;
+    });
+    req.on('end', () => resolve(body));
+    req.on('error', () => resolve(''));
+  });
+}
+function authCookie(token, secure) {
+  return `mf_auth=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000${secure ? '; Secure' : ''}`;
+}
+function isSecure(req) {
+  const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+  return Boolean(req.socket.encrypted) || proto === 'https';
+}
+
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
   res.setHeader('x-content-type-options', 'nosniff');
@@ -1845,22 +1945,52 @@ const server = http.createServer(async (req, res) => {
   // --- optional shared-secret auth (inert unless MUSICFY_TOKEN is set) ---
   if (AUTH_TOKEN) {
     const cookie = (req.headers.cookie || '').match(/(?:^|;\s*)mf_auth=([^;]+)/);
+    let cookieToken = '';
+    try { cookieToken = cookie ? decodeURIComponent(cookie[1]) : ''; } catch { cookieToken = cookie ? cookie[1] : ''; }
     const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     const qtoken = u.searchParams.get('token') || '';
-    const authed = (cookie && cookie[1] === AUTH_TOKEN) || bearer === AUTH_TOKEN || qtoken === AUTH_TOKEN;
+    const next = safeNext(u.searchParams.get('next') || (req.method === 'GET' ? u.pathname : '/'));
+    const authed = (cookieToken && tokenEqual(cookieToken, AUTH_TOKEN)) || tokenEqual(bearer, AUTH_TOKEN) || tokenEqual(qtoken, AUTH_TOKEN);
+
+    if (u.pathname === '/login') {
+      if (req.method === 'GET') {
+        if (authed) {
+          const headers = { location: '/', 'cache-control': 'no-store' };
+          if (qtoken && tokenEqual(qtoken, AUTH_TOKEN)) headers['set-cookie'] = authCookie(AUTH_TOKEN, isSecure(req));
+          res.writeHead(302, headers);
+          return res.end();
+        }
+        return sendLogin(res, '', next, 200, loginLang(req, u));
+      }
+      if (req.method === 'POST') {
+        if (loginBlocked(req)) return sendLogin(res, 'too-many', next, 429, loginLang(req, u));
+        const form = new URLSearchParams(await readFormBody(req));
+        const want = safeNext(form.get('next') || '/');
+        if (tokenEqual(form.get('password') || '', AUTH_TOKEN)) {
+          loginClear(req);
+          res.writeHead(302, { 'set-cookie': authCookie(AUTH_TOKEN, isSecure(req)), location: want, 'cache-control': 'no-store' });
+          return res.end();
+        }
+        loginFailed(req);
+        return sendLogin(res, 'wrong', want, 401, loginLang(req, u));
+      }
+      res.writeHead(405, { allow: 'GET, POST' }); return res.end();
+    }
+
     if (!authed) {
       if (u.pathname.startsWith('/api/')) return json(res, 401, { error: 'unauthorized' });
+      if (req.method === 'GET' && String(req.headers.accept || '').includes('text/html')) {
+        const back = safeNext(u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : ''));
+        res.writeHead(302, { location: `/login?next=${encodeURIComponent(back)}`, 'cache-control': 'no-store' });
+        return res.end();
+      }
       res.writeHead(401, { 'content-type': 'text/plain; charset=utf-8' });
       return res.end('unauthorized');
     }
-    if (qtoken && qtoken === AUTH_TOKEN) {
+    if (qtoken && tokenEqual(qtoken, AUTH_TOKEN)) {
       u.searchParams.delete('token');
       const clean = u.pathname + (u.searchParams.toString() ? '?' + u.searchParams.toString() : '');
-      // Secure only when the request actually arrived over TLS: a LAN install on plain
-      // http would otherwise receive a cookie the browser refuses to store
-      const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
-      const secure = req.socket.encrypted || proto === 'https';
-      res.writeHead(302, { 'set-cookie': `mf_auth=${AUTH_TOKEN}; HttpOnly; SameSite=Lax; Path=/; Max-Age=31536000${secure ? '; Secure' : ''}`, location: clean });
+      res.writeHead(302, { 'set-cookie': authCookie(AUTH_TOKEN, isSecure(req)), location: clean });
       return res.end();
     }
   }
@@ -1907,6 +2037,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (u.pathname === '/app.js') {
       const body = fs.readFileSync(path.join(WEB, 'app.js'));
+      return sendStatic(req, res, body, 'text/javascript; charset=utf-8');
+    }
+    if (u.pathname === '/i18n.js') {
+      const body = fs.readFileSync(path.join(WEB, 'i18n.js'));
       return sendStatic(req, res, body, 'text/javascript; charset=utf-8');
     }
     if (u.pathname === '/sw.js') {

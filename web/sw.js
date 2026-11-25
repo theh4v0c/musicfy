@@ -2,7 +2,7 @@
 // MUSICFY offline layer. Caches the app shell, library JSON and explicitly saved
 // audio so the app opens and plays from the device with no network.
 // Service workers require HTTPS or localhost.
-const SHELL = 'mf-shell-v4';
+const SHELL = 'mf-shell-v5';
 const AUDIO = 'mf-audio-v2';
 const API = 'mf-api-v2';
 const AUDIO_KEYS = () => caches.open(AUDIO);
@@ -89,7 +89,7 @@ self.addEventListener('fetch', (e) => {
 
   // the shell bundle is stale-while-revalidate: an old tab still opens instantly,
   // and the next load runs the current CSS/JS even when the URL did not change
-  if (url.pathname === '/app.css' || url.pathname === '/app.js' || url.pathname === '/manifest.webmanifest') {
+  if (url.pathname === '/app.css' || url.pathname === '/app.js' || url.pathname === '/i18n.js' || url.pathname === '/manifest.webmanifest') {
     e.respondWith(caches.open(SHELL).then(async (c) => {
       const hit = await c.match(req);
       const net = fetch(req).then((r) => { if (r.ok) c.put(req, r.clone()); return r; }).catch(() => hit);

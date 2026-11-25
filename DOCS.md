@@ -597,6 +597,8 @@ Rekordbox and Traktor both open `.mp3`, `.m4a` (AAC), `.wav`, `.aiff` and `.flac
 
 ## Endpoints
 
+Web: `GET/POST /login` (shared-secret login page, when `MUSICFY_TOKEN` is set).
+
 Library: `GET/POST /api/playlists`, `GET/PATCH/DELETE /api/playlists/:id`, `POST /api/playlists/:id/tracks`, `DELETE /api/playlists/:id/tracks/:trackId`, `GET /api/playlists/:id/export.m3u`, `GET /api/playlists/:id/zip`, `POST /api/playlists/:id/download`, `GET/POST/DELETE /api/tracks`, `POST /api/tracks/:id/download`, `GET /api/tracks/:id/file`, `POST /api/tracks/:id/cover`, `GET /api/cover/:id`, `GET /api/group/:type/:name`.
 
 Discovery: `GET /api/search/ladder?q=`, `GET /api/ladder/stream/{youtube,soundcloud,generic}`, `GET /api/prewarm/:id`, `POST /api/ladder/download`, `GET /api/jobs/:id`, `GET /api/downloads`, `POST /api/downloads/:id/retry`, `POST /api/downloads/:id/cancel`, `POST /api/downloads/retry-failed`, `POST /api/downloads/cancel-all`, `POST /api/downloads/clear-failed`, `GET /api/health/rungs`.
@@ -604,6 +606,13 @@ Discovery: `GET /api/search/ladder?q=`, `GET /api/ladder/stream/{youtube,soundcl
 Maintenance: `POST /api/mirror/spotify`, `POST /api/mirror/track`, `POST /api/history/scan`, `POST /api/history/materialize`, `POST /api/maintenance/repair`, `GET /api/maintenance/duplicates`, `POST /api/maintenance/dedupe`, `POST /api/maintenance/dedupe-files`, `POST /api/tracks/:id/unlock`, `POST /api/covers/fill`, `GET/POST /api/settings`, `GET/POST /api/soundcloud/token`, `GET /api/docs` (generated list), `GET /api/stats`.
 
 ## Web app notes
+
+The interface is English and Brazilian Portuguese. `web/i18n.js` translates exact
+interface strings after each render and through a MutationObserver; it never walks the
+track title, artist, album or playlist-name nodes. The browser language selects Portuguese
+automatically, and Settings → You → Language stores an explicit choice. `GET/POST /login`
+is the shared-password page used when `MUSICFY_TOKEN` is set; it sets the same HttpOnly
+cookie as the query-token route.
 
 `web/app.js` is a single file: `api()` wrapper with a read cache (`nocache: true` bypasses it, call `bustCache()`/`afterWrite()` after mutations or the UI shows stale data), `state` object, one `render*` per view, `playAt`/`playList` for playback, `refreshView()` which must know every view, `openCtx` for the track menu, `openPlaylistMenu` for playlists, `renderDownloads` for the queue panel.
 

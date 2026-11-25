@@ -109,6 +109,11 @@ function alive(p) {
   } catch { return false; }
 }
 
+function systemdActive() {
+  if (process.platform !== 'linux') return false;
+  try { return spawnSync('systemctl', ['is-active', '--quiet', 'musicfy']).status === 0; } catch { return false; }
+}
+
 function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 function ensureDirs() {
@@ -222,12 +227,14 @@ function serve() {
 
 async function status() {
   const p = pid();
-  if (!alive(p)) {
+  const service = systemdActive();
+  if (!alive(p) && !service) {
     if (p) { try { fs.rmSync(pidFile); } catch {} }
     console.log(`MUSICFY is not running  (${rootDir})`);
     return 1;
   }
   const env = runtimeEnv();
+  if (service && !alive(p)) console.log('MUSICFY is running as the systemd service musicfy');
   const db = path.join(env.MUSICFY_DATA, 'musicfy.db');
   let size = '';
   try { size = ` · ${(fs.statSync(db).size / 1e6).toFixed(1)} MB db`; } catch {}
@@ -242,6 +249,10 @@ async function status() {
 
 async function start() {
   ensureDirs();
+  if (systemdActive()) {
+    console.log('Already running as the systemd service musicfy. Use: sudo systemctl restart musicfy');
+    return 0;
+  }
   const p = pid();
   if (alive(p)) { console.log(`Already running (pid ${p}) · ${urlFor()}`); return 0; }
   if (p) { try { fs.rmSync(pidFile); } catch {} }
@@ -263,6 +274,10 @@ async function start() {
 }
 
 async function stop() {
+  if (systemdActive()) {
+    console.log('The systemd service is active. Stop it with: sudo systemctl stop musicfy');
+    return 1;
+  }
   const p = pid();
   if (!alive(p)) {
     if (p) { try { fs.rmSync(pidFile); } catch {} }
@@ -416,9 +431,16 @@ function token() {
 
 function update() {
   if (fs.existsSync(path.join(APP, '.git'))) {
-    if (!run('git', ['-C', APP, 'pull', '--ff-only'])) return 1;
+    if (!run('git', ['-C', APP, 'pull', '--ff-only'])) {
+      console.log('git pull failed. If the repository is private, configure a read-only deploy key first.');
+      return 1;
+    }
   } else {
     console.log('This is not a git checkout. Update with your package manager, then run: musicfy restart');
+    return 0;
+  }
+  if (systemdActive()) {
+    console.log('Updated. Restart with: sudo systemctl restart musicfy');
     return 0;
   }
   if (alive(pid())) return restart();

@@ -39,8 +39,8 @@ in a Docker image. Rotate a leaked token with `musicfy token --rotate` and resta
 
 - Default install listens on `0.0.0.0` so a phone on the same network can reach it.
 - Set `MUSICFY_TOKEN` (`musicfy setup --token`, or `musicfy token --rotate`) before doing
-  that. Every request then needs the cookie set by `/?token=…` or
-  `Authorization: Bearer …`.
+  that. Open `/login` and enter the password; the server sets an HttpOnly cookie. API
+  clients can use `Authorization: Bearer …`.
 - Better: bind to `127.0.0.1` and put a TLS reverse proxy or VPN in front. HTTPS is also
   required for the service worker and offline playback on iOS.
 - Do not port-forward it directly to the internet. There is no per-user account system,

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.7 — 2026-11-25
+
+- Login page for the shared secret. It sets an HttpOnly cookie, keeps the password out of
+  the URL, and rate-limits repeated failures.
+- Portuguese (Brazil) interface, detected from the browser or chosen in Settings. The login
+  page follows the browser language as well. Track, artist and album names are never
+  translated.
+- DOMAIN.md: a domain with automatic HTTPS through Caddy, with MUSICFY kept on
+  `127.0.0.1` and the login in front of it.
+- The installer binds to `127.0.0.1` by default; LAN and VPS access are deliberate.
+- `musicfy status/start/stop/update` recognise an installed systemd service, so they do
+  not report "not running" while systemd owns the process.
+
 ## 0.1.6 — 2026-11-25
 
 - Agent install prompt for open-source terminal coding agents such as OpenCode and Hermes.

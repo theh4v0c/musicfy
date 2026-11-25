@@ -2704,6 +2704,12 @@ async function renderSettings() {
         <label>Email<input id="set-email" value="${esc(s.email || '')}" placeholder="you@example.com"></label>
         <label>Timezone<input id="set-tz" value="${esc(s.timezone || '')}" placeholder="America/Sao_Paulo"></label>
         <p class="set-note">IANA name, e.g. America/Sao_Paulo. Setting a city below fills it in automatically.</p>
+        <label>Language
+          <select id="set-lang">
+            <option value="en"${window.I18N && window.I18N.lang === 'en' ? ' selected' : ''}>English</option>
+            <option value="pt-BR"${window.I18N && window.I18N.lang === 'pt-BR' ? ' selected' : ''}>Português (Brasil)</option>
+          </select>
+        </label>
       </section>
       <section class="set-card" data-tone="acc">
         <h2>Location</h2>
@@ -2823,6 +2829,8 @@ async function renderSettings() {
   };
   if (avoidInput) { avoidInput.addEventListener('input', paintAvoid); paintAvoid(); }
 
+  const langSel = document.getElementById('set-lang');
+  if (langSel && window.I18N) langSel.onchange = () => window.I18N.set(langSel.value);
   const saveBtn = document.getElementById('set-save');
   const saveMsg = document.getElementById('set-msg');
 
