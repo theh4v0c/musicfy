@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.51 — 2026-11-25
+
+- `bin/deploy-pi.sh` (`npm run deploy:pi`) deploys the whole app — including
+  `package.json`, which carries the version the Pi reports — restarts the service and
+  fails if the running version does not match the tree. A deploy that skipped
+  `package.json` left the Pi on 0.1.31 while running newer code.
+
 ## 0.1.50 — 2026-11-25
 
 - When a storefront returns few albums, Deezer fills them; when it returns no artists, the
