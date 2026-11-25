@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.12 — 2026-11-25
+
+- Listener keeps A&R and Settings → Model endpoint. A&R is how playlists are requested in
+  natural language; hiding it made the listener mode a dead end. Only Prep, harmonic tools,
+  BPM/key chips and DJ exports remain hidden.
+
 ## 0.1.11 — 2026-11-25
 
 - Listener keeps library maintenance: Fix covers, Fix metadata, Edit album and Choose

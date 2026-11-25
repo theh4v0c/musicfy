@@ -149,8 +149,9 @@ Screenshots use a small demo library, not a real one.
 - **Offline** playback on a phone through a service worker, once served over HTTPS.
 - **English and Portuguese (Brazil)** interface, chosen in Settings or from the browser.
   Track, artist and album names are never translated.
-- **Listener and DJ modes.** Listener hides Prep, A&R, harmonic tools, BPM/key chips and
-  DJ exports. DJ shows the full bench. The mode is in Settings → Mode.
+- **Listener and DJ modes.** Listener hides Prep, harmonic tools, BPM/key chips and DJ
+  exports. A&R, search, playlists and the model endpoint stay. DJ shows the full bench.
+  The mode is in Settings → Mode.
 
 ## Layout
 

@@ -26,7 +26,7 @@ function applyTier(tier, persist = true) {
   state.tier = tier === 'listener' ? 'listener' : 'dj';
   document.body.classList.toggle('tier-listener', state.tier === 'listener');
   if (persist) { try { localStorage.setItem('mf-tier', state.tier); } catch {} }
-  if (state.tier === 'listener' && (state.view === 'djexport' || state.view === 'askai')) nav('home');
+  if (state.tier === 'listener' && state.view === 'djexport') nav('home');
 }
 applyTier(state.tier, false);
 const esc = (s) => (s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -791,7 +791,7 @@ function setNav(v) {
   const pill = $('pill'); if (pill) pill.hidden = !(v === 'library' || v === 'settings');
 }
 function nav(v, push = true) {
-  if (state.tier === 'listener' && (v === 'djexport' || v === 'askai')) v = 'home';
+  if (state.tier === 'listener' && v === 'djexport') v = 'home';
   closeInlinePreview();
   const qd = $('queue-drawer'); if (qd) qd.hidden = true;
   if (typeof clearSelection === 'function') clearSelection();
@@ -2765,7 +2765,7 @@ async function renderSettings() {
         <label>Auto-save after plays<input id="set-auto-dl" type="number" min="0" max="20" value="${Number(s.auto_download_plays ?? 2)}"></label>
         <p class="set-note">0 turns automatic saving off.</p>
       </section>
-      <section class="set-card" data-tone="acc" data-tier="dj">
+      <section class="set-card" data-tone="acc">
         <h2>Model endpoint</h2>
         <p class="set-note">Used by A&amp;R and Ask to interpret requests. Covers, search, downloads and playback do not use it.</p>
         <p class="set-note llm-status" id="set-llm-status"><span class="llm-dot" data-state="idle"></span> <span>Checking...</span></p>
@@ -3562,7 +3562,6 @@ async function runAssistant(text, out, stateEl, box) {
   }
 
 async function renderAskAi() {
-  if (state.tier === 'listener') return nav('home');
   closeInlinePreview();
   setNav('askai');
   state.view = 'askai'; state.playlistId = null; state.genreFilter = null; renderSidebar();

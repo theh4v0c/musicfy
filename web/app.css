@@ -1365,8 +1365,7 @@ main.main { transition: margin-right .18s ease; }
 }
 
 /* listener tier: the store/phone surface, not the DJ bench */
-body.tier-listener [data-nav="djexport"],
-body.tier-listener [data-nav="askai"] { display: none !important; }
+body.tier-listener [data-nav="djexport"] { display: none !important; }
 body.tier-listener #pl-harm,
 body.tier-listener #pl-kind,
 body.tier-listener #plan { display: none !important; }
