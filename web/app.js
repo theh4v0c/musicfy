@@ -2749,7 +2749,7 @@ async function renderSettings() {
         <label class="set-check"><input type="checkbox" id="set-taste-children"${s.taste_include_children ? ' checked' : ''}> Let children's music shape recommendations</label>
         <p class="set-note">Off: children's plays stay in your history but do not move your top genres, tempo, key, picks or rotation.</p>
       </section>
-      <section class="set-card" data-tone="mute" data-tier="dj">
+      <section class="set-card" data-tone="mute">
         <h2>Maintenance</h2>
         <p class="set-note">Housekeeping for the library itself. Nothing here changes your files unless it says so.</p>
         <div class="set-tools">

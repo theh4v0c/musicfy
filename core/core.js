@@ -1130,9 +1130,9 @@ function saveThumb(thumb, trackId) {
           await saveImageCover(Buffer.concat(chunks), coverFile(trackId));
           db.prepare('UPDATE tracks SET has_art=1 WHERE id=?').run(trackId);
           resolve(true);
-        } catch { resolve(false); }
+        } catch (e) { try { log('cover', `save failed for track ${trackId}: ${e.message}`); } catch {} resolve(false); }
       });
-    }).on('error', () => resolve(false));
+    }).on('error', (e) => { try { log('cover', `download failed for track ${trackId}: ${e.message}`); } catch {} resolve(false); });
   });
 }
 
@@ -4443,14 +4443,17 @@ const server = http.createServer(async (req, res) => {
     // fill missing cover art from the public iTunes catalogue
     if (u.pathname === '/api/covers/fill' && req.method === 'POST') {
       const limit = Math.min(Number((u.searchParams.get('limit') || 40)), 200);
-      const rows = db.prepare(`SELECT id, title, artist FROM tracks WHERE COALESCE(has_art,0)=0 ORDER BY id LIMIT ?`).all(limit);
+      const rows = db.prepare(`SELECT id, title, artist, album FROM tracks WHERE COALESCE(has_art,0)=0 ORDER BY id LIMIT ?`).all(limit);
       let found = 0, tried = 0, noMatch = 0, failed = 0;
       const worker = async (queue) => {
         while (queue.length) {
           const t = queue.shift();
           tried += 1;
           try {
-            const url = await covers.artworkFor(t.artist, t.title);
+            let url = await covers.artworkFor(t.artist, t.title);
+            // an album search is often the only way to match a title with punctuation or
+            // a single whose track name differs from the catalogue's version
+            if (!url && t.album) url = await covers.artworkForAlbum(t.album, t.artist);
             if (!url) { noMatch += 1; continue; }
             const ok = await saveThumb(url, t.id);
             if (ok) found += 1; else failed += 1;

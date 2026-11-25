@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.11 — 2026-11-25
+
+- Listener keeps library maintenance: Fix covers, Fix metadata, Edit album and Choose
+  cover remain available. Only Prep, A&R, harmonic tools, BPM/key chips and DJ exports are
+  hidden.
+- Cover repair falls back from a track search to an album search when a title does not
+  match, and reports save/download failures separately from no match.
+- `musicfy doctor` lists the covers folder so a VPS permission problem is visible.
+
 ## 0.1.10 — 2026-11-25
 
 - Fix update checks on installs left on a detached HEAD by an older `install.sh`. The check
