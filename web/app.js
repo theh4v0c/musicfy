@@ -2798,7 +2798,7 @@ async function renderSettings() {
             <option value="mp3"${s.preferred_format === 'mp3' ? ' selected' : ''}>mp3 (universal)</option>
           </select>
         </label>
-        <p class="set-note">Applies to downloads from streaming sources only. "Keep the original" stores what the source serves without re-encoding; m4a and mp3 convert once, which loses a little quality and takes time. Files you upload are stored byte for byte, and lossless files are never converted.</p>
+        <p class="set-note">Applies to downloads from streaming sources only. "Keep the original" stores what the source serves without re-encoding. m4a and mp3 convert only when the source uses a different codec; when the source already serves AAC, m4a is a container fix with no re-encode. Files you upload are stored byte for byte, and lossless files are never converted.</p>
       </section>
       <section class="set-card">
         <h2>Playback</h2>

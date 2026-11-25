@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.33 — 2026-11-25
+
+- The download format note is accurate: when the source already serves AAC, m4a is a
+  container fix and no re-encode happens. It converts only across codecs.
+
 ## 0.1.32 — 2026-11-25
 
 - The queue takes one job per track at a time. Two jobs for the same track raced in ingest:
