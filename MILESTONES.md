@@ -6,6 +6,22 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-25 · Manual metadata is authoritative (`v492`)
+
+Clicking **Fix metadata** after correcting the Meshuggah albums moved three *None* tracks
+back to reissue albums: catalogue repair proposed the release it matched and applied it,
+overwriting the person's edit. The catalogue was treated as truth; it is only a suggestion.
+
+- migration 6 adds `tracks.meta_locked`.
+- **Edit metadata** and **Edit album** record the fields they write. `repair.propose()`
+  skips those fields; **Fix metadata** can still fill gaps but cannot revert a hand edit.
+- album/year bulk writes lock album/year; single edits lock every field submitted.
+- the three *None* tracks (Aztec Two-Step, Sickening, Humiliative) were restored to
+  *None* (1994); Rare Trax, Alive and I were re-applied and locked. A repair on *None*
+  now reports 0 fixed for the locked fields and leaves the album at 5 tracks.
+
+Tests 57/57, unit 13/13, design-check and smoke green.
+
 ### 2026-11-25 · Meshuggah library repaired: albums and covers (`v491`, data)
 
 Twenty-four Meshuggah rows had no album and two had `NULL`; their titles were unambiguous

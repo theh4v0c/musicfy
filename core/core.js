@@ -246,6 +246,16 @@ function upsertTrack({ title, artist, album, year, duration, format, spotify_id,
   return Number(r.lastInsertRowid);
 }
 
+function lockMeta(db, id, keys) {
+  const wanted = (keys || []).filter(Boolean);
+  if (!wanted.length) return;
+  const row = db.prepare('SELECT meta_locked FROM tracks WHERE id=?').get(id);
+  if (!row) return;
+  const set = new Set(String(row.meta_locked || '').split(',').map((x) => x.trim()).filter(Boolean));
+  for (const k of wanted) set.add(k);
+  db.prepare('UPDATE tracks SET meta_locked=? WHERE id=?').run([...set].join(','), id);
+}
+
 function upsertFile({ track_id, path: p, tier, bitrate, size, mtime }) {
   const row = db.prepare('SELECT id, track_id FROM files WHERE path=?').get(p);
   if (row) {
@@ -854,7 +864,7 @@ const LADDER_TTL = Number(process.env.MUSICFY_LADDER_TTL || 5 * 60 * 1000);
 const ladderCache = new Map();
 
 // 4. schema version, so column changes stop being invisible
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 function currentVersion() {
   try {
     const row = db.prepare('SELECT value FROM meta WHERE key=?').get('schema_version');
@@ -928,6 +938,10 @@ function migrate() {
       // one file, even when the names differ
       try { db.exec('ALTER TABLE files ADD COLUMN sha256 TEXT'); } catch {}
       try { db.exec('CREATE INDEX IF NOT EXISTS idx_files_sha ON files(sha256)'); } catch {}
+    }],
+    [6, () => {
+      // hand-edited metadata is authoritative; catalogue repair must not overwrite it
+      try { db.exec('ALTER TABLE tracks ADD COLUMN meta_locked TEXT'); } catch {}
     }],
   ];
   for (const [version, run] of steps) {
@@ -2783,6 +2797,7 @@ const server = http.createServer(async (req, res) => {
         if (!Object.keys(fields).length) return json(res, 400, { error: 'nothing to change' });
         const r = repair.apply(db, id, fields);
         if (r.error) return json(res, 409, r);
+        lockMeta(db, id, Object.keys(fields));
         return json(res, 200, { ok: true, ...r });
       });
       return;
@@ -2808,8 +2823,13 @@ const server = http.createServer(async (req, res) => {
         if (!sets.length) return json(res, 400, { error: 'nothing to change' });
         const upd = db.prepare(`UPDATE tracks SET ${sets.join(', ')}, updated_at=? WHERE id=?`);
         let updated = 0;
+        const locked = [];
+        if (b.album !== undefined) locked.push('album');
+        if (b.year !== undefined) locked.push('year');
+        if (b.genre !== undefined) locked.push('genre');
+        if (b.genre_family !== undefined) locked.push('genre_family');
         for (const id of ids) {
-          try { const r = upd.run(...params, now(), id); if (r.changes) updated += 1; } catch {}
+          try { const r = upd.run(...params, now(), id); if (r.changes) { updated += 1; lockMeta(db, id, locked); } } catch {}
         }
         return json(res, 200, { ok: true, updated, checked: ids.length });
       });

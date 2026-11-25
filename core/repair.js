@@ -6,7 +6,7 @@ const identity = require('./identity');
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 async function propose(db, trackId) {
-  const t = db.prepare('SELECT id, title, artist, album, year, genre, genre_family, bpm, key, duration FROM tracks WHERE id=?').get(trackId);
+  const t = db.prepare('SELECT id, title, artist, album, year, genre, genre_family, bpm, key, duration, meta_locked FROM tracks WHERE id=?').get(trackId);
   if (!t) return null;
   let c = null;
   try { c = await identity.canon(t.artist || '', t.title || ''); } catch {}
@@ -19,16 +19,20 @@ async function propose(db, trackId) {
     confidence: 0,
   };
 
+  // a field edited by hand is authoritative: the catalogue is a suggestion, not an
+  // override. Without this, "Fix metadata" reverted a corrected album to whichever
+  // release the catalogue happened to match.
+  const locked = new Set(String(t.meta_locked || '').split(',').map((x) => x.trim()).filter(Boolean));
   if (c) {
     proposal.confidence = Math.round((c.score || 0) * 100);
     const titleDiffers = norm(c.title) !== norm(t.title);
     const artistDiffers = norm(c.artist) !== norm(t.artist);
-    if (titleDiffers) { proposal.after.title = c.title; proposal.reasons.push(`title: "${t.title}" -> "${c.title}"`); }
-    if (artistDiffers) { proposal.after.artist = c.artist; proposal.reasons.push(`artist: "${t.artist}" -> "${c.artist}"`); }
-    if (c.album && norm(c.album) !== norm(t.album)) { proposal.after.album = c.album; proposal.reasons.push(`album: "${t.album || ''}" -> "${c.album}"`); }
-    if (c.year && Number(c.year) !== Number(t.year)) { proposal.after.year = c.year; proposal.reasons.push(`year: ${t.year || '-'} -> ${c.year}`); }
-    if (c.genre && norm(c.genre) !== norm(t.genre)) { proposal.after.genre = c.genre; proposal.reasons.push(`genre: "${t.genre || ''}" -> "${c.genre}"`); }
-    if (c.family && c.family !== t.genre_family) proposal.after.genre_family = c.family;
+    if (titleDiffers && !locked.has('title')) { proposal.after.title = c.title; proposal.reasons.push(`title: "${t.title}" -> "${c.title}"`); }
+    if (artistDiffers && !locked.has('artist')) { proposal.after.artist = c.artist; proposal.reasons.push(`artist: "${t.artist}" -> "${c.artist}"`); }
+    if (c.album && norm(c.album) !== norm(t.album) && !locked.has('album')) { proposal.after.album = c.album; proposal.reasons.push(`album: "${t.album || ''}" -> "${c.album}"`); }
+    if (c.year && Number(c.year) !== Number(t.year) && !locked.has('year')) { proposal.after.year = c.year; proposal.reasons.push(`year: ${t.year || '-'} -> ${c.year}`); }
+    if (c.genre && norm(c.genre) !== norm(t.genre) && !locked.has('genre')) { proposal.after.genre = c.genre; proposal.reasons.push(`genre: "${t.genre || ''}" -> "${c.genre}"`); }
+    if (c.family && c.family !== t.genre_family && !locked.has('genre_family')) proposal.after.genre_family = c.family;
   } else {
     proposal.reasons.push('no catalogue match, nothing to compare against');
   }
