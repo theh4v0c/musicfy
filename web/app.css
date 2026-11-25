@@ -126,7 +126,7 @@ main.main { grid-area: main; display: flex; flex-direction: column; overflow: hi
 .mast-fact { font-size: 13.5px; line-height: 1.45; color: var(--fg-mute); }
 .mast-chip { font-size: 10.5px; letter-spacing: .04em; padding: 3px 10px; border-radius: var(--r-pill); color: var(--fg-soft);
   border: 1px solid var(--line); background: rgba(255,255,255,.035); white-space: nowrap; }
-.mast-main { display: flex; align-items: flex-end; justify-content: space-between; gap: 26px; margin: 14px 0 14px; }
+.mast-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 26px; margin: 14px 0 14px; }
 .mast-copy { min-width: 0; }
 .mast-greet { margin: 0; font-size: clamp(28px, 3.4vw, 42px); line-height: 1; letter-spacing: -.03em; font-weight: 600; }
 .mast-greet .mast-name { color: var(--fg); margin-left: .22em; }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.18 — 2026-11-25
+
+- Home mast: the greeting aligns to the top of the Flow/Resume stack instead of floating
+  in the vertical middle of the card. It keeps the one-line greeting and removes the
+  awkward empty band above it.
+- The mast session sentence is translated: "new track this week" and the "at 12:12" time
+  in "Você parou em …".
+
 ## 0.1.17 — 2026-11-25
 
 - Portuguese covers the Prep page (EXPORTAR, PRONTAS PARA EXPORTAR, Prepare/Update counts,

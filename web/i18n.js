@@ -179,6 +179,8 @@
     [/^(\d+) playlists?, ready when you are\.$/, (m) => `${m[1]} ${Number(m[1]) === 1 ? 'lista' : 'listas'}, quando você quiser.`],
     [/^All (\d+) playlists$/, (m) => `Todas as ${m[1]} listas`],
     [/^You left off on /, () => 'Você parou em '],
+    [/^Você parou em (.+) at (\d{1,2}:\d{2})\.$/, (m) => `Você parou em ${m[1]} às ${m[2]}.`],
+    [/^(\d+) new tracks? this week(?:; (\d+) still unheard)?\.$/, (m) => `${m[1]} ${m[1] === '1' ? 'faixa nova' : 'faixas novas'} esta semana${m[2] ? `; ${m[2]} ainda não ouvida${m[2] === '1' ? '' : 's'}` : ''}.`],
     [/^Sources: /, () => 'Fontes: '],
     [/^Playback log: /, () => 'Registro de reprodução: '],
     [/^how much of my library has audio$/, () => 'quanto da minha biblioteca tem áudio'],
