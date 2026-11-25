@@ -74,6 +74,18 @@ to the 160k AAC path, which is what most tracks will use.
 No paid source is wired in. Beatport was implemented, required a streaming plan, and was
 removed on request: this project does not depend on paid services.
 
+## Correcting metadata by hand
+
+A track's context menu has **Edit metadata** (title, artist, album, year). For a group —
+the usual case when YouTube files land in the wrong album — select the rows and press
+**Edit album** in the selection bar: tick *Set album* (and optionally *Set year*), type the
+value, save. `POST /api/tracks/edit {ids, album?, year?, genre?}` does the update.
+
+An album change is not an identity change. `repair.apply()` only checks the
+artist+title duplicate key when the title or artist actually changed, so a row with a
+duplicate elsewhere can still be moved to the correct album (previously any edit on such
+a row failed with "another track already has that title and artist").
+
 ## Versions: original vs remaster
 
 `ladder.titleForVersion()` keeps the version the person asked for. A request without

@@ -125,6 +125,10 @@ const recs = await j('/api/recommend?limit=50');
 const childFree = (recs.body?.picks || []).every((t) => t.genre_family !== 'children');
 ok('children are not recommended while the preference is off', tasteCfg.taste_include_children === true || childFree, JSON.stringify(recs.body?.profile));
 
+console.log('bulk metadata');
+const bulkBad = await post('/api/tracks/edit', { ids: [] });
+ok('bulk edit requires a selection', bulkBad.status === 400 && /ids/.test(bulkBad.body?.error || ''), `${bulkBad.status} ${JSON.stringify(bulkBad.body)}`);
+
 console.log('maintenance repair');
 const mr = await post('/api/maintenance/repair', {});
 ok('metadata repair reports what it changed', mr.status === 200 && mr.body?.ok && 'fixed_year' in mr.body && 'cleaned_titles' in mr.body, JSON.stringify(mr.body));

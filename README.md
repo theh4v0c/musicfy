@@ -67,7 +67,7 @@ Every path comes from the environment (`MUSICFY_HOME`, `MUSICFY_OWNED`, `MUSICFY
 ```sh
 node core/core.js          # listens on 0.0.0.0:8710
 ./bin/smoke.sh             # checks every critical endpoint
-node bin/test.mjs          # asserts real behaviour, 56 checks
+node bin/test.mjs          # asserts real behaviour, 57 checks
 ```
 
 Settings and secrets (`settings.json`, `llm.json`, `soundcloud.json`) live in the data

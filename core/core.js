@@ -2788,6 +2788,34 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // bulk metadata edit: move many tracks to the right album (or set year/genre)
+    if (u.pathname === '/api/tracks/edit' && req.method === 'POST') {
+      let body = ''; req.on('data', c => body += c);
+      req.on('end', () => {
+        let b = null;
+        try { b = JSON.parse(body || '{}'); } catch { return json(res, 400, { error: 'bad request body' }); }
+        const ids = Array.isArray(b.ids) ? b.ids.map(Number).filter(Number.isFinite).slice(0, 1000) : [];
+        if (!ids.length) return json(res, 400, { error: 'ids required' });
+        const sets = [];
+        const params = [];
+        if (b.album !== undefined) { sets.push('album=?'); params.push(String(b.album || '').trim().slice(0, 200) || null); }
+        if (b.year !== undefined) {
+          const y = b.year === '' || b.year === null ? null : Math.trunc(Number(b.year));
+          sets.push('year=?'); params.push(y && y >= 1900 && y <= new Date().getFullYear() + 1 ? String(y) : null);
+        }
+        if (b.genre !== undefined) { sets.push('genre=?'); params.push(String(b.genre || '').trim() || null); }
+        if (b.genre_family !== undefined) { sets.push('genre_family=?'); params.push(String(b.genre_family || '').trim() || null); }
+        if (!sets.length) return json(res, 400, { error: 'nothing to change' });
+        const upd = db.prepare(`UPDATE tracks SET ${sets.join(', ')}, updated_at=? WHERE id=?`);
+        let updated = 0;
+        for (const id of ids) {
+          try { const r = upd.run(...params, now(), id); if (r.changes) updated += 1; } catch {}
+        }
+        return json(res, 200, { ok: true, updated, checked: ids.length });
+      });
+      return;
+    }
+
     // find rows whose file vanished, clear them and optionally requeue
     if (u.pathname === '/api/maintenance/verify-files' && req.method === 'POST') {
       const requeue = u.searchParams.get('requeue') !== '0';

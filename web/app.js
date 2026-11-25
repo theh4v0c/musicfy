@@ -174,6 +174,7 @@ function ctxRename(t) {
       <label>Title<input id="rn-title" value="${esc(t.title || '')}"></label>
       <label>Artist<input id="rn-artist" value="${esc(t.artist || '')}"></label>
       <label>Album<input id="rn-album" value="${esc(t.album || '')}"></label>
+      <label>Year<input id="rn-year" inputmode="numeric" value="${esc(t.year || '')}" placeholder="e.g. 2002"></label>
       <div class="ctx-row"><button class="btn btn-primary" id="rn-save">Save</button><button class="btn btn-ghost" id="rn-cancel">Cancel</button></div>
     </div>`;
   m.classList.add('open'); markCtxOpen();
@@ -186,6 +187,7 @@ function ctxRename(t) {
       title: m.querySelector('#rn-title').value.trim(),
       artist: m.querySelector('#rn-artist').value.trim(),
       album: m.querySelector('#rn-album').value.trim(),
+      year: m.querySelector('#rn-year').value.trim(),
     };
     try {
       const r = await api(`/api/tracks/${t.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -222,7 +224,7 @@ function openCtx(t, x, y) {
     ${hasAudio(t) ? `<button data-act="offline">${state.offlineIds && state.offlineIds.has(t.id) ? 'Remove from offline' : 'Save for offline'}</button>` : ''}
     <button data-act="addpl">Add to playlist</button>
     ${state.view === 'playlist' && state.playlistId ? '<button data-act="rmpl">Remove from this playlist</button>' : ''}
-    ${(!t.ladder && t.id) ? '<button data-act="rename">Rename track</button>' : ''}
+    ${(!t.ladder && t.id) ? '<button data-act="rename">Edit metadata</button>' : ''}
     ${(!t.ladder && t.id) ? '<button data-act="repair">Fix metadata</button>' : ''}
     ${(!t.ladder && t.id) ? `<button data-act="deltrack">${state.selectedIds.size > 1 && state.selectedIds.has(t.id) ? `Delete ${state.selectedIds.size} selected` : 'Delete from library'}</button>` : ''}
     <button data-act="radiostart">Start track radio</button>`;
@@ -4489,13 +4491,59 @@ function renderSelectionBar() {
   bar.innerHTML = `<span class="selcount" id="selcount">${n} selected</span>
     <button class="btn btn-primary" id="sel-create">New playlist</button>
     <button class="btn btn-ghost" id="sel-add">Add to playlist</button>
+    <button class="btn btn-ghost" id="sel-edit">Edit album</button>
     <button class="btn btn-ghost" id="sel-delete">Delete</button>
     <button class="btn btn-ghost" id="sel-clear">Clear</button>`;
   host.appendChild(bar);
   bar.querySelector('#sel-create').onclick = selCreatePlaylist;
   bar.querySelector('#sel-add').onclick = selAddToPlaylist;
+  bar.querySelector('#sel-edit').onclick = openBulkEdit;
   bar.querySelector('#sel-delete').onclick = () => deleteTracks([...state.selectedIds]);
   bar.querySelector('#sel-clear').onclick = clearSelection;
+}
+
+/* Move a selection to the right album. An album is not part of a track's identity, so
+   this cannot collide with another row; it is one UPDATE per selected track. */
+function openBulkEdit() {
+  const ids = [...state.selectedIds];
+  if (!ids.length) return;
+  const rows = ids.map((id) => (state._rows && state._rows.get(id)) || {}).filter(Boolean);
+  const same = (key) => {
+    const vals = rows.map((r) => String(r[key] ?? ''));
+    return vals.length && vals.every((v) => v === vals[0]) ? vals[0] : '';
+  };
+  const album = same('album');
+  const year = same('year');
+  markCtxOpen();
+  const m = $('ctx');
+  m.innerHTML = `<div class="ctx-title">Edit ${ids.length} track${ids.length === 1 ? '' : 's'}</div>
+    <div class="ctx-form">
+      <label class="set-check"><input type="checkbox" id="bulk-album-on" checked> Set album</label>
+      <label>Album<input id="bulk-album" value="${esc(album)}" placeholder="album name"></label>
+      <label class="set-check"><input type="checkbox" id="bulk-year-on"> Set year</label>
+      <label>Year<input id="bulk-year" inputmode="numeric" value="${esc(year)}" placeholder="e.g. 1998"></label>
+      <div class="ctx-row"><button class="btn btn-primary" id="bulk-save">Save</button><button class="btn btn-ghost" id="bulk-cancel">Cancel</button></div>
+    </div>`;
+  m.classList.add('open'); markCtxOpen();
+  m.style.left = Math.max(8, innerWidth / 2 - 170) + 'px';
+  m.style.top = '12%';
+  m.onclick = null;
+  m.querySelector('#bulk-cancel').onclick = () => closeCtx(true);
+  m.querySelector('#bulk-save').onclick = async () => {
+    const body = { ids };
+    if (m.querySelector('#bulk-album-on').checked) body.album = m.querySelector('#bulk-album').value.trim();
+    if (m.querySelector('#bulk-year-on').checked) body.year = m.querySelector('#bulk-year').value.trim();
+    if (body.album === undefined && body.year === undefined) { toast('Tick album or year first', 4000); return; }
+    try {
+      const r = await api('/api/tracks/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      closeCtx(true);
+      state.allTracks = null;
+      bustCache();
+      clearSelection();
+      toast(`${r.updated} track${r.updated === 1 ? '' : 's'} updated`, 4000);
+      refreshView();
+    } catch { toast('Could not update those tracks', 4000); }
+  };
 }
 
 async function selCreatePlaylist() {

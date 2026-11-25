@@ -6,6 +6,24 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-25 · Correcting an album is possible, for one track or twenty (`v490`)
+
+Meshuggah tracks sit in the wrong albums, and correcting one at a time was the only
+option — and even that could fail.
+
+- The row menu is now **Edit metadata** (title, artist, album, **year**), not "Rename
+  track": the album field was there, but the label hid it.
+- Selecting rows gives **Edit album** in the selection bar: tick *Set album* (and
+  optionally *Set year*), type the value, save. `POST /api/tracks/edit` updates the
+  selection in one call; empty clears the field.
+- `repair.apply()` only checks the artist+title duplicate key when the **title or artist
+  actually changed**. An album/year edit is not an identity change and is no longer
+  blocked by a duplicate elsewhere in the library.
+- Verified: two blank-album Meshuggah rows select, the dialog opens with the album field,
+  and a bulk set/revert round-trip updates the database.
+
+Tests 56 → 57 (selection required), unit 13/13, design-check and smoke green.
+
 ### 2026-11-25 · Maintenance repair actually repairs, and says so (`v489`)
 
 The Settings button returned "0 years fixed" on a library where 538 rows held years as
