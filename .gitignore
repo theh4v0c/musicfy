@@ -1,0 +1,30 @@
+# backups and editor leftovers
+backups/
+*.bak-*
+*.tar.gz
+*.sha256
+.DS_Store
+
+# runtime data never belongs in git
+data/
+*.db
+*.db-wal
+*.db-shm
+*.log
+node_modules/
+
+# secrets live under data/ — design/tokens.json is the design contract and is tracked
+data/llm.json
+data/soundcloud.json
+data/sc-client.json
+data/settings.json
+data/tokens.json
+
+# python bytecode
+__pycache__/
+*.pyc
+
+# installer state
+musicfy.env
+musicfy.pid
+musicfy-*.tgz

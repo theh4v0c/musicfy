@@ -1,0 +1,11 @@
+.git
+.github
+backups
+*.bak-*
+core.bak-*
+web.bak-*
+data
+*.db
+*.log
+node_modules
+.DS_Store
