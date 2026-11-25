@@ -203,3 +203,14 @@ test('album order ignores a same-name release that shares almost no titles', () 
   assert.equal(out.filled, 0);
   assert.equal(out[0].track_no, null);
 });
+
+test('a rate limit or bot check stops the client ladder', () => {
+  // the exact lines yt-dlp printed on the store VPS
+  assert.equal(L.blockedByAddress('ERROR: [youtube] x: Unable to download webpage: HTTP Error 429: Too Many Requests'), true);
+  assert.equal(L.blockedByAddress('ERROR: [youtube] x: Sign in to confirm you’re not a bot'), true);
+  assert.equal(L.blockedByAddress('ERROR: unable to download video data: HTTP Error 403: Forbidden'), true);
+  // a real per-video problem must keep walking the clients
+  assert.equal(L.blockedByAddress('ERROR: [youtube] dQw4w9WgXcQ: Video unavailable'), false);
+  assert.equal(L.blockedByAddress('WARNING: Signature solving failed: some formats may be missing'), false);
+  assert.equal(L.blockedByAddress(''), false);
+});

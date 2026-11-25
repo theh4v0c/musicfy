@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.24 — 2026-11-25
+
+- A YouTube 429, bot check or 403 stops the client ladder: the downloader goes to
+  SoundCloud instead of spending minutes on clients that meet the same wall.
+- Downloads use eight parallel fragments on the search path too, not only on a direct link.
+- The client ladder honours the chosen download format instead of always transcoding to mp3.
+- `MUSICFY_YTDLP_IPV4=1` adds `--force-ipv4` for a VPS with a slow IPv6 route, and
+  `MUSICFY_PREFER_SOUNDCLOUD=1` asks SoundCloud first. Both are documented in INSTALL.md
+  with concurrency guidance.
+
 ## 0.1.23 — 2026-11-25
 
 - Home pick reason "your artist of the week, unheard lately" and the "Show all 2289"

@@ -100,4 +100,13 @@ const QUALITY_RANK = (c) => {
   return 20;
 };
 
-module.exports = { normalize, artistTokens, scoreCandidate, titleForVersion, QUALITY_RANK };
+
+// A rate limit or a bot check is a fact about the address, not about a player client.
+// Walking the rest of the YouTube clients meets the same wall, so the downloader should
+// stop retrying and try another source. Kept here so it can be tested without a network.
+const ADDRESS_BLOCKED = /HTTP Error 429|Too Many Requests|Sign in to confirm|not a bot|HTTP Error 403/i;
+function blockedByAddress(text) {
+  return ADDRESS_BLOCKED.test(String(text || ''));
+}
+
+module.exports = { normalize, artistTokens, scoreCandidate, titleForVersion, QUALITY_RANK, blockedByAddress };

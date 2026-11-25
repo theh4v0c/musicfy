@@ -525,6 +525,32 @@ The first boot creates `data/`, `logs/` and the schema. Nothing has to be seeded
 | `MUSICFY_BIND` | `0.0.0.0` | listen address |
 | `MUSICFY_TOKEN` | unset | optional shared secret |
 | `MUSICFY_ORIGINS` | unset | extra allowed origins behind a proxy |
+| `MUSICFY_DOWNLOAD_CONCURRENCY` | `4` | downloads at once; 1–2 on a server address YouTube throttles |
+| `MUSICFY_YTDLP_IPV4` | unset | `1` adds `--force-ipv4`; use it when a VPS IPv6 route is slow |
+| `MUSICFY_PREFER_SOUNDCLOUD` | unset | `1` asks SoundCloud first, for addresses YouTube blocks |
+
+### Downloads on a server address
+
+YouTube treats a home connection and a datacenter address differently. A home line gets
+the full-speed stream; a VPS often gets `429 Too Many Requests`, a bot check, or a slow
+IPv6 route, and each retry costs time before the next source is tried.
+
+MUSICFY now fails fast: once a YouTube attempt reports 429 or a bot check, it stops walking
+the client list and goes to SoundCloud instead of spending minutes on clients that meet the
+same wall. `--concurrent-fragments 8` is used on both the direct and search paths.
+
+If downloads are still slow on a VPS, try in `~/.musicfy/musicfy.env`, one at a time:
+
+```ini
+MUSICFY_DOWNLOAD_CONCURRENCY=2
+MUSICFY_YTDLP_IPV4=1
+MUSICFY_PREFER_SOUNDCLOUD=1
+```
+
+Then `musicfy restart`. Concurrency 1 is the safest for a rate limit but it also means one
+slow retry blocks every other job; 2 usually finishes a queue faster without tripping the
+limit again. If `MUSICFY_YTDLP_IPV4=1` makes no difference, your IPv6 route was not the
+problem and you can drop it.
 
 `musicfy.env` under the data root holds the same values and is written with mode 600.
 The `install.sh` and `musicfy setup` routes use `~/.musicfy` as `MUSICFY_HOME` and write

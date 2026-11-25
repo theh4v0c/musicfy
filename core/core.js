@@ -9,7 +9,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { createHash, timingSafeEqual } = require('node:crypto');
 const { execFile, execFileSync, spawn } = require('node:child_process');
-const { normalize, scoreCandidate, titleForVersion, QUALITY_RANK } = require('./ladder');
+const { normalize, scoreCandidate, titleForVersion, QUALITY_RANK, blockedByAddress } = require('./ladder');
 const ytdlp = require('./ytdlp');
 const bandcamp = require('./bandcamp');
 const mb = require('./mb');
@@ -1264,6 +1264,11 @@ function verifyFiles({ requeue = true } = {}) {
 const downloadQueue = [];
 let activeDownloads = 0;
 const MAX_DOWNLOADS = Number(process.env.MUSICFY_DOWNLOAD_CONCURRENCY || 4);
+// a datacenter IP often gets a slower route over IPv6 than over IPv4; -4 is one flag
+const YTDLP_IPV4 = /^(1|true|yes)$/i.test(String(process.env.MUSICFY_YTDLP_IPV4 || ''));
+// SoundCloud is far more forgiving of a server address than YouTube
+const PREFER_SOUNDCLOUD = /^(1|true|yes)$/i.test(String(process.env.MUSICFY_PREFER_SOUNDCLOUD || ''));
+const netArgs = () => (YTDLP_IPV4 ? ['--force-ipv4'] : []);
 // failures are reported for this run of the service only, not for all time
 const BOOTED_AT = Math.floor(Date.now() / 1000);
 
@@ -1521,7 +1526,8 @@ function startLadderDownload(jobId, b, onDone) {
     const NO_COVER = 'duration > 2 & title !~= "(?i)(cover|karaoke|tutorial|lesson|backing track|\\btabs?\\b)"';
     const trySource = (source, next) => {
       const child = spawn(paths.YTDLP, [
-        '--no-warnings', '--newline', ...audioArgs(),
+        '--no-warnings', '--newline', ...audioArgs(), ...netArgs(),
+        '--concurrent-fragments', '8', '--retries', '3', '--fragment-retries', '3',
         '--max-downloads', '1', '--match-filter', NO_COVER,
         '-o', path.join(dir, '%(title)s.%(ext)s'), source,
       ], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -1532,8 +1538,16 @@ function startLadderDownload(jobId, b, onDone) {
       child.on('error', () => settle(next));
       child.on('close', () => settle(() => (gotAudio() ? ingestDownloaded() : next())));
     };
-    // five candidates each, filtered by title, first survivor wins
-    trySource(`ytsearch5:${query}`, () => trySource(`scsearch5:${query}`, () => finish('error', 'no source in search')));
+    // five candidates each, filtered by title, first survivor wins. On a server address
+    // YouTube answers with 429 long before it answers with audio, so SoundCloud can go first.
+    const sources = PREFER_SOUNDCLOUD
+      ? [`scsearch5:${query}`, `ytsearch5:${query}`]
+      : [`ytsearch5:${query}`, `scsearch5:${query}`];
+    const trySourceAt = (i) => {
+      if (i >= sources.length) return finish('error', 'no source in search');
+      trySource(sources[i], () => trySourceAt(i + 1));
+    };
+    trySourceAt(0);
     return;
   }
 
@@ -1542,8 +1556,8 @@ function startLadderDownload(jobId, b, onDone) {
       ? b.url
       : `https://www.youtube.com/watch?v=${b.id}`;
     const child = spawn(paths.YTDLP, [
-      '--no-warnings', '--newline', ...audioArgs(),
-      '--concurrent-fragments', '4', '--retries', '3', '--fragment-retries', '3',
+      '--no-warnings', '--newline', ...audioArgs(), ...netArgs(),
+      '--concurrent-fragments', '8', '--retries', '3', '--fragment-retries', '3',
       '-o', path.join(dir, '%(title)s.%(ext)s'), yt,
     ], { stdio: ['ignore', 'pipe', 'pipe'] });
     watch(child);
@@ -1564,7 +1578,8 @@ function startLadderDownload(jobId, b, onDone) {
           // blocked by every YouTube client but can still reach SoundCloud.
           const tryQuery = (source, next) => {
             const retry = spawn(paths.YTDLP, [
-              '--no-warnings', '--newline', ...audioArgs(),
+              '--no-warnings', '--newline', ...audioArgs(), ...netArgs(),
+              '--concurrent-fragments', '8',
               '--match-filter', 'duration > 2',
               '--extractor-args', 'youtube:player_client=android',
               '-o', path.join(dir, '%(title)s.%(ext)s'), source,
@@ -1586,8 +1601,10 @@ function startLadderDownload(jobId, b, onDone) {
           }));
           return;
         }
+        // the ladder used to transcode to mp3 whatever the owner had chosen
+        lastYtError = '';
         const attempt = spawn(paths.YTDLP, [
-          '--no-warnings', '--newline', '-x', '--audio-format', 'mp3', '--audio-quality', '0',
+          '--no-warnings', '--newline', ...audioArgs(), ...netArgs(),
           '--extractor-args', `youtube:player_client=${clients[index]}`,
           '-o', path.join(dir, '%(title)s.%(ext)s'), yt,
         ], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -1596,7 +1613,11 @@ function startLadderDownload(jobId, b, onDone) {
         let attemptSettled = false;
         const settleAttempt = (fn) => { if (attemptSettled) return; attemptSettled = true; fn(); };
         attempt.on('error', () => settleAttempt(() => tryClient(index + 1)));
-        attempt.on('close', (c) => settleAttempt(() => (c === 0 ? ingestDownloaded() : tryClient(index + 1))));
+        attempt.on('close', (c) => settleAttempt(() => {
+          if (c === 0) return ingestDownloaded();
+          if (blockedByAddress(lastYtError)) return tryClient(clients.length);
+          tryClient(index + 1);
+        }));
       };
       tryClient(0);
       });
