@@ -31,9 +31,7 @@
     "LICENSE",
     "CONTRIBUTING.md",
     "THIRD_PARTY.md",
-    "docs/screenshots/",
-    "TESTERS.md",
-    "VPS.md"
+    "docs/screenshots/"
   ],
   "scripts": {
     "start": "node core/core.js",

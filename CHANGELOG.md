@@ -2,29 +2,10 @@
 
 ## 0.1.5 — 2026-11-25
 
-- New installs bind to `127.0.0.1` by default. The phone step now runs
-  `musicfy setup --bind=0.0.0.0` and sets a token explicitly.
-- VPS.md adds the exact procedure for testing the public GitHub one-liner while the
-  repository is private: temporary public visibility with the firewall blocked, or an
-  authenticated rehearsal that only skips the raw download.
-- The systemd installer uses the invoking user when run through sudo, not root.
-
-## 0.1.4 — 2026-11-25
-
-- VPS.md: safe test install on a VPS with a local-only bind, a token, an SSH tunnel, an
-  optional Caddy HTTPS proxy, systemd, firewall, backup and update commands.
-- install.sh accepts `--root DIR` / `--bind ADDR` / `--port N` with a space as well as `=`,
-  and passes `--bind`, `--port` and `--token` to setup.
-- The systemd installer uses the invoking user when run through sudo, so the service does
-  not default to root.
-
-## 0.1.3 — 2026-11-25
-
-- `install.sh --local` (and `--from=DIR`) installs a source folder without cloning GitHub,
-  so a private test build can be sent as one tarball.
-- TESTERS.md: a short, no-GitHub-account guide for friends, including what to send back and
-  what not to share.
-- README links the test route while keeping the public one-liner for after release.
+- Fresh installs listen on `127.0.0.1` by default. Use `--bind=0.0.0.0` for access from a
+  phone or another computer on the LAN, together with `musicfy token --rotate`.
+- `install.sh` accepts `--root`, `--bind`, `--port` and `--token`, with or without `=`.
+- The systemd unit runs as the user who invoked the installer, not as root.
 
 ## 0.1.2 — 2026-11-25
 
@@ -35,11 +16,7 @@
   Node and ffmpeg are already installed.
 - Explicit platform table: macOS and 64-bit Linux are supported; Windows through Docker
   Desktop or WSL2; NAS through Linux containers; phones are clients only.
-- Removed the remaining Raspberry Pi positioning, keyword and deploy references; the
-  project is described as self-hosted and 64-bit Linux/macOS.
-- Documentation audit: removed the remaining hostname/proxy/personal references, corrected
-  the stale duplicate-key and endpoint descriptions and the test count, and added demo
-  screenshots to the README.
+- README now includes demo screenshots and a platform table.
 
 ## 0.1.1 — 2026-11-25
 

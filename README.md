@@ -86,17 +86,6 @@ for the package names.
 Native Windows is not supported. Use **Docker Desktop** or **WSL2** and follow the
 step-by-step guide: [Windows instructions in INSTALL.md](INSTALL.md#5-windows).
 
-### On a VPS
-
-See [VPS.md](VPS.md) for a safe test install: it listens only on `127.0.0.1`, you reach it
-through an SSH tunnel, and a domain plus Caddy is optional.
-
-### Testing before release
-
-If someone sent you a `musicfy-test-<version>.tar.gz` file, follow
-[TESTERS.md](TESTERS.md). It assumes no GitHub account and explains how to unpack, install
-and send feedback.
-
 ### Full instructions
 
 The short version above is enough for most people. If you want every click and every
