@@ -1,0 +1,76 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    name: unit · node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: node --test bin/unit.mjs
+      - run: node bin/design-check.mjs
+
+  boot:
+    name: boot smoke · empty home
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: boot, upload one track, ask for radio
+        run: |
+          set -eu
+          HOME_DIR="$RUNNER_TEMP/musicfy"
+          mkdir -p "$HOME_DIR"
+          MUSICFY_HOME="$HOME_DIR" MUSICFY_PORT=18710 MUSICFY_BIND=127.0.0.1 \
+            node --no-warnings core/core.js > "$RUNNER_TEMP/core.log" 2>&1 &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 40); do
+            curl -fsS http://127.0.0.1:18710/health >/dev/null && break
+            sleep 0.25
+          done
+          node -e "const fs=require('fs');const b=Buffer.alloc(44+8000);b.write('RIFF',0);b.writeUInt32LE(36+8000,4);b.write('WAVE',8);b.write('fmt ',12);b.writeUInt32LE(16,16);b.writeUInt16LE(1,20);b.writeUInt16LE(1,22);b.writeUInt32LE(8000,24);b.writeUInt32LE(16000,28);b.writeUInt16LE(2,32);b.writeUInt16LE(16,34);b.write('data',36);b.writeUInt32LE(8000,40);fs.writeFileSync('$RUNNER_TEMP/one.wav',b)"
+          curl -fsS -X POST --data-binary @"$RUNNER_TEMP/one.wav" "http://127.0.0.1:18710/api/upload/track?name=ci.wav" >/dev/null
+          curl -fsS http://127.0.0.1:18710/api/tracks | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const a=JSON.parse(s);if(!a.length)process.exit(1)})"
+          curl -fsS http://127.0.0.1:18710/api/radio/1 >/dev/null
+          curl -fsS http://127.0.0.1:18710/api/history/stats >/dev/null
+          echo "boot smoke ok"
+
+  api:
+    name: api · network, non-blocking
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: python3 -m pip install --user -U yt-dlp
+      - name: start with two seeded tracks
+        run: |
+          set -eu
+          HOME_DIR="$RUNNER_TEMP/musicfy"
+          mkdir -p "$HOME_DIR"
+          MUSICFY_HOME="$HOME_DIR" MUSICFY_PORT=18711 MUSICFY_BIND=127.0.0.1 \
+            node --no-warnings core/core.js > "$RUNNER_TEMP/core.log" 2>&1 &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:18711/health >/dev/null && break; sleep 0.25; done
+          node -e "const fs=require('fs');const b=Buffer.alloc(44+8000);b.write('RIFF',0);b.writeUInt32LE(36+8000,4);b.write('WAVE',8);b.write('fmt ',12);b.writeUInt32LE(16,16);b.writeUInt16LE(1,20);b.writeUInt16LE(1,22);b.writeUInt32LE(8000,24);b.writeUInt32LE(16000,28);b.writeUInt16LE(2,32);b.writeUInt16LE(16,34);b.write('data',36);b.writeUInt32LE(8000,40);fs.writeFileSync('$RUNNER_TEMP/a.wav',b)"
+          curl -fsS -X POST --data-binary @"$RUNNER_TEMP/a.wav" "http://127.0.0.1:18711/api/upload/track?name=a.wav" >/dev/null
+          curl -fsS -X PATCH -H 'content-type: application/json' -d '{"artist":"CI","genre":"House","genre_family":"electronic"}' http://127.0.0.1:18711/api/tracks/1 >/dev/null
+          BASE=http://127.0.0.1:18711 node bin/test.mjs

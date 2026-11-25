@@ -1,0 +1,64 @@
+{
+  "name": "musicfy",
+  "version": "0.1.10",
+  "description": "Self-hosted music library, browser player and DJ prep bench",
+  "license": "AGPL-3.0-or-later",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "bin": {
+    "musicfy": "bin/musicfy.mjs"
+  },
+  "files": [
+    "bin/musicfy.mjs",
+    "bin/smoke.sh",
+    "bin/test.mjs",
+    "bin/unit.mjs",
+    "bin/design-check.mjs",
+    "bin/design-audit.mjs",
+    "core/",
+    "web/",
+    "design/",
+    "README.md",
+    "INSTALL.md",
+    "OPERATIONS.md",
+    "DOCS.md",
+    "DESIGN.md",
+    "MILESTONES.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "THIRD_PARTY.md",
+    "docs/screenshots/",
+    "AGENT_INSTALL.md",
+    "DOMAIN.md"
+  ],
+  "scripts": {
+    "start": "node core/core.js",
+    "serve": "node bin/musicfy.mjs serve",
+    "test": "node --test bin/unit.mjs",
+    "test:api": "node bin/test.mjs",
+    "smoke": "sh bin/smoke.sh",
+    "design": "node bin/design-check.mjs"
+  },
+  "keywords": [
+    "music",
+    "self-hosted",
+    "sqlite",
+    "dj",
+    "library",
+    "linux",
+    "macos",
+    "home-server"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/theh4v0c/musicfy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/theh4v0c/musicfy/issues"
+  },
+  "homepage": "https://github.com/theh4v0c/musicfy#readme"
+}
