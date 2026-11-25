@@ -1318,6 +1318,19 @@ function pumpDownloads() {
       db.prepare("UPDATE jobs SET state='cancelled', finished_at=? WHERE payload LIKE ?").run(now(), `%${item.jobId}%`);
       continue;
     }
+    // Two ingests for one track race on the same file: one installs it, the other finds
+    // the row and deletes it as the "worse" copy. A queued duplicate waits its turn.
+    const trackId = Number(item.payload && item.payload.trackId);
+    if (trackId) {
+      const like = trackIdLike(trackId);
+      const runningTwin = db.prepare("SELECT id FROM jobs WHERE kind='track-download' AND state='running' AND (payload LIKE ? OR payload LIKE ?) LIMIT 1")
+        .get(like.a, like.b);
+      if (runningTwin) {
+        db.prepare("UPDATE jobs SET state='skipped', detail=?, finished_at=?, progress=0 WHERE payload LIKE ?")
+          .run(`duplicate of job ${runningTwin.id}`, now(), `%${item.jobId}%`);
+        continue;
+      }
+    }
     activeDownloads += 1;
     db.prepare("UPDATE jobs SET state='running', updated_at=? WHERE payload LIKE ?").run(now(), `%${item.jobId}%`);
     try {
@@ -1441,8 +1454,11 @@ function startLadderDownload(jobId, b, onDone) {
       }
       const ext = (name.split('.').pop() || 'mp3').toLowerCase();
       tid = tid || upsertTrack({ title: t, artist: a, album: b.artist || 'Web', duration: dur, format: ext });
-      // two sources can carry the same file name: never overwrite another track's audio
-      if (db.prepare('SELECT 1 FROM files WHERE path=? AND track_id<>? LIMIT 1').get(dest, tid)) {
+      // Two sources can carry the same file name: never overwrite another track's audio.
+      // A file with no row is an orphan from a rejected or interrupted job, and renaming
+      // over it silently destroyed the track that owned the name.
+      const owner = db.prepare('SELECT track_id FROM files WHERE path=? LIMIT 1').get(dest);
+      if ((owner && owner.track_id !== tid) || (!owner && fs.existsSync(dest))) {
         dest = dest.replace(/(\.[^.]+)$/, ` [${tid}]$1`);
       }
       fs.renameSync(fp, dest);

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.32 — 2026-11-25
+
+- The queue takes one job per track at a time. Two jobs for the same track raced in ingest:
+  one installed the file, the other saw the row, treated it as the worse copy and removed
+  it. A queued duplicate is now skipped with "duplicate of job N".
+- Ingest never renames over a file that has no row. An orphan from a rejected job used to be
+  overwritten silently, which lost the track that owned that name.
+
 ## 0.1.31 — 2026-11-25
 
 - The Downloads drawer is translated: summary, running/queued counts, missing list, every
