@@ -1,0 +1,103 @@
+'use strict';
+/* Release-bundle updates.
+ *
+ * An install made with `install.sh --local` or from a downloaded archive has no .git, and
+ * `musicfy update` used to stop at "not a git checkout". It now takes the latest published
+ * release from GitHub, verifies it, backs up the current code and swaps it in. Data,
+ * backups and musicfy.env live outside these paths and are not touched.
+ */
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { execFileSync } = require('node:child_process');
+
+const REPO = process.env.MUSICFY_REPO_SLUG || 'theh4v0c/musicfy';
+// only code and docs are replaced; anything the owner put next to them is left alone
+const CODE = ['core', 'web', 'bin', 'design', 'docs'];
+const FILES = [
+  'install.sh', 'package.json', 'README.md', 'INSTALL.md', 'OPERATIONS.md', 'DOCS.md',
+  'DESIGN.md', 'MILESTONES.md', 'CHANGELOG.md', 'SECURITY.md', 'LICENSE',
+  'CONTRIBUTING.md', 'THIRD_PARTY.md', 'AGENT_INSTALL.md', 'DOMAIN.md',
+];
+
+function versionParts(v) {
+  return String(v || '0').replace(/^v/i, '').split(/[.\-+]/).map((p) => (/^\d+$/.test(p) ? Number(p) : p));
+}
+// 1 when a is newer than b, -1 when older, 0 when equal
+function compare(a, b) {
+  const pa = versionParts(a);
+  const pb = versionParts(b);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+    const x = pa[i] ?? 0;
+    const y = pb[i] ?? 0;
+    if (x === y) continue;
+    if (typeof x === 'number' && typeof y === 'number') return x > y ? 1 : -1;
+    return String(x) > String(y) ? 1 : -1;
+  }
+  return 0;
+}
+
+async function latest() {
+  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+    headers: { 'user-agent': 'musicfy-updater', accept: 'application/vnd.github+json' },
+  });
+  if (!res.ok) throw new Error(`github ${res.status}`);
+  const body = await res.json();
+  const version = String(body.tag_name || '').replace(/^v/i, '');
+  if (!version || !body.tarball_url) throw new Error('the release has no tag or tarball');
+  return { version, tarball: body.tarball_url, page: body.html_url || '', published: body.published_at || null };
+}
+
+function readVersion(dir) {
+  try { return JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).version || ''; } catch { return ''; }
+}
+
+async function download(url, dest) {
+  const res = await fetch(url, { headers: { 'user-agent': 'musicfy-updater' }, redirect: 'follow' });
+  if (!res.ok) throw new Error(`download ${res.status}`);
+  fs.writeFileSync(dest, Buffer.from(await res.arrayBuffer()));
+}
+
+async function apply(appRoot) {
+  const rel = await latest();
+  const from = readVersion(appRoot) || '0.0.0';
+  if (compare(rel.version, from) <= 0) return { from, to: from, upToDate: true };
+
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'musicfy-rel-'));
+  try {
+    const tgz = path.join(tmp, 'release.tgz');
+    await download(rel.tarball, tgz);
+    execFileSync('tar', ['-xzf', tgz, '-C', tmp], { timeout: 120000 });
+
+    // the archive holds one directory; find it by its package.json rather than by name
+    const root = fs.readdirSync(tmp, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => path.join(tmp, e.name))
+      .find((d) => fs.existsSync(path.join(d, 'package.json')));
+    if (!root) throw new Error('the archive has no package.json');
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+    if (pkg.name !== 'musicfy') throw new Error(`unexpected package: ${pkg.name}`);
+    if (compare(String(pkg.version || '0'), rel.version) !== 0) {
+      throw new Error(`archive is ${pkg.version}, release says ${rel.version}`);
+    }
+
+    // keep the old code next to the data so a broken release can be put back by hand
+    const backupRoot = path.join(path.dirname(appRoot), 'backups', `code-${from}-${Date.now().toString(36)}`);
+    fs.mkdirSync(backupRoot, { recursive: true });
+    for (const entry of [...CODE, ...FILES]) {
+      const src = path.join(appRoot, entry);
+      if (fs.existsSync(src)) fs.cpSync(src, path.join(backupRoot, entry), { recursive: true });
+    }
+
+    for (const entry of [...CODE, ...FILES]) {
+      const src = path.join(root, entry);
+      if (!fs.existsSync(src)) continue;
+      fs.cpSync(src, path.join(appRoot, entry), { recursive: true, force: true });
+    }
+    return { from, to: rel.version, upToDate: false, backup: backupRoot };
+  } finally {
+    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+  }
+}
+
+module.exports = { latest, apply, compare, REPO };
