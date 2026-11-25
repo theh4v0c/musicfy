@@ -1,6 +1,6 @@
 {
   "name": "musicfy",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "description": "Self-hosted music library, browser player and DJ prep bench",
   "license": "AGPL-3.0-or-later",
   "type": "commonjs",
@@ -16,6 +16,7 @@
     "bin/test.mjs",
     "bin/unit.mjs",
     "bin/design-check.mjs",
+    "bin/i18n-check.mjs",
     "bin/design-audit.mjs",
     "core/",
     "web/",
@@ -41,7 +42,8 @@
     "test": "node --test bin/unit.mjs",
     "test:api": "node bin/test.mjs",
     "smoke": "sh bin/smoke.sh",
-    "design": "node bin/design-check.mjs"
+    "design": "node bin/design-check.mjs",
+    "i18n": "node bin/i18n-check.mjs"
   },
   "keywords": [
     "music",

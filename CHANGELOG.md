@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.22 — 2026-11-25
+
+- Portuguese covers the pop-up messages: toasts now translate where they are created, so
+  download, queue, cover, import and failure messages are no longer English.
+- Server error messages and the A&R spoken lines have translations, and stats fragments
+  split by bold markup ("1 track · 2 GB on disk") are translated as a whole.
+- Specific sentence rules now run before generic word rules, so "10 tracks by X I don't
+  have" is no longer half Portuguese; the "nunca played" patch patterns are gone.
+- Track, artist, playlist and greeting names are left alone: data is not translated.
+- Dates, times and sorting follow the selected language instead of the browser locale.
+- The greeting uses the listener's timezone instead of the server's local time.
+- New `bin/i18n-check.mjs` gate (`npm run i18n`) fails on duplicate keys, untranslated
+  toasts and patch-style patterns.
+
 ## 0.1.21 — 2026-11-25
 
 - Translate the remaining Home pick reasons: untouched for two months, more from an artist,

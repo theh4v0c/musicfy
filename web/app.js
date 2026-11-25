@@ -29,6 +29,8 @@ function applyTier(tier, persist = true) {
   if (state.tier === 'listener' && state.view === 'djexport') nav('home');
 }
 applyTier(state.tier, false);
+const LOC = () => (window.I18N && window.I18N.lang === 'pt-BR' ? 'pt-BR' : 'en');
+const tr = (s) => (window.I18N ? window.I18N.t(String(s ?? '')) : String(s ?? ''));
 const esc = (s) => (s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // rung display: short labels, stable classes for color coding
 function shortRung(rung) {
@@ -606,7 +608,7 @@ function toast(msg, ms = 2600) {
   // never let a burst of toasts fill the screen
   while (host.children.length >= 4) host.firstElementChild.remove();
   const el = document.createElement('div');
-  el.className = 'toast'; el.textContent = msg;
+  el.className = 'toast'; el.textContent = tr(msg);
   host.appendChild(el);
   setTimeout(() => el.classList.add('out'), Math.max(600, ms - 400));
   setTimeout(() => el.remove(), ms);
@@ -623,11 +625,11 @@ function toastPersistent(initial) {
     host.appendChild(el);
   }
   el.classList.remove('out');
-  el.textContent = initial;
+  el.textContent = tr(initial);
   return {
-    update(t) { el.textContent = t; },
+    update(t) { el.textContent = tr(t); },
     done(finalMsg, ms = 6000) {
-      el.textContent = finalMsg;
+      el.textContent = tr(finalMsg);
       el.classList.add('out');
       setTimeout(() => el.remove(), Math.max(600, ms));
     },
@@ -643,10 +645,10 @@ function progressPill(text) {
     el.className = 'progress-pill';
     document.body.appendChild(el);
   }
-  el.innerHTML = `<span>${esc(text)}</span><i></i>`;
+  el.innerHTML = `<span>${esc(tr(text))}</span><i></i>`;
   el.classList.add('on');
   return {
-    update(t) { const s = el.querySelector('span'); if (s) s.textContent = t; },
+    update(t) { const s = el.querySelector('span'); if (s) s.textContent = tr(t); },
     done() { el.classList.remove('on'); },
   };
 }
@@ -1177,7 +1179,7 @@ async function renderHome() {
       <div id="discover-home"></div>
       <div class="sec-title">Recently played <small id="recent-hint"></small></div>
       <div class="row-scroller" id="recent-row"></div>
-      <div class="sec-title">Your playlists <small>${Number(state.playlists.length).toLocaleString()} TOTAL</small></div>
+      <div class="sec-title">Your playlists <small>${Number(state.playlists.length).toLocaleString(LOC())} TOTAL</small></div>
       <div class="pgrid" id="home-grid"></div>
     </div>`;
   // the masthead reports the session, not the weather: time, place, what was last on
@@ -1185,8 +1187,8 @@ async function renderHome() {
     const clock = document.getElementById('mast-clock');
     if (!clock) return;
     const d = new Date();
-    const day = d.toLocaleDateString(undefined, { weekday: 'short' });
-    const hm = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const day = d.toLocaleDateString(LOC(), { weekday: 'short' });
+    const hm = d.toLocaleTimeString(LOC(), { hour: '2-digit', minute: '2-digit' });
     clock.textContent = `${day} ${hm}`;
   };
   paintClock();
@@ -1724,7 +1726,7 @@ async function openPlaylist(pid, push = true) {
   plnEl.textContent = list.length;
   paintPlMode();
   const totalS = list.reduce((a, t) => a + (t.duration || 0), 0);
-  pldurEl.textContent = list.length ? `${Math.round(totalS / 60).toLocaleString()} min` : '';
+  pldurEl.textContent = list.length ? `${Math.round(totalS / 60).toLocaleString(LOC())} min` : '';
   state.sort = { key: 'pos', dir: 1 };
   function paintPlMode() {
     const mode = plView();
@@ -1740,7 +1742,7 @@ async function openPlaylist(pid, push = true) {
       sorted.sort((a, b) => {
         const va = a[state.sort.key] ?? '', vb = b[state.sort.key] ?? '';
         if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * state.sort.dir;
-        return String(va).localeCompare(String(vb)) * state.sort.dir;
+        return String(va).localeCompare(String(vb), LOC()) * state.sort.dir;
       });
     }
     const tl = $('tlist'); tl.innerHTML = '';
@@ -1904,9 +1906,9 @@ const idxLabel = (n) => String(n).padStart(2, '0');
 function sortedPlaylists(list) {
   const mode = plOrder();
   const out = (list || state.playlists).slice();
-  const byName = (a, b) => String(a.name).localeCompare(String(b.name));
-  const byDate = (a, b) => String(a.created_at || a.updated_at || '').localeCompare(String(b.created_at || b.updated_at || ''));
-  const byUpdated = (a, b) => String(a.updated_at || '').localeCompare(String(b.updated_at || ''));
+  const byName = (a, b) => String(a.name).localeCompare(String(b.name), LOC());
+  const byDate = (a, b) => String(a.created_at || a.updated_at || '').localeCompare(String(b.created_at || b.updated_at || ''), LOC());
+  const byUpdated = (a, b) => String(a.updated_at || '').localeCompare(String(b.updated_at || ''), LOC());
   if (mode === 'alphaDesc') out.sort((a, b) => byName(b, a));
   else if (mode === 'dateNew') out.sort((a, b) => byDate(b, a));
   else if (mode === 'dateOld') out.sort(byDate);
@@ -1948,7 +1950,7 @@ async function renderLibrary() {
       <button class="btn btn-ghost" id="lib-newpl">New playlist</button>
       <button class="btn btn-ghost" id="hist-import">Playlist from most-played</button>
     </div>
-    <div class="sec-title" style="margin-top:0">Playlists <small>${Number(state.playlists.length).toLocaleString()} TOTAL</small></div>
+    <div class="sec-title" style="margin-top:0">Playlists <small>${Number(state.playlists.length).toLocaleString(LOC())} TOTAL</small></div>
     <div class="list-bar">${orderControls()}${viewSwitch('library', libView())}</div>
     <div class="pgrid" id="lib-grid"></div>`;
   const drawGrid = (view) => {
@@ -2010,7 +2012,7 @@ function sortedCrates() {
   const show = prepShowListen();
   const out = [...state.playlists].filter((p) => show || p.kind !== 'listen');
   const mode = prepOrder();
-  const byName = (a, b) => String(a.name).localeCompare(String(b.name));
+  const byName = (a, b) => String(a.name).localeCompare(String(b.name), LOC());
   if (mode === 'alphaDesc') out.sort((a, b) => byName(b, a));
   else if (mode === 'size') out.sort((a, b) => (b.n_tracks || 0) - (a.n_tracks || 0));
   else if (mode === 'todo') out.sort((a, b) => crateCoverage(a) - crateCoverage(b) || (b.owned || 0) - (a.owned || 0));
@@ -2053,9 +2055,9 @@ async function renderDjExport() {
     const pct = st.total ? Math.round((st.current / st.total) * 100) : 0;
     if (cov) {
       cov.textContent = [
-        `${Number(st.current).toLocaleString()}/${Number(st.total).toLocaleString()} up to date`,
-        st.outdated ? `${Number(st.outdated).toLocaleString()} without cue points` : '',
-        st.never ? `${Number(st.never).toLocaleString()} never analysed` : '',
+        `${Number(st.current).toLocaleString(LOC())}/${Number(st.total).toLocaleString(LOC())} up to date`,
+        st.outdated ? `${Number(st.outdated).toLocaleString(LOC())} without cue points` : '',
+        st.never ? `${Number(st.never).toLocaleString(LOC())} never analysed` : '',
       ].filter(Boolean).join(' · ');
     }
     if (fill) fill.style.width = pct + '%';
@@ -2064,7 +2066,7 @@ async function renderDjExport() {
       // never-analysed is a library-wide job; outdated is per playlist, and a button
       // that only says "update a playlist below" is a button that does not act
       ab.hidden = !remaining;
-      ab.textContent = `Analyse ${Number(remaining).toLocaleString()} never analysed`;
+      ab.textContent = `Analyse ${Number(remaining).toLocaleString(LOC())} never analysed`;
     }
   } catch {}
   const btn = document.getElementById('dj-analyze');
@@ -2492,7 +2494,7 @@ async function renderSongs(push = true) {
       e.n += 1;
       counts.set(name, e);
     }
-    const rows = [...counts.values()].sort((a, b) => a.name.localeCompare(b.name));
+    const rows = [...counts.values()].sort((a, b) => a.name.localeCompare(b.name, LOC()));
     const theadEl = document.getElementById('songs-thead');
     if (theadEl) theadEl.style.display = 'none';
     host.innerHTML = `<div class="sec-title">${browse === 'artists' ? 'Artists' : 'Albums'} <small>${rows.length}</small></div><div class="pgrid" id="browse-grid"></div>`;
@@ -2549,7 +2551,7 @@ async function renderSongs(push = true) {
   const statsEl = $('songs-stats');
   if (statsEl) {
     api('/api/stats').then((s) => {
-      statsEl.textContent = `${Number(s.tracks).toLocaleString()} tracks · ${(s.owned_bytes / 1073741824).toFixed(1)} GB on disk`;
+      statsEl.textContent = `${Number(s.tracks).toLocaleString(LOC())} tracks · ${(s.owned_bytes / 1073741824).toFixed(1)} GB on disk`;
     }).catch(() => { statsEl.textContent = `${all.length} tracks`; });
   }
 
@@ -2570,7 +2572,7 @@ async function renderSongs(push = true) {
       list.sort((a, b) => {
         const va = a[sort.key] ?? '', vb = b[sort.key] ?? '';
         if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * sort.dir;
-        return String(va).localeCompare(String(vb)) * sort.dir;
+        return String(va).localeCompare(String(vb), LOC()) * sort.dir;
       });
     }
     const el = $('songs-list');
@@ -2796,7 +2798,7 @@ async function renderSettings() {
         </label>
         <p class="set-note dj-only">Display only. Exports always write musical notation, which is what Rekordbox and Traktor read.</p>
         <label class="set-check"><input type="checkbox" id="set-normalize"${s.normalize_loudness ? ' checked' : ''}> Normalize loudness</label>
-        <p class="set-note">Turns loud tracks down towards a common level, using the loudness measured during analysis. It only ever attenuates — it cannot add distortion and it never rewrites a file. <b>iOS ignores per-track volume</b>, so on a phone or in a car this does nothing.</p>
+        <p class="set-note">Turns loud tracks down towards a common level, using the loudness measured during analysis. It only ever attenuates — it cannot add distortion and it never rewrites a file. iOS ignores per-track volume, so on a phone or in a car this does nothing.</p>
         <label>Target level
           <select id="set-target">
             <option value="-12"${String(s.target_loudness) === '-12' ? ' selected' : ''}>-12 dB (loud)</option>
@@ -2840,8 +2842,8 @@ async function renderSettings() {
   Promise.all([api('/api/stats', { nocache: true }), api('/api/analyze/status', { nocache: true })]).then(([st, an]) => {
     const f = document.getElementById('set-facts');
     if (!f) return;
-    f.innerHTML = `<div><b>${Number(st.tracks).toLocaleString()}</b> tracks</div><div><b>${(st.owned_bytes / 1e9).toFixed(2)} GB</b> on disk</div><div><b>${Number(st.listens).toLocaleString()}</b> plays recorded</div>`
-      + `<div><b>${Number(an.current).toLocaleString()}</b> current · <b>${Number(an.outdated).toLocaleString()}</b> without cue points</div>`;
+    f.innerHTML = `<div><b>${Number(st.tracks).toLocaleString(LOC())}</b> tracks</div><div><b>${(st.owned_bytes / 1e9).toFixed(2)} GB</b> on disk</div><div><b>${Number(st.listens).toLocaleString(LOC())}</b> plays recorded</div>`
+      + `<div><b>${Number(an.current).toLocaleString(LOC())}</b> current · <b>${Number(an.outdated).toLocaleString(LOC())}</b> without cue points</div>`;
   }).catch(() => {});
   // the exclusion field, shown back as the terms the app will actually use
   const avoidInput = document.getElementById('set-taste-avoid');
@@ -3065,6 +3067,7 @@ async function renderSettings() {
   // maintenance answers in the card, with numbers, instead of a toast that disappears
   const maintEl = document.getElementById('set-maint');
   const maint = (text, tone) => {
+    text = tr(text);
     if (!maintEl) return;
     maintEl.textContent = text;
     maintEl.dataset.tone = tone || '';
@@ -3078,7 +3081,7 @@ async function renderSettings() {
       let durations = 0;
       try { const d = await api('/api/maintenance/fill-durations', { method: 'POST' }); durations = d.fixed || 0; } catch {}
       const bits = [];
-      if (r.fixed_year) bits.push(`${Number(r.fixed_year).toLocaleString()} year${r.fixed_year === 1 ? '' : 's'} normalised`);
+      if (r.fixed_year) bits.push(`${Number(r.fixed_year).toLocaleString(LOC())} year${r.fixed_year === 1 ? '' : 's'} normalised`);
       if (r.cleared_placeholder_album) bits.push(`${r.cleared_placeholder_album} placeholder album${r.cleared_placeholder_album === 1 ? '' : 's'} cleared`);
       if (r.cleaned_titles) bits.push(`${r.cleaned_titles} media label${r.cleaned_titles === 1 ? '' : 's'} removed from titles`);
       if (r.trimmed) bits.push(`${r.trimmed} trimmed`);
@@ -3713,7 +3716,7 @@ async function renderSearch() {
     if (state.genreFilter) { renderGenreView(res, all, 60); return; }
     res.innerHTML = '';
     if (!s) {
-      res.innerHTML = `<div class="sec-title" style="margin-top:0">Browse all <small>${Number(all.length).toLocaleString()} TRACKS</small></div>`;
+      res.innerHTML = `<div class="sec-title" style="margin-top:0">Browse all <small>${Number(all.length).toLocaleString(LOC())} TRACKS</small></div>`;
       const g = document.createElement('div'); g.className = 'pgrid';
       for (const p of state.playlists) g.appendChild(pcard(p));
       res.appendChild(g); return;
@@ -4202,7 +4205,7 @@ function trow(t, i, list) {
   el.className = 'trow'; el.dataset.tid = t.id;
   const liked = isLiked(t);
   const stamp = t.date_added || t.added_at;
-  const added = stamp ? new Date(stamp * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  const added = stamp ? new Date(stamp * 1000).toLocaleDateString(LOC(), { month: 'short', day: 'numeric', year: 'numeric' }) : '';
   el.innerHTML = `
     <div class="tno"><span class="tno-num">${String(i + 1).padStart(2, '0')}</span><button class="tno-play" aria-label="Play">${IC.play}</button></div>
     ${artTag(t, 'tart', 96)}
@@ -4733,7 +4736,7 @@ function paintPill() {
   const el = $('pill');
   if (!el) return;
   api('/api/stats', { nocache: true }).then((s) => {
-    el.textContent = `${Number(s.tracks).toLocaleString()} TRACKS · ${(s.owned_bytes / 1073741824).toFixed(1)} GB`;
+    el.textContent = `${Number(s.tracks).toLocaleString(LOC())} TRACKS · ${(s.owned_bytes / 1073741824).toFixed(1)} GB`;
   }).catch(() => { el.textContent = ''; });
 }
 

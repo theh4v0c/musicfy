@@ -3386,10 +3386,23 @@ const server = http.createServer(async (req, res) => {
         GROUP BY t.artist ORDER BY n DESC LIMIT 1`).get(nowTs - 7 * 86400);
       const weekTrack = db.prepare(`SELECT t.title, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
         WHERE l.played_at >= ? ${child} GROUP BY l.track_id ORDER BY n DESC LIMIT 1`).get(nowTs - 7 * 86400);
-      const hourFamily = db.prepare(`SELECT t.genre_family f, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
-        WHERE l.played_at >= ? AND t.genre_family IS NOT NULL AND t.genre_family != '' ${child}
-          AND CAST(strftime('%H', l.played_at, 'unixepoch', 'localtime') AS INTEGER) BETWEEN ? AND ?
-        GROUP BY t.genre_family ORDER BY n DESC LIMIT 1`).get(nowTs - 120 * 86400, Math.max(0, hour - 1), Math.min(23, hour + 1));
+      // SQLite's 'localtime' is the server's timezone. A UTC VPS and a Sao Paulo listener
+      // disagreed by three hours, so compute the listener's hour in JS from settings.timezone.
+      const localHour = (ts) => {
+        try {
+          return Number(new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: tz }).format(new Date(Number(ts) * 1000))) % 24;
+        } catch { return new Date(Number(ts) * 1000).getHours(); }
+      };
+      const hourCounts = new Map();
+      const hourRows = db.prepare(`SELECT l.played_at ts, t.genre_family f FROM listens l JOIN tracks t ON t.id=l.track_id
+        WHERE l.played_at >= ? AND t.genre_family IS NOT NULL AND t.genre_family != '' ${child}`).all(nowTs - 120 * 86400);
+      for (const r of hourRows) {
+        const h = localHour(r.ts);
+        const near = Math.min(Math.abs(h - hour), 24 - Math.abs(h - hour)) <= 1;
+        if (near) hourCounts.set(r.f, (hourCounts.get(r.f) || 0) + 1);
+      }
+      let hourFamily = null;
+      for (const [f, n] of hourCounts) if (!hourFamily || n > hourFamily.n) hourFamily = { f, n };
       const tempo = db.prepare(`SELECT ROUND(AVG(t.bpm)) b, COUNT(*) n FROM listens l JOIN tracks t ON t.id=l.track_id
         WHERE l.played_at >= ? AND t.bpm IS NOT NULL AND t.bpm > 0 ${child}`).get(nowTs - 7 * 86400);
       const weekNew = db.prepare(`SELECT COUNT(*) c FROM tracks WHERE added_at >= ?`).get(nowTs - 7 * 86400).c;
@@ -3398,8 +3411,13 @@ const server = http.createServer(async (req, res) => {
       const staleAlbum = db.prepare(`SELECT t.album a, COUNT(*) n, MAX(l.played_at) last FROM listens l JOIN tracks t ON t.id=l.track_id
         WHERE t.album IS NOT NULL AND t.album != '' ${child} GROUP BY t.album HAVING n >= 4 AND last IS NOT NULL AND last < ?
         ORDER BY n DESC LIMIT 1`).get(nowTs - 21 * 86400);
-      const topHour = db.prepare(`SELECT CAST(strftime('%H', l.played_at, 'unixepoch', 'localtime') AS INTEGER) h, COUNT(*) n
-        FROM listens l GROUP BY h ORDER BY n DESC LIMIT 1`).get();
+      const topCounts = new Map();
+      for (const r of db.prepare('SELECT played_at ts FROM listens').all()) {
+        const h = localHour(r.ts);
+        topCounts.set(h, (topCounts.get(h) || 0) + 1);
+      }
+      let topHour = null;
+      for (const [h, n] of topCounts) if (!topHour || n > topHour.n) topHour = { h, n };
 
       const hhmm = (ts) => {
         try { return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz }).format(new Date(ts * 1000)); }
