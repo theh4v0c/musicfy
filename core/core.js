@@ -1467,7 +1467,10 @@ function startLadderDownload(jobId, b, onDone) {
       if (softBad && b.trackId && !b.retried) {
         return retryBySearch(`video/promo source rejected (${sourceName.slice(0, 40)}), retrying by search`);
       }
-      if (dur && declared && dur < declared * 0.8) {
+      // One rule for selection and ingest: under 60% of the known length is a preview or a
+      // clip, not the recording. An 80% floor rejected a legitimate 232s master of a track
+      // listed as 294s and left the shelf empty, which is worse than a shorter version.
+      if (dur && declared && dur < declared * 0.6) {
         // the source was a clip: try a plain search for the full version once
         if (!b.retried) return retryBySearch(`truncated audio: ${Math.round(dur)}s of ${Math.round(declared)}s, retrying by search`);
         try { fs.rmSync(dest, { force: true }); } catch {}

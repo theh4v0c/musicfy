@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.28 — 2026-11-25
+
+- Selection and ingest use the same 60% duration rule. The 80% ingest floor rejected a
+  legitimate 232s master of a track listed as 294s, so SoundCloud had the track and the
+  shelf still stayed empty.
+
 ## 0.1.27 — 2026-11-25
 
 - When an update changes `bin/musicfy.mjs`, `musicfy update` re-runs itself with the new
