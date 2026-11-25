@@ -22,7 +22,7 @@ function fileUri(p) {
 
 function rowsFor(db, playlistId) {
   return db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.genre, t.bpm, t.key, t.key_scale,
-      t.duration, t.beat_grid, t.sections, t.year, t.track_no, f.path, f.size, f.bitrate
+      t.duration, t.beat_grid, t.sections, t.year, t.track_no, t.disc_no, f.path, f.size, f.bitrate
     FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
     LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
     WHERE pt.playlist_id=? ORDER BY pt.position`).all(playlistId);
@@ -88,7 +88,7 @@ function rekordboxXml(db, playlistId, opts) {
       `Composer=""`, `Album="${xmlEsc(t.album || '')}"`, `Grouping=""`,
       `Genre="${xmlEsc(t.genre || '')}"`, `Kind="${kindOf(t.path)}"`,
       `Size="${Number(t.size) || 0}"`, `TotalTime="${Math.round(Number(t.duration) || 0)}"`,
-      'DiscNumber="0"', `TrackNumber="${Number(t.track_no) || 0}"`,
+      `DiscNumber="${Number(t.disc_no) || 0}"`, `TrackNumber="${Number(t.track_no) || 0}"`,
       `Year="${Number(t.year) || 0}"`, `AverageBpm="${fmtBpm(t.bpm)}"`,
       'DateAdded="2026-01-01"',
       `BitRate="${t.bitrate ? Math.round(Number(t.bitrate) / 1000) : 320}"`,

@@ -139,3 +139,67 @@ test('a plain request is not answered with a remaster', () => {
   assert.equal(L.titleForVersion('Glints Collide', 'Glints Collide', 'Glints Collide (Remastered 2006)'), 'Glints Collide');
   assert.equal(L.titleForVersion('Glints Collide (Remastered 2006)', 'Glints Collide', 'Glints Collide (Remastered 2006)'), 'Glints Collide (Remastered 2006)');
 });
+
+const O = require('../core/album-order.js');
+const fakeDb = (writes) => ({ prepare: (sql) => ({ run: (...args) => writes.push({ sql, args }) }) });
+
+test('album order writes missing numbers and sorts by them', () => {
+  const writes = [];
+  const rows = [
+    { id: 1, title: 'Second', duration: 200, track_no: 2, disc_no: null },
+    { id: 2, title: 'First', duration: 201, track_no: null, disc_no: null },
+  ];
+  const list = [
+    { title: 'First', trackNumber: 1, discNumber: 1, duration: 201 },
+    { title: 'Second', trackNumber: 2, discNumber: 1, duration: 200 },
+  ];
+  const out = O.apply(fakeDb(writes), rows.slice(), list);
+  assert.deepEqual(out.map((r) => r.id), [2, 1]);
+  assert.equal(out[0].track_no, 1);
+  assert.equal(out.filled, 1);
+  assert.equal(writes.filter((w) => /SET track_no/.test(w.sql)).length, 1);
+  assert.equal(writes.filter((w) => /SET disc_no/.test(w.sql)).length, 2);
+});
+
+test('album order never overwrites a track number already on the row', () => {
+  const rows = [{ id: 1, title: 'One', duration: 100, track_no: 9, disc_no: null }];
+  const list = [{ title: 'One', trackNumber: 1, discNumber: 1, duration: 100 }];
+  const out = O.apply(fakeDb([]), rows, list);
+  assert.equal(out[0].track_no, 9);
+  assert.equal(out.filled, 0);
+});
+
+test('album order falls back to duration for a mangled title', () => {
+  const rows = [{ id: 4, title: 'C**k/ver10', duration: 300, track_no: null, disc_no: null }];
+  const list = [{ title: 'Cock/ver10', trackNumber: 8, discNumber: 1, duration: 300 }];
+  const out = O.apply(fakeDb([]), rows, list);
+  assert.equal(out[0].track_no, 8);
+});
+
+test('album order keeps discs apart', () => {
+  const rows = [
+    { id: 1, title: 'D2T1', duration: 100, track_no: 1, disc_no: null },
+    { id: 2, title: 'D1T2', duration: 100, track_no: 2, disc_no: null },
+    { id: 3, title: 'D1T1', duration: 100, track_no: 1, disc_no: null },
+  ];
+  const list = [
+    { title: 'D1T1', trackNumber: 1, discNumber: 1, duration: 100 },
+    { title: 'D1T2', trackNumber: 2, discNumber: 1, duration: 100 },
+    { title: 'D2T1', trackNumber: 1, discNumber: 2, duration: 100 },
+  ];
+  const out = O.apply(fakeDb([]), rows.slice(), list);
+  assert.deepEqual(out.map((r) => r.id), [3, 2, 1]);
+});
+
+test('album order ignores a same-name release that shares almost no titles', () => {
+  const rows = [
+    { id: 1, title: 'Alpha', duration: 100, track_no: null, disc_no: null },
+    { id: 2, title: 'Beta', duration: 100, track_no: null, disc_no: null },
+    { id: 3, title: 'Gamma', duration: 100, track_no: null, disc_no: null },
+    { id: 4, title: 'Delta', duration: 100, track_no: null, disc_no: null },
+  ];
+  const list = [{ title: 'Something Else', trackNumber: 1, discNumber: 1, duration: 100 }];
+  const out = O.apply(fakeDb([]), rows, list);
+  assert.equal(out.filled, 0);
+  assert.equal(out[0].track_no, null);
+});

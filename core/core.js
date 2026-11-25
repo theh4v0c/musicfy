@@ -23,6 +23,7 @@ const repair = require('./repair');
 const agent = require('./agent');
 const recommend = require('./recommend');
 const identity = require('./identity');
+const albumOrder = require('./album-order');
 const deezer = require('./deezer');
 const archive = require('./archive');
 const spotify = require('./spotify');
@@ -51,6 +52,9 @@ fs.mkdirSync(paths.LOGS, { recursive: true });
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 const db = new DatabaseSync(DB_PATH);
+// analysis, downloads and a maintenance script can write at once: wait for the lock
+db.exec('PRAGMA busy_timeout=5000');
+try { db.exec('PRAGMA journal_mode=WAL'); } catch {}
 db.exec(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
 try { db.exec('ALTER TABLE jobs ADD COLUMN progress REAL DEFAULT 0'); } catch {}
 try { db.exec('ALTER TABLE jobs ADD COLUMN updated_at INTEGER'); } catch {}
@@ -139,7 +143,7 @@ function backfillDupKeys() {
 backfillDupKeys();
 
 // columns for playlist entries that stream from a source instead of a local file
-for (const col of ['src_kind TEXT', 'src_id TEXT', 'src_url TEXT', 'isrc TEXT', 'beat_grid TEXT', 'track_no INTEGER']) {
+for (const col of ['src_kind TEXT', 'src_id TEXT', 'src_url TEXT', 'isrc TEXT', 'beat_grid TEXT', 'track_no INTEGER', 'disc_no INTEGER']) {
   try { db.exec(`ALTER TABLE tracks ADD COLUMN ${col}`); } catch {}
 }
 
@@ -228,21 +232,21 @@ const uidOf = (a, al, t) =>
     .replace(/\s+/g, ' ');
 
 // ---------- helpers ----------
-function upsertTrack({ title, artist, album, year, duration, format, spotify_id, track_no }) {
+function upsertTrack({ title, artist, album, year, duration, format, spotify_id, track_no, disc_no }) {
   const dupKey = dupKeyOf(artist, title);
   const existing = db.prepare('SELECT id FROM tracks WHERE dup_key=?').get(dupKey);
   if (existing) {
     // fill in blanks on the row we already have instead of creating a second one
     db.prepare(`UPDATE tracks SET album=COALESCE(NULLIF(album,''), ?), year=COALESCE(year, ?),
-      duration=COALESCE(duration, ?), spotify_id=COALESCE(spotify_id, ?), track_no=COALESCE(track_no, ?), updated_at=? WHERE id=?`)
-      .run(album || '', year || null, duration || null, spotify_id || null, track_no || null, now(), existing.id);
+      duration=COALESCE(duration, ?), spotify_id=COALESCE(spotify_id, ?), track_no=COALESCE(track_no, ?), disc_no=COALESCE(disc_no, ?), updated_at=? WHERE id=?`)
+      .run(album || '', year || null, duration || null, spotify_id || null, track_no || null, disc_no || null, now(), existing.id);
     return existing.id;
   }
   const uid = uidOf(artist, album, title);
   const t = now();
-  const r = db.prepare(`INSERT INTO tracks (uid,dup_key,title,artist,album,year,duration,format,spotify_id,track_no,added_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(uid, dupKey, title, artist || '', album || '', year || null, duration || null, format || null, spotify_id || null, track_no || null, t, t);
+  const r = db.prepare(`INSERT INTO tracks (uid,dup_key,title,artist,album,year,duration,format,spotify_id,track_no,disc_no,added_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(uid, dupKey, title, artist || '', album || '', year || null, duration || null, format || null, spotify_id || null, track_no || null, disc_no || null, t, t);
   return Number(r.lastInsertRowid);
 }
 
@@ -400,7 +404,7 @@ function probe(file) {
   return new Promise((resolve) => {
     const { spawn } = require('node:child_process');
     const ff = spawn('ffprobe', ['-v', 'error', '-show_entries',
-      'format=duration,bit_rate,size:format_tags=title,artist,album,date,track',
+      'format=duration,bit_rate,size:format_tags=title,artist,album,date,track,disc',
       '-of', 'json', file]);
     let out = '';
     ff.stdout.on('data', d => out += d);
@@ -409,9 +413,11 @@ function probe(file) {
         const f = JSON.parse(out).format || {};
         const tg = f.tags || {};
         const trk = String(tg.track || '').match(/^\d+/);
+        const dsc = String(tg.disc || '').match(/^\d+/);
         resolve({
           title: tg.title, artist: tg.artist, album: tg.album, year: (tg.date || '').match(/^\d{4}/) ? tg.date.slice(0, 4) : null,
           trackNumber: trk ? Number(trk[0]) : null,
+          discNumber: dsc ? Number(dsc[0]) : null,
           duration: f.duration ? Number(f.duration) : null,
           bitrate: f.bit_rate ? Number(f.bit_rate) : null,
           size: f.size ? Number(f.size) : null,
@@ -1706,6 +1712,107 @@ function playlistRows(pid) {
     WHERE pt.playlist_id=? ORDER BY pt.position`).all(pid);
 }
 
+function dupFold(s) {
+  return String(s || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+// What counts as the same recording: identical artist and title, the same album (or a
+// blank one on either side), and a length within three seconds. Versions differ in the
+// title ("... (Remastered 2006)") or the length and are left alone on purpose.
+function duplicatePlan() {
+  const rows = db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.duration,
+      (SELECT COUNT(*) FROM files f WHERE f.track_id=t.id AND f.tier='owned') owned,
+      (SELECT MAX(f.bitrate) FROM files f WHERE f.track_id=t.id AND f.tier='owned') bitrate,
+      (SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.track_id=t.id) used
+    FROM tracks t`).all();
+  const byKey = new Map();
+  for (const r of rows) {
+    if (!dupFold(r.title)) continue;                 // "(untitled)" rows are not all one song
+    const k = `${dupFold(r.artist)}|${dupFold(r.title)}`;
+    if (!byKey.has(k)) byKey.set(k, []);
+    byKey.get(k).push(r);
+  }
+  const groups = [];
+  for (const list of byKey.values()) {
+    if (list.length < 2) continue;
+    list.sort((a, b) => (b.owned - a.owned) || ((b.bitrate || 0) - (a.bitrate || 0)) || (b.used - a.used) || (a.id - b.id));
+    const keep = list[0];
+    const merge = [];
+    for (const d of list.slice(1)) {
+      const aa = dupFold(keep.album);
+      const ab = dupFold(d.album);
+      if (aa && ab && aa !== ab) continue;                 // single vs album is not a duplicate
+      const ka = Number(keep.duration) || 0;
+      const kb = Number(d.duration) || 0;
+      if (ka && kb && Math.abs(ka - kb) > 3) continue;     // a different recording
+      merge.push(d);
+    }
+    if (merge.length) groups.push({ keep, merge, title: keep.title, artist: keep.artist, album: keep.album });
+  }
+  // how many same-name families are versions rather than duplicates: reported, never
+  // touched, so "nothing removed" has an explanation
+  const base = (x) => dupFold(String(x || '').replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/\s+-\s+.*$/, ' '));
+  const families = new Map();
+  for (const r of rows) {
+    if (!base(r.title)) continue;
+    const k = `${dupFold(r.artist)}|${base(r.title)}`;
+    if (!families.has(k)) families.set(k, new Set());
+    families.get(k).add(dupFold(r.title));
+  }
+  const versions = [...families.values()].filter((set) => set.size > 1).length;
+
+  const extra = [];
+  const files = db.prepare("SELECT id, track_id, path, bitrate FROM files WHERE tier='owned'").all();
+  const perTrack = new Map();
+  for (const f of files) {
+    if (!perTrack.has(f.track_id)) perTrack.set(f.track_id, []);
+    perTrack.get(f.track_id).push(f);
+  }
+  for (const [trackId, list] of perTrack) {
+    if (list.length < 2) continue;
+    list.sort((a, b) => fileQuality(path.extname(b.path), b.bitrate) - fileQuality(path.extname(a.path), a.bitrate));
+    for (const f of list.slice(1)) extra.push({ ...f, track_id: trackId });
+  }
+  return { groups, extra, versions };
+}
+
+function applyDuplicatePlan(plan) {
+  const paths = [];
+  let removed = 0, filesRemoved = 0;
+  db.exec('BEGIN');
+  try {
+    for (const g of plan.groups) {
+      const keep = g.keep;
+      for (const dupe of g.merge) {
+        const dupeFiles = db.prepare('SELECT id, path FROM files WHERE track_id=?').all(dupe.id);
+        db.prepare('UPDATE OR IGNORE playlist_tracks SET track_id=? WHERE track_id=?').run(keep.id, dupe.id);
+        db.prepare('DELETE FROM playlist_tracks WHERE track_id=?').run(dupe.id);
+        db.prepare('UPDATE OR IGNORE likes SET track_id=? WHERE track_id=?').run(keep.id, dupe.id);
+        db.prepare('DELETE FROM likes WHERE track_id=?').run(dupe.id);
+        db.prepare('UPDATE listens SET track_id=? WHERE track_id=?').run(keep.id, dupe.id);
+        db.prepare('UPDATE OR IGNORE resolutions SET track_id=? WHERE track_id=?').run(keep.id, dupe.id);
+        db.prepare('DELETE FROM resolutions WHERE track_id=?').run(dupe.id);
+        db.prepare('DELETE FROM files WHERE track_id=?').run(dupe.id);
+        db.prepare('DELETE FROM tracks WHERE id=?').run(dupe.id);
+        for (const f of dupeFiles) paths.push(f.path);
+        removed += 1;
+      }
+    }
+    for (const f of plan.extra) {
+      db.prepare('DELETE FROM files WHERE id=?').run(f.id);
+      paths.push(f.path);
+      filesRemoved += 1;
+    }
+    db.exec('COMMIT');
+  } catch (e) {
+    try { db.exec('ROLLBACK'); } catch {}
+    throw e;
+  }
+  for (const p of paths) { try { fs.unlinkSync(p); } catch {} }
+  return { groups: plan.groups.length, removed, files: filesRemoved };
+}
+
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
   res.setHeader('x-content-type-options', 'nosniff');
@@ -2356,6 +2463,7 @@ const server = http.createServer(async (req, res) => {
         year: meta.year || null,
         duration: meta.duration,
         track_no: meta.trackNumber || null,
+        disc_no: meta.discNumber || null,
         format: (name.split('.').pop() || 'mp3').toLowerCase(),
       });
       upsertFile({ track_id: tid, path: dest, tier: 'owned', bitrate: meta.bitrate, size: meta.size, mtime: meta.mtime });
@@ -2512,85 +2620,27 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // merge duplicate rows that already exist
-    if (u.pathname === '/api/maintenance/merge-duplicates' && req.method === 'POST') {
-      const groups = db.prepare(`SELECT lower(title) t, lower(COALESCE(artist,'')) a, COUNT(*) c
-        FROM tracks GROUP BY t, a HAVING c > 1`).all();
-      let merged = 0;
-      for (const g of groups) {
-        const rows = db.prepare(`SELECT t.id, (SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.track_id=t.id) np,
-          (SELECT COUNT(*) FROM files f WHERE f.track_id=t.id) nf
-          FROM tracks t WHERE lower(t.title)=? AND lower(COALESCE(t.artist,''))=? ORDER BY np DESC, nf DESC, t.id ASC`).all(g.t, g.a);
-        const keep = rows[0];
-        if (!keep) continue;
-        for (const dupe of rows.slice(1)) {
-          db.prepare('UPDATE OR IGNORE playlist_tracks SET track_id=? WHERE track_id=?').run(keep.id, dupe.id);
-          db.prepare('DELETE FROM playlist_tracks WHERE track_id=?').run(dupe.id);
-          db.prepare('UPDATE OR IGNORE files SET track_id=? WHERE track_id=?').run(keep.id, dupe.id);
-          db.prepare('DELETE FROM files WHERE track_id=?').run(dupe.id);
-          db.prepare('UPDATE OR IGNORE likes SET track_id=? WHERE track_id=?').run(keep.id, dupe.id);
-          db.prepare('DELETE FROM likes WHERE track_id=?').run(dupe.id);
-          db.prepare('UPDATE listens SET track_id=? WHERE track_id=?').run(keep.id, dupe.id);
-          db.prepare('UPDATE OR IGNORE resolutions SET track_id=? WHERE track_id=?').run(keep.id, dupe.id);
-          db.prepare('DELETE FROM resolutions WHERE track_id=?').run(dupe.id);
-          db.prepare('DELETE FROM tracks WHERE id=?').run(dupe.id);
-          merged++;
-        }
-        db.prepare('UPDATE tracks SET has_art=1 WHERE id=? AND EXISTS (SELECT 1 FROM files f WHERE f.track_id=? AND f.tier=? )').run(keep.id, keep.id, 'owned');
+    // duplicate finding is deliberately conservative: same artist and title after
+    // case/punctuation folding, same album (or one blank), length within three seconds.
+    // An original and a remaster have different titles, so they can never be merged.
+    if ((u.pathname === '/api/maintenance/duplicates' || u.pathname === '/api/maintenance/dedupe') && (req.method === 'GET' || req.method === 'POST')) {
+      const plan = duplicatePlan();
+      if (req.method === 'GET') {
+        return json(res, 200, {
+          ok: true,
+          groups: plan.groups.length,
+          tracks: plan.groups.reduce((n, g) => n + g.merge.length, 0),
+          extra_files: plan.extra.length,
+          versions: plan.versions,
+          sample: plan.groups.slice(0, 6).map((g) => ({ title: g.title, artist: g.artist, album: g.album, count: g.merge.length + 1 })),
+        });
       }
-      return json(res, 200, { ok: true, groups: groups.length, merged });
-    }
-
-    // merge near duplicate tracks, keeping the highest quality copy
-    if (u.pathname === '/api/maintenance/dedupe' && req.method === 'POST') {
-      const keyOf = (artist, title) => {
-        const norm = (s) => String(s || '').toLowerCase()
-          .replace(/\((?:feat\.?|ft\.?|with|remaster[^)]*|deluxe[^)]*|bonus[^)]*)[^)]*\)/g, ' ')
-          .replace(/\[[^\]]*\]/g, ' ')
-          .replace(/\s+-\s+(?:remaster(?:ed)?|single version|album version|radio edit|explicit|clean).*$/g, ' ')
-          .replace(/[^a-z0-9]+/g, ' ')
-          .trim();
-        return `${norm(artist)}|${norm(title)}`;
-      };
-      const rows = db.prepare(`SELECT t.id, t.title, t.artist, t.dup_key,
-        (SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.track_id=t.id) plays_in,
-        (SELECT COUNT(*) FROM files f WHERE f.track_id=t.id AND f.tier='owned') owned,
-        (SELECT MAX(f.bitrate) FROM files f WHERE f.track_id=t.id AND f.tier='owned') bitrate
-        FROM tracks t`).all();
-
-      const groups = new Map();
-      for (const r of rows) {
-        const k = keyOf(r.artist, r.title);
-        if (!groups.has(k)) groups.set(k, []);
-        groups.get(k).push(r);
+      try {
+        const out = applyDuplicatePlan(plan);
+        return json(res, 200, { ok: true, ...out });
+      } catch (e) {
+        return serverError(res, e, u.pathname);
       }
-
-      let removed = 0, mergedGroups = 0;
-      for (const [k, list] of groups) {
-        if (list.length < 2) continue;
-        // best quality first: has a file, then the highest bitrate, then the oldest row
-        list.sort((a, b) => (b.owned - a.owned) || ((b.bitrate || 0) - (a.bitrate || 0)) || (a.id - b.id));
-        const keep = list[0];
-        if (!keep) continue;
-        mergedGroups += 1;
-        for (const dupe of list.slice(1)) {
-          if (dupe.id === keep.id) continue;
-          db.prepare('UPDATE OR IGNORE playlist_tracks SET track_id=? WHERE track_id=?').run(keep.id, dupe.id);
-          db.prepare('DELETE FROM playlist_tracks WHERE track_id=?').run(dupe.id);
-          if (!keep.owned) {
-            db.prepare('UPDATE OR IGNORE files SET track_id=? WHERE track_id=?').run(keep.id, dupe.id);
-          }
-          db.prepare('DELETE FROM files WHERE track_id=?').run(dupe.id);
-          db.prepare('UPDATE OR IGNORE likes SET track_id=? WHERE track_id=?').run(keep.id, dupe.id);
-          db.prepare('DELETE FROM likes WHERE track_id=?').run(dupe.id);
-          db.prepare('UPDATE listens SET track_id=? WHERE track_id=?').run(keep.id, dupe.id);
-          db.prepare('UPDATE OR IGNORE resolutions SET track_id=? WHERE track_id=?').run(keep.id, dupe.id);
-          db.prepare('DELETE FROM resolutions WHERE track_id=?').run(dupe.id);
-          db.prepare('DELETE FROM tracks WHERE id=?').run(dupe.id);
-          removed += 1;
-        }
-      }
-      return json(res, 200, { ok: true, groups: mergedGroups, removed });
     }
 
     // ---------- format compatibility (rekordbox / Traktor) ----------
@@ -2676,13 +2726,14 @@ const server = http.createServer(async (req, res) => {
     // backfill album track numbers from the files (needed for album ordering)
     if (u.pathname === '/api/maintenance/fill-tracknos' && req.method === 'POST') {
       const rows = db.prepare(`SELECT t.id, f.path FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned'
-        WHERE t.track_no IS NULL LIMIT 2000`).all();
+        WHERE t.track_no IS NULL OR t.disc_no IS NULL LIMIT 2000`).all();
       let fixed = 0;
       for (const r of rows) {
         if (!fs.existsSync(r.path)) continue;
         try {
           const m = await probe(r.path);
           if (m && m.trackNumber) { db.prepare('UPDATE tracks SET track_no=? WHERE id=?').run(m.trackNumber, r.id); fixed += 1; }
+          if (m && m.discNumber) db.prepare('UPDATE tracks SET disc_no=? WHERE id=?').run(m.discNumber, r.id);
         } catch {}
       }
       return json(res, 200, { fixed, checked: rows.length });
@@ -4932,6 +4983,13 @@ const server = http.createServer(async (req, res) => {
         try {
           for (const id of ids) {
             const files = filesOf.all(id);
+            // foreign keys are not enabled in SQLite by default: clear the rows that
+            // point at this track, or deleting one leaves orphan playlist entries
+            db.prepare('DELETE FROM playlist_tracks WHERE track_id=?').run(id);
+            db.prepare('DELETE FROM likes WHERE track_id=?').run(id);
+            db.prepare('DELETE FROM listens WHERE track_id=?').run(id);
+            db.prepare('DELETE FROM resolutions WHERE track_id=?').run(id);
+            db.prepare('DELETE FROM files WHERE track_id=?').run(id);
             const r = del.run(id);
             if (r.changes) deleted += 1;
             for (const f of files) freed.push(f.path);
@@ -4964,21 +5022,15 @@ const server = http.createServer(async (req, res) => {
         FROM tracks t
         LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
         LEFT JOIN resolutions r ON r.track_id=t.id
-        WHERE lower(${col})=lower(?) ORDER BY COALESCE(t.track_no, 9999), t.id`).all(gname);
-      // album pages: sort by the album's official track order when we can get it
+        WHERE lower(${col})=lower(?) ORDER BY COALESCE(t.disc_no, 1), COALESCE(t.track_no, 9999), t.id`).all(gname);
+      // album pages: the catalogue supplies the running order, and any number it
+      // supplies is written to the track so the order survives offline and in exports
       if (col === 'album' && rows.length > 1) {
         try {
-          const list = await identity.albumTracklist(gname, rows[0].artist);
-          if (list && list.length) {
-            const nk = (s) => String(s || '').toLowerCase().replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
-            const idx = new Map();
-            list.forEach((s, i) => idx.set(nk(s.title), i));
-            rows = rows.slice().sort((a, b) => {
-              const ia = idx.has(nk(a.title)) ? idx.get(nk(a.title)) : 9999;
-              const ib = idx.has(nk(b.title)) ? idx.get(nk(b.title)) : 9999;
-              return ia - ib || a.id - b.id;
-            });
-          }
+          const names = new Set(rows.map((r) => String(r.artist || '').trim()).filter(Boolean));
+          const artist = names.size === 1 ? [...names][0] : '';
+          const list = await identity.albumTracklist(gname, artist);
+          if (list && list.length) rows = albumOrder.apply(db, rows, list);
         } catch {}
       }
       return json(res, 200, rows);

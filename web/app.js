@@ -2732,7 +2732,7 @@ async function renderSettings() {
           <button class="btn btn-ghost" id="set-repair" type="button">Repair metadata</button>
           <button class="btn btn-ghost" id="set-genres" type="button">Fill genres</button>
           <button class="btn btn-ghost" id="set-covers" type="button">Fix covers</button>
-          <button class="btn btn-ghost" id="set-dedupe" type="button">Remove duplicate files</button>
+          <button class="btn btn-ghost" id="set-dedupe" type="button">Remove duplicates</button>
           <button class="btn btn-ghost" id="set-cache-clear" type="button">Clear cache</button>
         </div>
         <p class="set-note" id="set-maint" data-tone="">Nothing run yet.</p>
@@ -3027,13 +3027,27 @@ async function renderSettings() {
   };
   const setDedupe = document.getElementById('set-dedupe');
   if (setDedupe) setDedupe.onclick = async () => {
-    if (!confirm('Keep the best copy of every duplicated file and delete the rest? This removes files from disk.')) return;
     setDedupe.disabled = true;
     try {
-      const r = await api('/api/maintenance/dedupe-files', { method: 'POST' });
-      maint(r.removed ? `Duplicates: ${r.removed} extra file${r.removed === 1 ? '' : 's'} removed from ${r.tracks} track${r.tracks === 1 ? '' : 's'}` : `Duplicates: none — ${r.tracks} tracks have more than one file`, 'ok');
+      const preview = await api('/api/maintenance/duplicates', { nocache: true });
+      if (!preview.groups && !preview.extra_files) {
+        const versions = Number(preview.versions) || 0;
+        maint(versions
+          ? `Duplicates: none — ${versions} group${versions === 1 ? '' : 's'} are different versions (live, remaster, remix) and were left alone.`
+          : 'Duplicates: none — no two rows share artist, title, album and length.', 'ok');
+        setDedupe.disabled = false;
+        return;
+      }
+      const bits = [];
+      if (preview.tracks) bits.push(`${preview.tracks} duplicate track${preview.tracks === 1 ? '' : 's'}`);
+      if (preview.extra_files) bits.push(`${preview.extra_files} extra file${preview.extra_files === 1 ? '' : 's'}`);
+      const names = (preview.sample || []).slice(0, 3).map((x) => `${x.artist ? x.artist + ' — ' : ''}${x.title}`).join('; ');
+      if (!confirm(`Remove ${bits.join(' and ')}? The best copy is kept, playlists and likes move to it, and the extra files are deleted from disk.${names ? `\n\n${names}` : ''}`)) { setDedupe.disabled = false; return; }
+      const r = await api('/api/maintenance/dedupe', { method: 'POST' });
+      maint(`Duplicates: ${r.removed} track${r.removed === 1 ? '' : 's'} merged, ${r.files} file${r.files === 1 ? '' : 's'} removed`, 'ok');
       state.allTracks = null;
-    } catch { maint('Could not remove duplicates', 'bad'); }
+      bustCache();
+    } catch (e) { maint(`Could not remove duplicates: ${e.message || 'unknown'}`, 'bad'); }
     setDedupe.disabled = false;
   };
   const rungs = document.getElementById('set-rungs');
@@ -4418,6 +4432,7 @@ async function renderAlbum(name, push = true) {
           <button class="btn btn-ghost" id="g-album-edit">Edit album</button>
           <button class="btn btn-ghost" id="g-covers">Choose cover</button>
           <button class="btn btn-ghost" id="g-upgrade">Find higher quality</button>
+          <button class="btn btn-ghost" id="g-delete">Delete album</button>
         </div>
       </div></div>
     <div id="g-list"></div>`;
@@ -4451,6 +4466,21 @@ async function renderAlbum(name, push = true) {
     else refreshView();
   });
   $('g-covers').onclick = () => openAlbumCoverPicker(name, (first && first.artist) || '');
+  $('g-delete').onclick = async () => {
+    if (!list.length) return;
+    const withAudio = list.filter((t) => hasAudio(t)).length;
+    const msg = `Delete the album "${name}"? ${list.length} track${list.length === 1 ? '' : 's'} will be removed from the library and from every playlist${withAudio ? `, and ${withAudio} audio file${withAudio === 1 ? '' : 's'} will be deleted from disk` : ''}. This cannot be undone.`;
+    if (!confirm(msg)) return;
+    try {
+      const r = await api('/api/tracks/delete', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: list.map((t) => t.id) }),
+      });
+      toast(`Album deleted — ${r.deleted} track${r.deleted === 1 ? '' : 's'} removed`, 5000);
+      state.allTracks = null;
+      bustCache();
+      nav('library');
+    } catch (e) { toast(`Could not delete the album: ${e.message || 'unknown'}`, 6000); }
+  };
   $('g-upgrade').onclick = async () => {
     try { const r = await api(`/api/albums/${encodeURIComponent(name)}/upgrade`, { method: 'POST' }); toast(r.queued ? `${r.queued} higher quality downloads queued` : 'No low-bitrate tracks to upgrade', 6000); if (r.queued) toast(`${r.queued} queued — see Downloads for progress`, 6000); } catch { toast('Could not queue upgrades', 4000); }
   };

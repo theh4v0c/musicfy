@@ -112,6 +112,29 @@ The lock is not permanent: a track whose menu offers **Fix metadata** also offer
 catalogue fix metadata** when fields are locked. It calls `POST /api/tracks/:id/unlock`,
 clears the lock, and returns the track to automatic repair.
 
+## Album order
+
+An album is a sequence, not a bag of tracks. `tracks.track_no` and `tracks.disc_no` hold
+the running order; the album page sorts by disc, then track, then row id. `GET
+/api/group/album/:name` also asks the catalogue for the release tracklist and writes any
+**missing** number back to the row. iTunes is asked first; when it rate limits or does not
+carry an edition, Deezer supplies the same track/disc positions. A number already on the track is never overwritten: a
+tag or a person's correction wins.
+
+Matching is by normalized title first, then by a unique duration within five seconds (for
+titles the catalogue spells differently, e.g. `C**k/ver10`). A release that shares fewer
+than two titles with a four-track-or-longer album is treated as a different album with the
+same name and is ignored. Because the numbers are written to the database, the order
+survives a restart, an offline start and an export; Traktor and Rekordbox XML both receive
+the track number (and Rekordbox the disc).
+
+The catalogue tracklist is cached for 30 days. A failed lookup is cached for six hours and
+never replaces a list that was already known.
+
+`node bin/fill-album-order.mjs [--dry-run] [--limit=N] [--album="Name"]` does the same for
+the whole library instead of only the albums as they are opened. It is safe to rerun: it
+fills blanks and reports how many numbers it added.
+
 ## Versions: original vs remaster
 
 `ladder.titleForVersion()` keeps the version the person asked for. A request without
@@ -349,6 +372,24 @@ and reports "2 already in your library (Artist — Title)" instead of "failed", 
 that *Find higher quality* is the way to replace a copy. The whole batch is never blocked:
 the new tracks upload, the duplicates are skipped.
 
+## Duplicates and deleting records
+
+**Remove duplicates** is deliberately conservative. A duplicate is the same artist and
+title after case and punctuation folding, the same album (or a blank album on one side),
+and a length within three seconds. The best copy (owned, bitrate, then playlist use) wins,
+and playlist entries, likes and plays move to it.
+
+Versions are never merged: an original, a remaster, a live take and a remix have different
+titles or lengths, so they stay as separate records. That is a hard rule: merging
+*Closed Eye Visuals* with *Closed Eye Visuals (Remastered 2006)* would destroy one of the
+two releases. The button previews what it found (`GET /api/maintenance/duplicates`) and
+only then applies it (`POST /api/maintenance/dedupe`); with no exact duplicates it says so
+instead of removing something else.
+
+An album page also has **Delete album**: one confirmation names the track count and how
+many files leave the disk, then the album's rows are removed with their playlist entries,
+likes, plays and analysis.
+
 ## Maintenance buttons
 
 Each button in Settings → Maintenance writes its result into the card, with numbers. A
@@ -359,7 +400,8 @@ toast that vanishes is not an answer.
 | Repair metadata | `2010.0` years, impossible years, placeholder albums (`Web`, `Unknown`, `NA`), media labels in titles (`(Official Audio)`), whitespace, missing durations | years normalised · albums cleared · labels removed · titles trimmed · durations filled · how many still have no artist |
 | Fill genres | MusicBrainz artist tags, one artist every 1.5 s, split across collaborators | artists checked · newly tagged · tracks with a genre, **live** |
 | Fix covers | official album art for tracks with none | tried · found · still without art · the titles the catalogue could not match |
-| Remove duplicate files | keeps the best copy per track, deletes the rest | files removed · tracks affected |
+| Remove duplicates | exact duplicate tracks (same artist/title after case/punctuation folding, same album or one blank, length within 3 s) and extra files on one track; best copy wins, playlists/likes/plays move to it, files are deleted | duplicate tracks merged · files removed · a preview with sample titles before anything is deleted |
+| Delete album (album page) | removes every track on that album, its playlist entries, likes, plays, analysis and audio files | tracks removed |
 | Clear cache | localStorage + Cache Storage | page cache size |
 
 Crate and album actions report the same way. **Fix metadata (crate)** and the album page's

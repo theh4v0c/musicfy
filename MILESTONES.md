@@ -6,6 +6,56 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-25 · Duplicates that are actually duplicates; delete an album (`v497`)
+
+The old "Remove duplicate files" only collapsed several files attached to one track, so a
+library with duplicate *rows* reported zero and looked broken. The other endpoint stripped
+version words, which meant an original and its remaster counted as duplicates.
+
+- **Remove duplicates** now finds exact duplicate tracks and extra files, shows a preview
+  first, then merges. Exact means same artist/title after case/punctuation folding, the
+  same album (or one blank), and a length within three seconds. Versions are left alone.
+- playlist entries, likes, plays, resolutions and files move to the kept track; the losing
+  audio is deleted from disk. The endpoint and its preview are one implementation.
+- **Delete album** on the album page removes every track and its playlist entries, likes,
+  plays, analysis and files, after one confirmation with the counts.
+- deleting a track now clears its dependent rows explicitly; SQLite foreign keys are off,
+  so the old path could leave orphan playlist entries.
+- three Meshuggah originals that the old version-stripping merge had removed were restored
+  from the 24 Nov backup with their files.
+
+Verified on a scratch library: two identical rows merged to one, a remaster with the same
+base title survived, and deleting its album removed the row and the file. On the live
+library the preview reports 0 exact duplicates and 0 extra files; it also counts 62
+groups of versions (live, remaster, remix) and says they are being left alone.
+
+### 2026-11-25 · Albums keep their running order (`v496`)
+
+Album pages were sorted by a live catalogue lookup and nothing was stored: most rows had
+no `track_no`, so a failed or slow lookup fell back to insertion order, and the order could
+change between views. A release also has a disc, which the old single `track_no` could not
+separate.
+
+- `tracks.disc_no` added alongside `track_no`; album pages sort by disc, track, id.
+- the album endpoint writes missing track/disc numbers from the catalogue tracklist to the
+  row. Existing numbers are never overwritten.
+- matching uses normalized titles, then a unique duration within five seconds; a same-name
+  release that shares almost no titles is rejected as a different album.
+- iTunes is the first tracklist source; Deezer is the fallback when iTunes rate limits or
+  lacks the edition, which is what filled the albums the first pass reported as unknown.
+- the shared identity cache now merges the keys each process changed, so the server and a
+  backfill cannot erase each other's lookups.
+- the catalogue tracklist cache keeps a good list for 30 days but retries a failure after
+  six hours, and a failure cannot replace a known list.
+- `bin/fill-album-order.mjs` fills the rest of the library (`--dry-run`, `--limit`,
+  `--album`). After the backfill 1,065 tracks carry a number (was 230), and no album with
+  four or more tracks is left without one.
+- Rekordbox XML exports the disc alongside the track number.
+
+Verified: DOOM (31 tracks) moved from no numbers to 1–31 and the API returns the running
+order; Drukqs was already correct and is untouched; unit tests cover fill, no-overwrite,
+duration fallback, disc separation and the wrong-album guard.
+
 ### 2026-11-25 · Prep rows: one action grid on a phone (`v495`)
 
 The Prep list on a phone put *Update 26* on a line of its own, right-aligned, with the

@@ -16,7 +16,20 @@ function load() {
   try { cache = JSON.parse(fs.readFileSync(CACHE, 'utf8')); } catch { cache = {}; }
   return cache;
 }
-function save() { try { fs.writeFileSync(CACHE, JSON.stringify(load()), { mode: 0o600 }); } catch {} }
+const dirty = new Set();
+// two processes share this file (the server and a backfill script). Writing the whole
+// in-memory object would erase what the other one learned, so only the keys this process
+// changed are written over a fresh read of the file.
+function save() {
+  try {
+    let disk = {};
+    try { disk = JSON.parse(fs.readFileSync(CACHE, 'utf8')) || {}; } catch {}
+    const mem = load();
+    for (const k of dirty) if (mem[k]) disk[k] = mem[k];
+    dirty.clear();
+    fs.writeFileSync(CACHE, JSON.stringify(disk), { mode: 0o600 });
+  } catch {}
+}
 
 let lastErrorAt = 0;
 const recentError = () => Date.now() - lastErrorAt < 20000;
@@ -95,7 +108,7 @@ async function canon(artist, title) {
   catch { return null; }
 
   const results = (data && data.results) || [];
-  if (!results.length) { c[key] = { at: Date.now(), hit: null }; save(); return null; }
+  if (!results.length) { c[key] = { at: Date.now(), hit: null }; dirty.add(key); save(); return null; }
 
   let best = null;
   const haveArtist = !!String(artist || '').trim();
@@ -120,6 +133,7 @@ async function canon(artist, title) {
   }
   const out = best && best.score >= (haveArtist ? 0.5 : 0.6) ? best : null;
   c[key] = { at: Date.now(), hit: out };
+  dirty.add(key);
   save();
   return out;
 }
@@ -223,15 +237,19 @@ async function artistSongs(name, limit = 20) {
 }
 
 // the ordered tracklist of one album, from iTunes, so album pages can sort by track number
-async function albumTracklist(name, artist) {
-  const key = 'albtrk2:' + norm(name) + '|' + norm(artist || '');
+async function albumTracklist(name, artist, opts = {}) {
+  const key = 'albtrk3:' + norm(name) + '|' + norm(artist || '');
   const c = load();
-  if (c[key] && Date.now() - c[key].at < 30 * 24 * 3600 * 1000) return c[key].list || null;
+  const cached = c[key];
+  // a failed lookup is not knowledge: retry it in a few hours instead of trusting a
+  // thirty-day "no such album". A real tracklist keeps the long cache.
+  const ttl = cached && cached.list && cached.list.length ? 30 * 24 * 3600 * 1000 : 6 * 3600 * 1000;
+  if (!opts.force && cached && Date.now() - cached.at < ttl) return cached.list || null;
   await throttle();
   let list = null;
   try {
     const q = encodeURIComponent(`${name} ${artist || ''}`.trim());
-    const search = await getJson(`https://itunes.apple.com/search?term=${q}&entity=album&limit=8`);
+    const search = await getJsonRetry(`https://itunes.apple.com/search?term=${q}&entity=album&limit=8`);
     const albums = (search.results || []).filter((a) => a.wrapperType === 'collection');
     let best = null;
     for (const a of albums) {
@@ -240,18 +258,26 @@ async function albumTracklist(name, artist) {
     }
     if (best && best.s >= 0.4) {
       await throttle();
-      const look = await getJson(`https://itunes.apple.com/lookup?id=${best.a.collectionId}&entity=song&limit=200`);
+      const look = await getJsonRetry(`https://itunes.apple.com/lookup?id=${best.a.collectionId}&entity=song&limit=200`);
       const songs = (look.results || []).filter((r) => r.wrapperType === 'track' && r.trackName);
-      list = songs.sort((x, y) => (x.trackNumber || 0) - (y.trackNumber || 0))
+      list = songs.sort((x, y) => (x.discNumber || 1) - (y.discNumber || 1) || (x.trackNumber || 0) - (y.trackNumber || 0))
         .map((r) => ({
           title: r.trackName,
           trackNumber: r.trackNumber || 0,
+          discNumber: r.discNumber || 0,
           duration: r.trackTimeMillis ? Math.round(r.trackTimeMillis / 1000) : null,
           artist: r.artistName || null,
         }));
     }
   } catch {}
+  // iTunes rate limits after a burst; Deezer carries the same order fields
+  if (!list || !list.length) {
+    try { list = await require('./deezer').albumTracklist(name, artist); } catch {}
+  }
+  // never replace a known tracklist with a transient failure
+  if (!list && cached && cached.list && cached.list.length) return cached.list;
   c[key] = { at: Date.now(), list };
+  dirty.add(key);
   save();
   return list;
 }

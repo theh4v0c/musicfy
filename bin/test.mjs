@@ -125,6 +125,10 @@ const recs = await j('/api/recommend?limit=50');
 const childFree = (recs.body?.picks || []).every((t) => t.genre_family !== 'children');
 ok('children are not recommended while the preference is off', tasteCfg.taste_include_children === true || childFree, JSON.stringify(recs.body?.profile));
 
+console.log('duplicates');
+const dupReport = await j('/api/maintenance/duplicates');
+ok('the duplicate report answers', dupReport.status === 200 && typeof dupReport.body?.groups === 'number' && typeof dupReport.body?.extra_files === 'number', JSON.stringify(dupReport.body));
+
 console.log('metadata guards');
 const guardId = (t && t.id) || ((await j('/api/tracks')).body || [])[0]?.id;
 if (guardId) {

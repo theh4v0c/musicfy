@@ -141,4 +141,32 @@ async function artistTop(id, limit = 8) {
   return data;
 }
 
-module.exports = { canon, search, searchAlbums, artistSearch, relatedArtists, artistTop };
+
+/* A release's running order from Deezer: the fallback when iTunes rate-limits or does
+ * not carry an edition. track_position/disk_number are exactly the order fields. */
+async function albumTracklist(name, artist) {
+  const key = 'albtrk:' + norm(name) + '|' + norm(artist || '');
+  if (cache.has(key)) return cache.get(key);
+  await throttle();
+  const q = `${artist || ''} ${name}`.trim();
+  const data = await getJson(`https://api.deezer.com/search/album?q=${encodeURIComponent(q)}&limit=10`).catch(() => null);
+  let best = null;
+  for (const it of ((data && data.data) || [])) {
+    const s = similarity(it.title, name) * (artist ? (0.6 + 0.4 * similarity((it.artist && it.artist.name) || '', artist)) : 1);
+    if (!best || s > best.s) best = { s, id: it.id };
+  }
+  if (!best || best.s < 0.4) { cache.set(key, null); return null; }
+  await throttle();
+  const full = await getJson(`https://api.deezer.com/album/${best.id}/tracks?limit=500`).catch(() => null);
+  const list = ((full && full.data) || []).filter((t) => t && t.title).map((t) => ({
+    title: t.title,
+    trackNumber: t.track_position || 0,
+    discNumber: t.disk_number || 0,
+    duration: t.duration || null,
+  }));
+  const out = list.length ? list : null;
+  cache.set(key, out);
+  return out;
+}
+
+module.exports = { canon, search, searchAlbums, albumTracklist, artistSearch, relatedArtists, artistTop };
