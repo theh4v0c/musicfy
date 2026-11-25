@@ -86,6 +86,12 @@ for the package names.
 Native Windows is not supported. Use **Docker Desktop** or **WSL2** and follow the
 step-by-step guide: [Windows instructions in INSTALL.md](INSTALL.md#5-windows).
 
+### Install with an agent
+
+If you use an open-source terminal coding agent such as **OpenCode** or **Hermes**, give it
+the copy-paste prompt in [AGENT_INSTALL.md](AGENT_INSTALL.md). It checks the machine,
+installs MUSICFY on localhost, and verifies it without opening a network port.
+
 ### Full instructions
 
 The short version above is enough for most people. If you want every click and every

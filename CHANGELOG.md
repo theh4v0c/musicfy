@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6 — 2026-11-25
+
+- Agent install prompt for open-source terminal coding agents such as OpenCode and Hermes.
+  It checks the machine, installs on localhost and verifies the health endpoint without
+  opening a network port.
+
 ## 0.1.5 — 2026-11-25
 
 - Fresh installs listen on `127.0.0.1` by default. Use `--bind=0.0.0.0` for access from a
