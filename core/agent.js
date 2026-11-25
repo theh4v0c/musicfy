@@ -101,7 +101,7 @@ function planLocally(text) {
   // "albums by Fear Factory" / "Fear Factory's discography" is a catalogue listing
   // match against the original text, not the lowercased copy: the artist's casing is
   // part of the name ("Fear Factory", not "fear factory")
-  const byAlbums = nt.match(/\b(?:albums?|discography)\s+(?:by|from|of|de)\s+(.+)$/i);
+  const byAlbums = nt.match(/\b(?:albums?|discography)(?:\s+[\w'áéíóúâêôãõç]+){0,3}\s+(?:by|from|of|de)\s+(.+)$/i);
   const ownsAlbums = text.match(/^(.+?)(?:'s|’s)\s+(?:albums?|discography)\s*[?.!]*$/i);
   const trailingAlbums = text.match(/^(.+?)\s+(?:albums?|discography)\s*[?.!]*$/i);
   const whatAlbums = text.match(/\bwhat albums (?:does|do) (.+?) have\b/i);
@@ -579,7 +579,8 @@ function childAudience(text) {
   if (/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:year|yr)s?[ -]?old\b/.test(t)) return true;
   // "play Baby by Justin Bieber" is a song, not an audience: only a possessive counts
   return /\b(kids?|children|child|toddler|preschool|nursery|my (daughter|son|niece|nephew|granddaughter|grandson))\b/.test(t)
-    || /\bfor (?:my|our|the) baby\b/.test(t);
+    || /\bfor (?:my|our|the) baby\b/.test(t)
+    || /\b(crian[cç]a|filh[ao]|beb[eê]|menin[oa]|sobrinh[ao])\b/.test(t);
 }
 
 const BRIEF_STOP = new Set(['the', 'and', 'for', 'with', 'her', 'his', 'she', 'he', 'likes', 'like', 'song', 'songs', 'kids', 'kid', 'children', 'child', 'music', 'band', 'from', 'that', 'this', 'about', 'into']);
@@ -740,13 +741,16 @@ async function propose(db, plan, lang = 'en') {
     const themes = (plan.args.themes || []).map((t) => String(t).trim()).filter(Boolean).slice(0, 4);
     const onlyLocalEarly = /\b(only|just|from)\s+(my|the)\s+library\b|\bno new\b/i.test(q);
     const BRIEF_RE = /\b(for my|she likes|he likes|they like|who likes|shes into|hes into|don'?t limit|birthday|wedding|kids?|children|toddler|for (?:my|our|the) baby|story time|year old|\d+\s*yo|about (unicorns?|robots?|dinosaurs?|space|animals?))\b/i;
+    // the same occasions in Portuguese; without these a Portuguese brief fell through to
+    // a plain library search
+    const BRIEF_PT = /\b(?:para (?:a|o|minha|meu|nossa|nosso)|anivers[aá]rio|festa|casamento|crian[cç]a|filh[ao]|beb[eê]|gosta de|curte|anos de idade)\b/i;
     // the model is good at naming artists and themes, unreliable at deciding what a brief
     // is: 'a techno set for a warehouse' is not one. Decide locally.
-    const brief = BRIEF_RE.test(q) || artists.length > 0;
+    const brief = BRIEF_RE.test(q) || BRIEF_PT.test(q) || artists.length > 0;
     if (brief && !themes.length && !artists.length) {
       // the model called it a brief but gave us nothing to look for: use the sentence,
       // minus the instructions, as the search phrase
-      const fallback = q.replace(/\b(create|make|build|playlist|for|my|a|an|the|please|some|of|with|songs?|tracks?)\b/gi, ' ')
+      const fallback = q.replace(/\b(create|make|build|playlist|for|my|a|an|the|please|some|of|with|songs?|tracks?|uma|um|lista|para|minha|meu|nossa|nosso|criar|montar|fazer|com|das?|dos?)\b/gi, ' ')
         .replace(/\s+/g, ' ').trim();
       if (fallback) themes.push(fallback.slice(0, 60));
     }
@@ -786,7 +790,10 @@ async function propose(db, plan, lang = 'en') {
     // "tracks by X" names one artist. If X is not here, the mood of the sentence is not a
     // substitute for X, and neither is whatever the catalogue returned for a name it did
     // not recognise — the honest answer is that there is nothing.
-    const byName = (q.match(/\bby\s+([a-z0-9][a-z0-9 .&'\-]{1,48})/i) || [])[1];
+    // read the artist from the normalised sentence: "10 faixas de X" becomes "10 tracks by X"
+    let normQ = q;
+    try { normQ = require('./query').normalizePortuguese(q); } catch {}
+    const byName = (normQ.match(/\bby\s+([a-z0-9][a-z0-9 .&'\-]{1,48})/i) || [])[1];
     // "by X" means only X. "based on X" / "like X" means use X to search, not a hard
     // filter: an English request like "a playlist like Berghain" names a club, and
     // filtering every catalogue result by that word returned nothing.

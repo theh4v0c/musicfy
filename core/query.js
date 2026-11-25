@@ -27,6 +27,9 @@ const PT_WORDS = [
   [/[aá]lbum(?![\p{L}])/giu, 'album'],
   [/\bdiscografia\b/gi, 'discography'],
   [/\btonalidade\b/gi, 'key'],
+  // "10 faixas de X" and "álbuns de X" name the artist: after the word mapping above this
+  // reads "10 tracks de X", so the preposition has to become "by" for the same parser
+  [/(tracks?|songs?|albums?)\s+de\s+/gi, '$1 by '],
 ];
 function normalizePortuguese(text) {
   let out = String(text || '');

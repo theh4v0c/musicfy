@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.43 — 2026-11-25
+
+- Portuguese artist names are read from the normalised sentence: "10 faixas de Aphex Twin"
+  becomes "10 tracks by Aphex Twin" before the artist is taken, and "álbum mais recente de
+  X" is an artist album request like its English form.
+- Portuguese briefs are detected as briefs (aniversário, festa, criança, filha, bebê) and
+  trigger the child-safe path.
+
 ## 0.1.42 — 2026-11-25
 
 - "Based on X" uses X to search the catalogue without hard-filtering every result by that
