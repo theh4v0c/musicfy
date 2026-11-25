@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.35 — 2026-11-25
+
+- A message the server composes from several sentences is translated sentence by sentence,
+  so "Downtempo: under 115 BPM. 4 of 5 you already play. Nothing new turned up." no longer
+  stays English as a whole.
+- A&R result fragments are translated: rotation, brief, catalogue, child-safety and the
+  artist-specific lines.
+
 ## 0.1.34 — 2026-11-25
 
 - A&R suggestion chips no longer fill the box with English. The visible label follows the

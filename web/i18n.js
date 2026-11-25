@@ -378,6 +378,27 @@
     [/^(\d+) downloads queued in the background$/, (m) => `${m[1]} downloads na fila em segundo plano`],
 
     [/^Found in the catalogue for “(.+)”\.$/, (m) => `Encontrada no catálogo para “${m[1]}”.`],
+    // A&R result fragments (agent.js composes these)
+    [/^(\d+) of (\d+) you already play\.$/, (m) => `${m[1]} de ${m[2]} você já toca.`],
+    [/^(\d+) new from artists around your rotation\.$/, (m) => `${m[1]} novas de artistas da sua rotação.`],
+    [/^(\d+) new from “(.+)”\.$/, (m) => `${m[1]} novas de “${m[2]}”.`],
+    [/^(\d+) new from the catalogue\.$/, (m) => `${m[1]} novas do catálogo.`],
+    [/^Nothing new turned up this time\.$/, () => 'Nada novo apareceu desta vez.'],
+    [/^All from your library\.$/, () => 'Tudo da sua biblioteca.'],
+    [/^For a brief: (.+)\.$/, (m) => `Para um briefing: ${m[1]}.`],
+    [/^(\d+) in your library, (\d+) new\.$/, (m) => `${m[1]} na sua biblioteca, ${m[2]} novas.`],
+    [/^(\d+) from your library — it has no explicit flag, so check these before playing them to a child\.$/,
+      (m) => `${m[1]} da sua biblioteca — ela não tem marcação de conteúdo explícito, então confira antes de tocar para uma criança.`],
+    [/^(\d+) clean catalogue tracks; nothing from your library, which has no explicit flag\.$/,
+      (m) => `${m[1]} faixas limpas do catálogo; nada da sua biblioteca, que não tem marcação de conteúdo explícito.`],
+    [/^The catalogue did not answer just now, so this is your library only\.$/,
+      () => 'O catálogo não respondeu agora, então isto é só a sua biblioteca.'],
+    [/^Nothing by “(.+)” is in your library, and the catalogue returned no match for that name\.$/,
+      (m) => `Nada de “${m[1]}” está na sua biblioteca, e o catálogo não achou esse nome.`],
+    [/^(\d+) by “(.+)” in your library, nothing new found\.$/, (m) => `${m[1]} de “${m[2]}” na sua biblioteca, nada novo encontrado.`],
+    [/^(\d+) by “(.+)” in your library, (\d+) new from the catalogue\.$/, (m) => `${m[1]} de “${m[2]}” na sua biblioteca, ${m[3]} novas do catálogo.`],
+    [/^(.+): under (\d+) BPM\.$/, (m) => `${m[1]}: abaixo de ${m[2]} BPM.`],
+
     [/^No answer: (.+)$/, (m) => `Sem resposta: ${m[1] === 'empty response' ? 'resposta vazia' : m[1]}`],
     [/^(\d+) tracks$/, (m) => `${m[1]} ${m[1] === '1' ? 'faixa' : 'faixas'}`],
     [/^(\d+) track$/, (m) => `${m[1]} faixa`],
@@ -478,12 +499,10 @@
     return !el || !!el.closest(SKIP);
   }
 
-  function translateString(value) {
-    if (lang !== 'pt-BR' || !value) return value;
-    const key = value.trim();
-    if (!key) return value;
-    let hit = pt[key];
-    if (hit) return value.replace(key, hit);
+  // one string against the dictionary and the rules; used both whole and per sentence
+  function translateKey(key) {
+    const hit = pt[key];
+    if (hit) return { out: hit, changed: true };
     let out = key;
     let changed = false;
     for (const [re, fn] of patterns) {
@@ -500,7 +519,29 @@
       out = out.replace(re, (...args) => fn(args));
       changed = true;
     }
-    return changed ? out : value;
+    return { out, changed };
+  }
+
+  function translateString(value) {
+    if (lang !== 'pt-BR' || !value) return value;
+    const key = value.trim();
+    if (!key) return value;
+    const whole = translateKey(key);
+    if (whole.changed) return value.replace(key, whole.out);
+    // the server composes some answers from several sentences ("Downtempo: under 115
+    // BPM. 4 of 5 you already play. Nothing new turned up."). Each sentence has a rule,
+    // the whole does not, so try them one by one before giving up.
+    const parts = key.split(/(?<=[.!?])\s+/);
+    if (parts.length > 1) {
+      let any = false;
+      const joined = parts.map((part) => {
+        const r = translateKey(part);
+        if (r.changed) any = true;
+        return r.out;
+      }).join(' ');
+      if (any) return value.replace(key, joined);
+    }
+    return value;
   }
 
   function translateNode(node) {
