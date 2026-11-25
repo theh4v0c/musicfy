@@ -13,6 +13,17 @@ deployment repository, not here.
 | Audio | your library root, e.g. `/srv/music/owned` |
 | Backups | a second disk, e.g. `/srv/music/backups` |
 
+## Install and run (new host)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/theh4v0c/musicfy/main/install.sh | sh
+musicfy doctor
+musicfy service install        # systemd or launchd; otherwise: musicfy start
+```
+
+`musicfy setup --root DIR --owned DIR --token` is the same setup without the clone.
+`musicfy.env` under the data root holds the paths and the token; keep it mode 600.
+
 ## Deploy
 
 ```sh
@@ -51,7 +62,9 @@ tar -xzf backups/musicfy-src-STAMP.tar.gz -C /opt/musicfy
 sudo systemctl start musicfy-core
 ```
 
-Database: stop the service, replace `data/musicfy.db` from the snapshot, start it again.
+Database: `musicfy backup` writes a verified `VACUUM INTO` snapshot;
+`musicfy restore backups/musicfy-YYYY-MM-DD.db` replaces the database (stop first) and
+keeps the previous file beside it. The same commands work on any host.
 
 ## Diagnose
 

@@ -23,3 +23,8 @@ data/tokens.json
 # python bytecode
 __pycache__/
 *.pyc
+
+# installer state
+musicfy.env
+musicfy.pid
+musicfy-*.tgz

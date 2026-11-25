@@ -5,6 +5,26 @@ One Node service, one SQLite database, no npm dependencies, no account in the pl
 
 Developed on a Raspberry Pi 5 (Debian 12, aarch64). Any Node 22.13+ host with ffmpeg works.
 
+## Quick start
+
+```sh
+# clone, create ~/.musicfy, the two Python venvs, and put `musicfy` on PATH
+curl -fsSL https://raw.githubusercontent.com/theh4v0c/musicfy/main/install.sh | sh
+musicfy start
+```
+
+or, with npm:
+
+```sh
+npm i -g musicfy
+musicfy setup --root ~/.musicfy
+musicfy start
+```
+
+`musicfy status`, `musicfy logs -f`, `musicfy doctor` and `musicfy service install` cover
+the rest. The service still runs on one port and reads every path from the environment;
+see `INSTALL.md` for the manual route and the env table.
+
 ## What it does
 
 - **Library** of tracks, albums, artists and playlists in `node:sqlite`.

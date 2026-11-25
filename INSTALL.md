@@ -53,8 +53,23 @@ At boot the server prints what it resolved, and names anything missing:
 
 ## 3. Install
 
+The short route:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/theh4v0c/musicfy/main/install.sh | sh
+musicfy start
+```
+
+or `npm i -g musicfy && musicfy setup --root ~/.musicfy && musicfy start`.
+
+`install.sh` clones into `~/.musicfy/app`, runs `musicfy setup` (directories, venvs,
+checks, `musicfy.env`) and links `~/.local/bin/musicfy`. It never uses sudo. Pass
+`--root=DIR`, `--repo=URL`, `--ref=BRANCH` or `--skip-deps`.
+
+The manual route, if you want to see every step:
+
 ```bash
-git clone https://github.com/<you>/MUSICFY && cd MUSICFY
+git clone https://github.com/theh4v0c/musicfy && cd musicfy
 
 # Node: no dependencies, Node 22.13+ (node:sqlite is unflagged there).
 # Python: the analyser. The directory name matters, or set MUSICFY_PYTHON.
@@ -74,6 +89,21 @@ node core/core.js
 
 The first boot creates `data/`, `logs/` and the schema, then serves on `:8710`. Nothing
 has to be seeded.
+
+### The CLI
+
+| command | what it does |
+|---|---|
+| `musicfy setup` | dirs, venvs, `.env`, dependency check, URL |
+| `musicfy serve` | foreground, the way a service runs it |
+| `musicfy start/stop/restart/status` | detached process, PID file, `logs/musicfy.log` |
+| `musicfy logs [-f]` | last 100 lines, or follow |
+| `musicfy doctor` | Node, ffmpeg, yt-dlp, Python, DB integrity, HTTP, disk, token warning |
+| `musicfy backup [--keep N]` | `VACUUM INTO` snapshot + settings/covers archive |
+| `musicfy restore <snapshot.db>` | replace the database (stop first) |
+| `musicfy token [--rotate]` | write or rotate `MUSICFY_TOKEN` |
+| `musicfy service install` | systemd (Linux) or launchd (macOS) |
+| `musicfy update` | git pull, then restart if running |
 
 ### systemd
 
@@ -130,15 +160,19 @@ on the same host.
 
 ---
 
-## 6. What a public release still needs
+## 6. What a public release still has open
 
-1. **Auth / first-run setup** — a single-user token exists (`MUSICFY_TOKEN`), but there is
-   no first-run password or account flow. *Blocking for anything beyond a private LAN.*
+1. **Accounts** — a single-user token exists (`MUSICFY_TOKEN`), and `setup --token` creates
+   one, but there is no per-user account or first-run password flow.
 2. **A scanner for an existing folder** — so people do not have to re-upload their library.
-3. **Packaging** — no Dockerfile or service installer is shipped; the systemd unit below
-   is a template.
-4. **Platform matrix** — the analysis venv and yt-dlp are Linux/macOS; Windows needs a
-   different ffmpeg and has not been tested.
+3. **Platform matrix** — the analysis venv and yt-dlp are Linux/macOS; Windows has not been
+   tested.
+4. **Authentication is still opt-in** — the default install warns at boot when it listens
+   on every interface without a token. Use `musicfy setup --token`, or bind to localhost
+   behind a TLS proxy.
+
+Packaging now ships `package.json`, `bin/musicfy.mjs`, `install.sh`, systemd/launchd
+installers, a Dockerfile, LICENSE, SECURITY and CI for unit, design and boot smoke.
 
 Paths, the schema-on-boot, the CDJ USB export (`export.pdb` + ANLZ) and the test suite are
 done; see `MILESTONES.md`.
