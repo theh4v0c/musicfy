@@ -405,7 +405,7 @@ $('ctx').addEventListener('click', async (e) => {
     try {
       const dry = await api(`/api/tracks/${t.id}/tags?dryRun=1`, { method: 'POST', nocache: true });
       if (dry.error) return toast(dry.error, 6000);
-      const ok = confirm(`Write Traktor + ID3 tags into the file?\n\n${dry.file}\nFrames: ${(dry.frames || []).join(', ')}\n\nA .mf.bak backup is kept once.`);
+      const ok = confirm(`${tr('Write Traktor + ID3 tags into the file?')}\n\n${dry.file}\nFrames: ${(dry.frames || []).join(', ')}\n\n${tr('A .mf.bak backup is kept once.')}`);
       if (!ok) return;
       const pp = progressPill('Writing tags…');
       const r = await api(`/api/tracks/${t.id}/tags`, { method: 'POST' });
@@ -451,7 +451,7 @@ $('ctx').addEventListener('click', async (e) => {
     try {
       const p = await api(`/api/repair/${t.id}`, { nocache: true });
       if (!p.changed) { toast(p.reasons[0] || 'Nothing to correct', 6000); return; }
-      if (!confirm(`Apply these corrections?\n\n${p.reasons.join('\n')}`)) return;
+      if (!confirm(`${tr('Apply these corrections?')}\n\n${p.reasons.join('\n')}`)) return;
       const r = await api(`/api/repair/${t.id}/apply`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(p.after) });
       if (r.error) return toast(r.error, 6000);
       patchTrackEverywhere(t.id, p.after);
@@ -488,8 +488,8 @@ $('ctx').addEventListener('click', async (e) => {
     const ids = many ? [...state.selectedIds] : [t.id];
     if (many) { await deleteTracks(ids); return; }
     const msg = hasAudio(t)
-      ? `Delete "${t.title}"? The audio file is removed from disk and the track disappears from every playlist.`
-      : `Delete "${t.title}" from the library?`;
+      ? tr(`Delete "${t.title}"? The audio file is removed from disk and the track disappears from every playlist.`)
+      : tr(`Delete "${t.title}" from the library?`);
     if (!confirm(msg)) return;
     try {
       // remember where the list was scrolled so deleting does not move the page
@@ -531,7 +531,7 @@ async function deleteTracks(input) {
   const msg = one
     ? (withAudio.length ? 'Delete this track? The audio file is removed from disk and it disappears from every playlist.' : 'Delete this track from the library?')
     : `Delete ${ids.length} tracks?${withAudio.length ? ` ${withAudio.length} audio file${withAudio.length === 1 ? ' is' : 's are'} removed from disk` : ''} and they disappear from every playlist.`;
-  if (!confirm(msg)) return;
+  if (!confirm(tr(msg))) return;
 
   // the rows go at once, so a forty track delete does not crawl
   for (const id of ids) document.querySelectorAll(`.trow[data-tid="${id}"]`).forEach((r) => r.remove());
@@ -968,7 +968,7 @@ function openPlaylistMenu(p, x, y) {
         const dry = await api(`/api/playlists/${encodeURIComponent(p.id)}/tags?dryRun=1`, { method: 'POST' });
         const ok = (dry.results || []).filter((r) => !r.skipped && !r.error).length;
         if (!ok) { toast('No MP3s to tag in this playlist', 4000); return; }
-        if (!confirm(`Write Traktor + ID3 tags into ${ok} file(s)?\n\nA .mf.bak backup is kept once per file.`)) return;
+        if (!confirm(`${tr('Write Traktor + ID3 tags into')} ${ok} ${tr('file(s)?')}\n\n${tr('A .mf.bak backup is kept once per file.')}`)) return;
         const pp = progressPill(`Tagging ${ok} files…`);
         const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/tags`, { method: 'POST' });
         pp.done();
@@ -1996,7 +1996,7 @@ async function renderLibrary() {
   };
   $('lib-upload').onclick = () => pickFile('audio/*', (f) => uploadFiles([f]));
   $('lib-newpl').onclick = async () => {
-    const name = prompt('New playlist name:'); if (!name) return;
+    const name = prompt(tr('New playlist name:')); if (!name) return;
     await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, kind: 'listen' }) });
     afterWrite(); await loadPlaylists(); renderLibrary(); toast('Listening playlist created — switch it to DJ set when you want it prepped');
   };
@@ -2167,7 +2167,7 @@ async function renderDjExport() {
       }
       const missingPrep = prepWork(p);
       const exportCrate = (fmt) => {
-        if (missingPrep && fmt !== 'usb' && !confirm(`${missingPrep} track${missingPrep === 1 ? '' : 's'} in "${p.name}" have no cue data at the current analyser. Cues will be missing. Export anyway?`)) return;
+        if (missingPrep && fmt !== 'usb' && !confirm(`${missingPrep} ${tr(missingPrep === 1 ? 'track' : 'tracks')} ${tr('in')} "${p.name}" ${tr('have no cue data at the current analyser. Cues will be missing. Export anyway?')}`)) return;
         toast(fmt === 'usb' ? 'Building the CDJ library…' : 'Zipping the playlist…', 6000);
         if (fmt === 'usb') window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/pioneer.zip`;
         else window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.zip?format=${fmt}`;
@@ -2888,7 +2888,7 @@ async function renderSettings() {
       await navigator.clipboard.writeText(text);
       toast('Playback log copied', 4000);
     } catch {
-      prompt('Copy the playback log', text);
+      prompt(tr('Copy the playback log'), text);
     }
   };
 
@@ -3238,7 +3238,7 @@ async function renderSettings() {
       if (preview.tracks) bits.push(`${preview.tracks} duplicate track${preview.tracks === 1 ? '' : 's'}`);
       if (preview.extra_files) bits.push(`${preview.extra_files} extra file${preview.extra_files === 1 ? '' : 's'}`);
       const names = (preview.sample || []).slice(0, 3).map((x) => `${x.artist ? x.artist + ' — ' : ''}${x.title}`).join('; ');
-      if (!confirm(`Remove ${bits.join(' and ')}? The best copy is kept, playlists and likes move to it, and the extra files are deleted from disk.${names ? `\n\n${names}` : ''}`)) { setDedupe.disabled = false; return; }
+      if (!confirm(`${tr('Remove')} ${bits.join(' ' + tr('and') + ' ')}? ${tr('The best copy is kept, playlists and likes move to it, and the extra files are deleted from disk.')}${names ? `\n\n${names}` : ''}`)) { setDedupe.disabled = false; return; }
       const r = await api('/api/maintenance/dedupe', { method: 'POST' });
       maint(`Duplicates: ${r.removed} track${r.removed === 1 ? '' : 's'} merged, ${r.files} file${r.files === 1 ? '' : 's'} removed`, 'ok');
       state.allTracks = null;
@@ -4672,7 +4672,7 @@ async function renderAlbum(name, push = true) {
     if (!list.length) return;
     const withAudio = list.filter((t) => hasAudio(t)).length;
     const msg = `Delete the album "${name}"? ${list.length} track${list.length === 1 ? '' : 's'} will be removed from the library and from every playlist${withAudio ? `, and ${withAudio} audio file${withAudio === 1 ? '' : 's'} will be deleted from disk` : ''}. This cannot be undone.`;
-    if (!confirm(msg)) return;
+    if (!confirm(tr(msg))) return;
     try {
       const r = await api('/api/tracks/delete', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: list.map((t) => t.id) }),
@@ -4799,7 +4799,7 @@ function openBulkEdit(idsArg, afterSave) {
 async function selCreatePlaylist() {
   const ids = [...state.selectedIds];
   if (!ids.length) return;
-  const name = prompt('Playlist name for the selection:');
+  const name = prompt(tr('Playlist name for the selection:'));
   if (!name) return;
   const np = await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
   afterWrite();
@@ -4823,6 +4823,8 @@ function clearSelection() {
 function paintPill() {
   const el = $('pill');
   if (!el) return;
+  // it takes 138px of the top bar on every page; it belongs to Library and Settings
+  el.hidden = !(state.view === 'library' || state.view === 'settings');
   api('/api/stats', { nocache: true }).then((s) => {
     el.textContent = `${Number(s.tracks).toLocaleString(LOC())} TRACKS · ${fmtSize(s.owned_bytes)}`;
   }).catch(() => { el.textContent = ''; });

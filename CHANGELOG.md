@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.48 — 2026-11-25
+
+- Every remaining native confirm/prompt goes through the dictionary: delete track, delete
+  album, delete selection, Traktor tags, analyser corrections, cue-less export, dedupe,
+  playlist name for a selection. The browser still draws OK/Cancel.
+- Chrome the audit listed: `Play <track>` aria labels, `BUILT FROM <artist>`, On deck,
+  shuffle, Hide/Show sidebar, Track options, View/List/Grid/Compact, Seek, Metadata only,
+  Press Enter to search, Searching, Sort playlists.
+- The library pill is shown only on Library and Settings; it was taking 138px of the top
+  bar on every page.
+- M3U exports declare `#EXTENC:UTF-8`.
+
 ## 0.1.47 — 2026-11-25
 
 - Update status separates the running version from the version on disk. Files replaced

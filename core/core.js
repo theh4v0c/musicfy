@@ -5157,7 +5157,7 @@ const server = http.createServer(async (req, res) => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mfzip-'));
       const stage = path.join(tmpDir, 'set');
       fs.mkdirSync(stage, { recursive: true });
-      const lines = ['#EXTM3U'];
+      const lines = ['#EXTM3U', '#EXTENC:UTF-8'];
       let n = 0;
       for (const r of files) {
         n += 1;
@@ -5188,7 +5188,7 @@ const server = http.createServer(async (req, res) => {
         JOIN tracks t ON t.id=pt.track_id
         LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
         WHERE pt.playlist_id=? ORDER BY pt.position`).all(pid);
-      const lines = ['#EXTM3U'];
+      const lines = ['#EXTM3U', '#EXTENC:UTF-8'];
       for (const r of rows) {
         lines.push(`#EXTINF:${Math.round(r.duration || 0)},${r.artist || 'Unknown'} - ${r.title || ''}`);
         lines.push(r.path || `# missing: ${r.artist || ''} - ${r.title || ''}`);
@@ -5296,7 +5296,7 @@ const server = http.createServer(async (req, res) => {
         ? exporter.traktorNml(db, pid, { dirFor: () => '/:audio', fileFor: (t) => names.get(t.id) || path.basename(t.path) })
         : exporter.rekordboxXml(db, pid, { pathFor: (t) => 'file://localhost/audio/' + encodeURIComponent(names.get(t.id) || path.basename(t.path)) });
       fs.writeFileSync(path.join(stage, fmt === 'traktor' ? 'traktor.nml' : 'rekordbox.xml'), body);
-      fs.writeFileSync(path.join(stage, 'playlist.m3u8'), ['#EXTM3U', ...rows.filter((r) => names.has(r.id)).map((r) => names.get(r.id))].join('\n'));
+      fs.writeFileSync(path.join(stage, 'playlist.m3u8'), ['#EXTM3U', '#EXTENC:UTF-8', ...rows.filter((r) => names.has(r.id)).map((r) => names.get(r.id))].join('\n'));
       fs.writeFileSync(path.join(stage, 'README.txt'),
         `MUSICFY set export — ${pl.name} (${fmt})\n\n` +
         `Contents\n  audio/        the actual audio files (this IS the set)\n` +
