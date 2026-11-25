@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.3 — 2026-11-25
+
+- `install.sh --local` (and `--from=DIR`) installs a source folder without cloning GitHub,
+  so a private test build can be sent as one tarball.
+- TESTERS.md: a short, no-GitHub-account guide for friends, including what to send back and
+  what not to share.
+- README links the test route while keeping the public one-liner for after release.
+
 ## 0.1.2 — 2026-11-25
 
 - Installation guide rewritten for someone who has never used a terminal: one numbered step
