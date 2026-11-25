@@ -2829,6 +2829,7 @@ async function renderSettings() {
         </label>
         <p class="set-note">Buffer ahead keeps the next track preloaded. More buffer means no wait between tracks and more data held in memory; off frees the memory on a small device.</p>
         <div class="lib-actions"><button class="btn btn-ghost" id="set-clearbuf" type="button">Clear buffer</button><span class="set-note">Frees preloaded audio and cached pages</span></div>
+        <div class="lib-actions"><button class="btn btn-ghost" id="set-copylog" type="button">Copy playback log</button><span class="set-note">For a stop in the car: what the phone and the server saw</span></div>
         <p class="set-note" id="set-playlog"></p>
       </section>
       <section class="set-card">
@@ -2860,6 +2861,29 @@ async function renderSettings() {
     f.innerHTML = `<div><b>${Number(st.tracks).toLocaleString(LOC())}</b> tracks</div><div><b>${(st.owned_bytes / 1e9).toFixed(2)} GB</b> on disk</div><div><b>${Number(st.listens).toLocaleString(LOC())}</b> plays recorded</div>`
       + `<div><b>${Number(an.current).toLocaleString(LOC())}</b> current · <b>${Number(an.outdated).toLocaleString(LOC())}</b> without cue points</div>`;
   }).catch(() => {});
+  // one button that collects the client log and the server's media requests, so a stop in
+  // the car can be explained without guessing
+  const copyLog = document.getElementById('set-copylog');
+  if (copyLog) copyLog.onclick = async () => {
+    let server = null;
+    try { server = await api('/api/diag/media', { nocache: true }); } catch {}
+    let client = [];
+    try { client = JSON.parse(localStorage.getItem('mf_play_log') || '[]'); } catch {}
+    const sw = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+    const text = JSON.stringify({
+      app: 'MUSICFY', version: d.version || '', ua: navigator.userAgent, lang: window.I18N && window.I18N.lang,
+      service_worker: sw, hidden: document.hidden,
+      settings: { normalize_loudness: !!s.normalize_loudness, target_loudness: s.target_loudness, prefetch_ahead: s.prefetch_ahead },
+      client_log: client, server,
+    }, null, 1);
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Playback log copied', 4000);
+    } catch {
+      prompt('Copy the playback log', text);
+    }
+  };
+
   // the exclusion field, shown back as the terms the app will actually use
   const avoidInput = document.getElementById('set-taste-avoid');
   const avoidHost = document.getElementById('set-avoid-terms');
@@ -5302,12 +5326,13 @@ function bindMediaSession() {
   const clear = (action) => { try { navigator.mediaSession.setActionHandler(action, null); } catch {} };
   // every seek affordance is cleared first, otherwise iOS keeps drawing rewind / forward
   ['seekbackward', 'seekforward', 'seekto', 'skipad', 'nextslide', 'previousslide', 'seekto'].forEach(clear);
-  set('play', () => audio.play().catch(() => {}));
-  set('pause', () => audio.pause());
+  set('play', () => { state._userPaused = false; audio.play().catch(() => {}); });
+  // a pause pressed in the car is a real wish; a pause the system makes on lock is not
+  set('pause', () => { state._userPaused = true; audio.pause(); });
   // the button in the car is "back", not "previous track": restart the song you are in
   set('previoustrack', () => prevTrack());
   set('nexttrack', () => nextTrack());
-  set('stop', () => { audio.pause(); audio.currentTime = 0; });
+  set('stop', () => { state._userPaused = true; audio.pause(); audio.currentTime = 0; });
 }
 bindMediaSession();
 document.addEventListener('visibilitychange', () => {
@@ -5317,7 +5342,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
   bindMediaSession();
   // the lock screen can leave the element paused with a queue waiting: pick it up again
-  if (state._wantPlaying && audio.paused && state.current) {
+  if (state._wantPlaying && !state._userPaused && audio.paused && state.current) {
     const ready = warmSrc.get(state.current.id);
     if (ready) startAudio(state.qi, ready, { resume: true });
     else audio.play().catch(() => {});
@@ -5416,7 +5441,8 @@ function paintRows() {
 const togglePlay = () => {
   if (!state.current) return null;
   if (!audio.getAttribute('src')) return playAt(state.qi);
-  if (audio.paused) { pausePreviews(); return audio.play().catch(() => {}); }
+  if (audio.paused) { state._userPaused = false; pausePreviews(); return audio.play().catch(() => {}); }
+  state._userPaused = true;
   return audio.pause();
 };
 let continuing = false;
@@ -5551,8 +5577,27 @@ audio.addEventListener('error', async () => {
   setTimeout(() => { nextTrack(); }, 400);
 });
 
-audio.addEventListener('play', () => { state._wantPlaying = true; setPlayIcons(true); paintRows(); if (state._failed) state._failed.clear(); });
-audio.addEventListener('pause', () => { if (!audio.ended) state._wantPlaying = false; setPlayIcons(false); paintRows(); });
+audio.addEventListener('play', () => {
+  state._wantPlaying = true; setPlayIcons(true); paintRows();
+  if (state._failed) state._failed.clear();
+  logPlay('play', { id: state.current && state.current.id, hidden: document.hidden });
+});
+audio.addEventListener('pause', () => {
+  // A pause the system makes while the screen is off is not the listener's wish. Clearing
+  // the intent there is what made a locked phone stay silent until it was unlocked.
+  if (!audio.ended && (!document.hidden || state._userPaused)) state._wantPlaying = false;
+  logPlay('pause', {
+    id: state.current && state.current.id, hidden: document.hidden, user: !!state._userPaused,
+    ended: audio.ended, at: Math.round(audio.currentTime || 0),
+  });
+  setPlayIcons(false); paintRows();
+});
+// the events that precede a silent stop: keep them, with how much runway was left
+['waiting', 'stalled', 'suspend'].forEach((ev) => audio.addEventListener(ev, () => {
+  let ahead = 0;
+  try { const b = audio.buffered; if (b && b.length) ahead = Math.max(0, b.end(b.length - 1) - audio.currentTime); } catch {}
+  logPlay(ev, { id: state.current && state.current.id, hidden: document.hidden, ready: audio.readyState, ahead: Math.round(ahead) });
+}));
 audio.addEventListener('loadedmetadata', () => {
   $('t-dur').textContent = fmt(audio.duration); $('np-dur').textContent = fmt(audio.duration);
   const at = Number(state._resumeAt || 0);

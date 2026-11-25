@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.38 — 2026-11-25
+
+- Audio responses carry `ETag`, `Last-Modified` and `Accept-Ranges`, honour `If-Range` and
+  answer `HEAD`. A phone that loses signal can resume the same byte range instead of
+  restarting the track or staying paused.
+- A system pause while the screen is off no longer cancels the play intent; only an explicit
+  pause (button, lock screen, steering wheel) does. Unlocking resumes what the system paused.
+- The play log records `waiting`, `stalled`, `suspend`, and whether a pause came from the
+  listener or from the system, with the buffer ahead at that moment.
+- New `/api/diag/media` keeps the last media requests (range, status, timing), and Settings
+  has **Copy playback log**, which copies the client log and the server view together.
+- A real PNG icon and the iOS web-app meta tags, so adding MUSICFY to the Home Screen
+  produces a proper standalone app; INSTALL.md has a "Playback in the car" section.
+
 ## 0.1.37 — 2026-11-25
 
 - Menu headings are translated again. The whole `.ctx-title` block had been excluded as

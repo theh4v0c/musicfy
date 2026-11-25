@@ -614,6 +614,32 @@ musicfy restart
 Treat the file as a password: it is a live session. Export it again when it expires, and
 delete it from the laptop afterwards.
 
+### Playback in the car
+
+A phone in a car is the harshest place for a web player: the screen locks, the browser is
+backgrounded, the network hands off between cells, and iOS may evict a Safari tab that has
+been idle. Three things matter.
+
+1. **Install it to the Home Screen.** In Safari: Share → Add to Home Screen. A standalone
+   web app is much less likely to be discarded than a tab, keeps the lock-screen controls,
+   and starts without the browser UI. It needs HTTPS (see `DOMAIN.md`); the icon and the
+   manifest are already in the build.
+2. **Keep the library local when you can.** `Save for offline` writes the file to the
+   device, and a saved track plays from the device instead of the network. On a long drive
+   through bad coverage, that is the difference between continuous music and silence.
+3. **Read the log if it stops.** Settings → **Copy playback log** collects what the phone
+   saw (lock, unlock, pause, stall, buffer ahead, play blocked) and what the server saw
+   (each media request with its byte range and timing). Paste it in a report; it says
+   whether the phone stopped asking for audio or the server stopped answering.
+
+The server sends `ETag`, `Last-Modified` and `Accept-Ranges` on audio and honours
+`If-Range`, so a phone that loses signal can resume the same byte range instead of
+restarting the track. It also answers `HEAD`, which players use to probe a file.
+
+If playback stops at every track boundary rather than mid-track, check that the queue has a
+next track (Playback → Buffer ahead is not `off`) and that Low Power Mode is not on: iOS
+pauses background media in Low Power Mode on some devices.
+
 ### What still cannot be downloaded
 
 These are limits of the sources, not of MUSICFY:

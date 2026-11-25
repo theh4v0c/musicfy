@@ -1266,6 +1266,14 @@ function verifyFiles({ requeue = true } = {}) {
 }
 
 // ---------- download queue ----------
+// What the phone actually asked for while the screen was off. A car failure leaves no
+// trace on the device, so the server keeps the last few media requests with timings.
+const mediaLog = [];
+function logMedia(entry) {
+  mediaLog.push(entry);
+  while (mediaLog.length > 120) mediaLog.shift();
+}
+
 const downloadQueue = [];
 let activeDownloads = 0;
 const MAX_DOWNLOADS = Number(process.env.MUSICFY_DOWNLOAD_CONCURRENCY || 4);
@@ -4368,6 +4376,14 @@ const server = http.createServer(async (req, res) => {
     }
 
     // live download queue for the UI
+    // what the device asked the server for, to explain a stop that left no trace on the phone
+    if (u.pathname === '/api/diag/media' && req.method === 'GET') {
+      return json(res, 200, {
+        now: new Date().toISOString(), uptime_s: Math.round(process.uptime()),
+        keepalive_ms: server.keepAliveTimeout, items: mediaLog.slice(-80),
+      });
+    }
+
     if (u.pathname === '/api/downloads') {
       const counts = db.prepare(`SELECT state, COUNT(*) c FROM jobs
         WHERE (kind='track-download' OR kind='ladder-download') AND state != 'dismissed'
@@ -5377,6 +5393,7 @@ const server = http.createServer(async (req, res) => {
         return json(res, 404, { error: 'no file' });
       }
       const st = fs.statSync(f.path);
+      const startedAt = Date.now();
       const range = req.headers.range;
       // files never change: let the device keep them, which is what makes a second play instant
       const ext = path.extname(f.path).toLowerCase();
@@ -5384,8 +5401,28 @@ const server = http.createServer(async (req, res) => {
         : (ext === '.ogg' || ext === '.opus') ? 'audio/ogg'
         : ext === '.flac' ? 'audio/flac'
         : ext === '.wav' ? 'audio/wav' : 'audio/mpeg';
-      const head = { 'content-type': mime, 'accept-ranges': 'bytes', 'cache-control': 'private, max-age=86400' };
-      if (range) {
+      // A validator is what lets a phone resume a range after the car loses signal. Without
+      // one, Safari re-requests from the start or gives up and stays paused until unlock.
+      const etag = `"${st.size.toString(16)}-${Math.floor(st.mtimeMs).toString(16)}"`;
+      const lastModified = st.mtime.toUTCString();
+      const head = {
+        'content-type': mime, 'accept-ranges': 'bytes', 'cache-control': 'private, max-age=86400, no-transform',
+        etag, 'last-modified': lastModified,
+      };
+      const ua = String(req.headers['user-agent'] || '').slice(0, 120);
+      const logIt = (status, bytes) => logMedia({
+        at: new Date().toISOString().slice(11, 19), id: tid, range: range || 'full',
+        status, bytes, ms: Date.now() - startedAt, ua,
+      });
+      if (req.method === 'HEAD') {
+        logIt(200, 0);
+        res.writeHead(200, { ...head, 'content-length': st.size });
+        return res.end();
+      }
+      // If-Range with a validator that no longer matches means "send the whole file again"
+      const ifRange = req.headers['if-range'];
+      const rangeUsable = !ifRange || ifRange === etag || ifRange === lastModified;
+      if (range && rangeUsable) {
         const r = range.match(/bytes=(\d*)-(\d*)/);
         let start = r && r[1] ? Number(r[1]) : 0;
         let end = r && r[2] ? Number(r[2]) : st.size - 1;
@@ -5397,9 +5434,11 @@ const server = http.createServer(async (req, res) => {
         }
         end = Math.min(end, st.size - 1);
         res.writeHead(206, { ...head, 'content-range': `bytes ${start}-${end}/${st.size}`, 'content-length': end - start + 1 });
+        logIt(206, end - start + 1);
         fs.createReadStream(f.path, { start, end }).pipe(res);
       } else {
         res.writeHead(200, { ...head, 'content-length': st.size });
+        logIt(200, st.size);
         fs.createReadStream(f.path).pipe(res);
       }
       return;

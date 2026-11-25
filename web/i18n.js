@@ -305,6 +305,11 @@
     'Export for CDJ USB': 'Exportar para USB de CDJ',
     'Write Traktor tags (crate)': 'Gravar tags do Traktor (lista)',
     'Download to device (zip)': 'Baixar para o aparelho (zip)',
+    'Copy playback log': 'Copiar registro de reprodução',
+    'For a stop in the car: what the phone and the server saw': 'Para uma parada no carro: o que o celular e o servidor viram',
+    'Playback log copied': 'Registro de reprodução copiado',
+    'Copy the playback log': 'Copie o registro de reprodução',
+
     'Delete playlist': 'Excluir lista',
     'Search this artist': 'Buscar este artista',
     'Play now': 'Tocar agora', 'Add to playlist (stream)': 'Adicionar à lista (streaming)',
