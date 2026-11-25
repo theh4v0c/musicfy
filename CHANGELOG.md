@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.50 — 2026-11-25
+
+- When a storefront returns few albums, Deezer fills them; when it returns no artists, the
+  artists named by those songs fill the list. An invalid or empty storefront now returns
+  songs, albums and artists instead of an empty catalogue.
+
 ## 0.1.49 — 2026-11-25
 
 - The catalogue follows a country instead of always asking the US store. Settings →

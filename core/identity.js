@@ -185,6 +185,10 @@ async function catalog(query, { songs = 40, albums = 12, artists = 6, country } 
   if (trackRows.length < Math.min(8, songs)) {
     try { deezerSongs = await require('./deezer').search(String(query || '').trim(), Math.min(songs, 25)); } catch {}
   }
+  let deezerAlbums = [];
+  if (albumRows.length < Math.min(4, albums)) {
+    try { deezerAlbums = await require('./deezer').searchAlbums(String(query || '').trim(), Math.min(albums, 12)); } catch {}
+  }
   const seen = new Set();
   const deezerRows = deezerSongs
     .filter((t) => {
@@ -232,6 +236,26 @@ async function catalog(query, { songs = 40, albums = 12, artists = 6, country } 
     if (have.has(k)) continue;
     have.add(k);
     out.songs.push(t);
+  }
+  const haveAlbum = new Set(out.albums.map((a) => `${String(a.artist).toLowerCase()}|${String(a.name).toLowerCase()}`));
+  for (const a of deezerAlbums) {
+    if (out.albums.length >= albums) break;
+    const k = `${String(a.artist).toLowerCase()}|${String(a.name).toLowerCase()}`;
+    if (haveAlbum.has(k)) continue;
+    haveAlbum.add(k);
+    out.albums.push({ name: a.name, artist: a.artist, year: null, tracks: a.tracks || null, artwork: a.cover || null });
+  }
+  // an artist list that came only from a storefront is a storefront answer; derive the ones
+  // the Deezer rows name so the page is not empty when the store is
+  if (out.artists.length < Math.min(3, artists)) {
+    const seenArtists = new Set(out.artists.map((a) => String(a.name).toLowerCase()));
+    for (const t of out.songs) {
+      if (out.artists.length >= artists) break;
+      const name = String(t.artist || '').split(' & ')[0].split(',')[0].trim();
+      if (!name || seenArtists.has(name.toLowerCase())) continue;
+      seenArtists.add(name.toLowerCase());
+      out.artists.push({ name, genre: null, artwork: null });
+    }
   }
   return out;
 }
