@@ -6,6 +6,40 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-25 · One primary per view (`v494`)
+
+The fourth design audit's objective defects, plus the items its evidence supported.
+
+- **The DOM gate is green again.** `.plhead-actions` centres its children, so a 44px touch
+  icon no longer stretches the 36px Download button beside it. `design-check --dom` failed
+  at HEAD while the static check passed; that false green is gone.
+- **Metadata is edited in a real `<dialog>`** (`.meta-dialog`): dimmed backdrop, native
+  focus trap and Escape, one column of fields, one accent-filled Save. `Edit metadata` and
+  `Edit album` share it. The old sheet form put Save and Cancel at identical menu-row
+  styling; the bulk checkbox was 141px wide because a phone rule sized every input at 100%.
+- **A selected filter is not a primary action.** `.mode-tab.on` is `--acc-soft` with
+  `--acc` text, so Library's All, Search's Library/Web sources, a playlist's Listening and
+  Prep's active sort stop competing with the actual CTA. Phone card play discs are neutral
+  too; Flow stays the one filled control on Home.
+- **Playlist rows keep the artist on a phone** even when the track has no album — the
+  subline used to require `t.album`, so "Drifting Memory" played as an orphan title.
+- **The repeated page hero is gone.** Library, Search, Playlists, Settings and A&R start
+  with their content; the page name is in the top bar and a hidden `h1` keeps the outline.
+  `.prep-hero` remains only on Prep, where the meter earns it.
+- **Counts are always formatted**: Home tiles, Browse all and playlist minutes use
+  thousands separators like the rest of the app.
+- **Home is shorter**: the three library counters are gone, the phone shows one full-width
+  pick instead of two clipped tiles, and a 640px-tall phone gets a tighter mast. First
+  record: 334px at 390×844 (40%), 300px at 360×640 (47%, was 55%). The gate now includes
+  360×640.
+- **No empty transport** on first load; Settings cards align to their content instead of
+  stretching to the tallest sibling.
+
+Verified: `design-check` static and `--dom` pass at 1440/390/360, API 60/60, unit 13/13,
+smoke green. Desktop player row, phone playlist subline and both editors checked in a
+browser; the dialog shows "a track needs a title" inline and saves both single and bulk
+edits.
+
 ### 2026-11-25 · Fresh install works; one metadata rule (`v493`)
 
 A clean clone with one uploaded track answered 500 on radio, recommendations, Flow and

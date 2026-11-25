@@ -83,6 +83,11 @@ every track on it at once: tick *Set album* (and optionally *Set year*), type th
 save. Clearing the album field removes the album. `POST /api/tracks/edit
 {ids, album?, year?, genre?}` does the update.
 
+Both editors are a modal `<dialog>`: a dimmed backdrop, native focus trap and Escape,
+fields in one column, and one accent-filled **Save**. A server refusal ("a track needs a
+title") appears inside the dialog, not as a toast, so the value can be corrected without
+reopening it.
+
 `None` is not treated as a placeholder: it is the title of Meshuggah's 1994 EP. The
 repair pass clears `Web`, `Unknown`, `NA`, `N/A`, `YouTube` and `Untitled`, and leaves a
 real one-word title alone.
@@ -165,7 +170,7 @@ A track played twice downloads itself (`settings.auto_download_plays`, 0 disable
 `DESIGN.md` + `design/tokens.json` are the interface contract: colour, radius scale,
 the three control roles, the type scale, containers, layout, motion, content rules and
 the list of forbidden patterns. `bin/design-check.mjs` enforces it (tokens ↔ CSS, then
-the built pages at 1440 and 390) and exits non-zero on drift. Run it before and after
+the built pages at 1440, 390 and 360) and exits non-zero on drift. Run it before and after
 any visual change.
 
 ## Keys: one wheel, two notations
@@ -503,10 +508,12 @@ Library JSON is gzipped (`/api/tracks` is 870 KB raw, 142 KB compressed). On a p
 
 The greeting is a session report: day and time, city, a two line greeting (late hours get
 "Still up,"), the last track as a sentence with its BPM and key as chips, Flow as a
-transport key, Resume when a queue survived, three picks with the reason each is there,
-and three readouts under a hairline. Picks come from `GET /api/home/picks`: artist of the
-week, more from the last artist, same key, same tempo, worn out, never heard. The reason
-is the point; a pick with no argument is a billboard.
+transport key and Resume when a queue survived. Below it, picks come from
+`GET /api/home/picks`: artist of the week, more from the last artist, same key, same
+tempo, worn out, never heard. The reason is the point; a pick with no argument is a
+billboard. The phone keeps the first pick as a full-width row (two clipped tiles said
+nothing); the three library counters that used to sit under it are gone — the sidebar
+pill and Settings already carry those numbers.
 
 Motion is small and purposeful: a light runs the top edge of the Flow key on hover
 (`.beam`), a lens ring opens from the pointer on every press (`.ripple`), the assistant's
@@ -532,6 +539,13 @@ the network throttled to 400 kbps and 150 ms.
   Six seconds is enough.
 
 Measured on the same throttle: first play 7.9 s -> 3.4 s, and the tail request is gone.
+
+At 390×844 the first record starts at 334px (40% of the screen); at 360×640 a shorter
+mast keeps it at 300px (47%), down from 353px (55%). The design gate now runs that size
+too, so a phone regression cannot pass by being smaller than the phone it was tested on.
+
+There is no empty transport on first load: until something is queued the desktop player
+row collapses, instead of showing a grey bar with `…` and `0:00`.
 
 ## Format compatibility
 

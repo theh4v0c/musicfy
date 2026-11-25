@@ -166,39 +166,86 @@ const isLiked = (t) => state.liked.has(t.id);
 
 /* ============ context menu ============ */
 let ctxTarget = null;
-// in-app rename editor, shared by both track menus
-function ctxRename(t) {
-  const m = $('ctx');
-  m.innerHTML = `<div class="ctx-title">Rename</div>
-    <div class="ctx-form">
-      <label>Title<input id="rn-title" value="${esc(t.title || '')}"></label>
-      <label>Artist<input id="rn-artist" value="${esc(t.artist || '')}"></label>
-      <label>Album<input id="rn-album" value="${esc(t.album || '')}"></label>
-      <label>Year<input id="rn-year" inputmode="numeric" value="${esc(t.year || '')}" placeholder="e.g. 2002"></label>
-      <div class="ctx-row"><button class="btn btn-primary" id="rn-save">Save</button><button class="btn btn-ghost" id="rn-cancel">Cancel</button></div>
+// metadata is the one place values are written, so it is a real dialog: native focus
+// trap, Escape and backdrop, one primary Save. The sheet menu stays for actions.
+function openMetaDialog({ title, subtitle, fields, onSave, saveLabel }) {
+  const d = $('meta-dialog');
+  const form = $('meta-form');
+  $('meta-dialog-title').textContent = title;
+  const sub = $('meta-dialog-sub');
+  sub.textContent = subtitle || '';
+  sub.hidden = !subtitle;
+  $('meta-save').textContent = saveLabel || 'Save';
+  const err = $('meta-error');
+  err.hidden = true; err.textContent = '';
+  $('meta-fields').innerHTML = fields.map((f) => {
+    const input = `<input id="mf-${f.key}" type="${f.type || 'text'}" value="${esc(f.value ?? '')}" placeholder="${esc(f.placeholder || '')}"${f.inputmode ? ` inputmode="${f.inputmode}"` : ''}>`;
+    if (!f.toggle) return `<label class="meta-field"><span>${esc(f.label)}</span>${input}</label>`;
+    return `<div class="meta-toggle">
+      <label class="meta-check"><input type="checkbox" id="mf-${f.key}-on"${f.checked ? ' checked' : ''}> ${esc(f.toggleLabel || `Set ${String(f.label).toLowerCase()}`)}</label>
+      <label class="meta-field"><span>${esc(f.label)}</span>${input}</label>
     </div>`;
-  m.classList.add('open'); markCtxOpen();
-  m.style.left = Math.max(8, innerWidth / 2 - 160) + 'px';
-  m.style.top = '12%';
-  m.onclick = null;
-  m.querySelector('#rn-cancel').onclick = () => closeCtx(true);
-  m.querySelector('#rn-save').onclick = async () => {
-    const body = {
-      title: m.querySelector('#rn-title').value.trim(),
-      artist: m.querySelector('#rn-artist').value.trim(),
-      album: m.querySelector('#rn-album').value.trim(),
-      year: m.querySelector('#rn-year').value.trim(),
-    };
+  }).join('');
+  const sync = () => {
+    for (const f of fields) {
+      if (!f.toggle) continue;
+      const on = d.querySelector(`#mf-${f.key}-on`).checked;
+      const input = d.querySelector(`#mf-${f.key}`);
+      input.disabled = !on;
+      input.closest('.meta-field').classList.toggle('off', !on);
+    }
+  };
+  for (const f of fields) if (f.toggle) d.querySelector(`#mf-${f.key}-on`).onchange = sync;
+  sync();
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const body = {};
+    for (const f of fields) {
+      if (f.toggle && !d.querySelector(`#mf-${f.key}-on`).checked) continue;
+      body[f.key] = d.querySelector(`#mf-${f.key}`).value.trim();
+    }
+    const btn = $('meta-save');
+    btn.disabled = true;
     try {
-      const r = await api(`/api/tracks/${t.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-      if (r.error) return toast(r.error, 6000);
-      closeCtx(true);
+      const problem = await onSave(body);
+      if (problem) { err.textContent = problem; err.hidden = false; return; }
+      d.close();
+    } catch {
+      err.textContent = 'Could not save those changes';
+      err.hidden = false;
+    } finally { btn.disabled = false; }
+  };
+  $('meta-cancel').onclick = () => d.close();
+  if (!d.open) d.showModal();
+  const first = d.querySelector('.meta-fields input:not([type="checkbox"])');
+  if (first) setTimeout(() => first.focus(), 30);
+}
+
+// in-app metadata editor for one track
+function ctxRename(t) {
+  closeCtx(true);
+  openMetaDialog({
+    title: 'Edit metadata',
+    subtitle: [t.artist, t.title].filter(Boolean).join(' — '),
+    fields: [
+      { key: 'title', label: 'Title', value: t.title },
+      { key: 'artist', label: 'Artist', value: t.artist },
+      { key: 'album', label: 'Album', value: t.album },
+      { key: 'year', label: 'Year', value: t.year, inputmode: 'numeric', placeholder: 'e.g. 2002' },
+    ],
+    onSave: async (body) => {
+      const res = await fetch(`/api/tracks/${t.id}`, {
+        method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return data.error || 'Could not save this track';
       state.allTracks = null;
       bustCache();
-      toast('Renamed', 4000);
+      toast('Metadata saved', 4000);
       refreshView();
-    } catch { toast('Could not rename', 4000); }
-  };
+      return null;
+    },
+  });
 }
 
 function openCtx(t, x, y) {
@@ -1089,10 +1136,6 @@ function bindViewSwitch(scope, onChange) {
   });
 }
 
-function heroBanner(kicker, title, sub) {
-  return `<div class="prep-hero"><div class="prep-kicker">${esc(kicker)}</div><div class="prep-title">${esc(title)}</div><p class="prep-sub">${esc(sub)}</p></div>`;
-}
-
 async function renderHome() {
   setNav('home'); state.playlistId = null; renderSidebar();
   // the name, where the sidebar is not on screen to carry it
@@ -1120,13 +1163,12 @@ async function renderHome() {
     <!-- the masthead greets and offers Flow; these belong to the page, after the first rail -->
     <div class="home-context">
       <div class="mast-picks" id="mast-picks" hidden></div>
-      <div class="mast-tiles" id="quick"></div>
     </div>
     <div id="home-lazy">
       <div id="discover-home"></div>
       <div class="sec-title">Recently played <small id="recent-hint"></small></div>
       <div class="row-scroller" id="recent-row"></div>
-      <div class="sec-title">Your playlists <small>${state.playlists.length} TOTAL</small></div>
+      <div class="sec-title">Your playlists <small>${Number(state.playlists.length).toLocaleString()} TOTAL</small></div>
       <div class="pgrid" id="home-grid"></div>
     </div>`;
   // the masthead reports the session, not the weather: time, place, what was last on
@@ -1167,7 +1209,6 @@ async function renderHome() {
     // loaded yet when the tiles first render
     if (g.stats && Number.isFinite(Number(g.stats.addedWeek))) {
       state._addedWeek = Number(g.stats.addedWeek);
-      drawQuick();
     }
 
   }).catch(() => {});
@@ -1180,7 +1221,6 @@ async function renderHome() {
     resume.innerHTML = `<span class="mast-resume-k">Resume</span><b>${esc(rq.title || 'last track')}</b>`;
     resume.onclick = () => { playAt(state.qi); };
   }
-  drawQuick();
   const fb = $('flow-btn');
   if (fb) fb.onclick = async () => {
     fb.disabled = true;
@@ -1540,35 +1580,6 @@ async function loadMastPicks(fresh) {
   } catch { host.hidden = true; }
 }
 
-function drawQuick() {
-  const q = $('quick');
-  if (!q) return;
-  // three readouts, not a grid of cards: the state of the library at a glance
-  const tracks = state.allTracks || [];
-  const weekAgo = Math.floor(Date.now() / 1000) - 7 * 86400;
-  const fresh = state._addedWeek != null
-    ? state._addedWeek
-    : tracks.filter((t) => Number(t.added_at) >= weekAgo).length;
-  const tiles = [
-    { go: 'liked', n: state.liked.size, l: 'liked songs', s: 'your shortlist' },
-    { go: 'fresh', n: fresh, l: 'new this week', s: 'in the library' },
-    { go: 'prep', n: state.playlists.length, l: 'playlists', s: 'ready to prep' },
-  ];
-  q.innerHTML = tiles.map((t) => `<button class="mtile" data-go="${esc(t.go)}">
-      <span class="mtile-n">${Number(t.n) || 0}</span>
-      <span class="mtile-l">${esc(t.l)}</span>
-      <span class="mtile-s">${esc(t.s)}</span>
-    </button>`).join('');
-  q.querySelectorAll('.mtile').forEach((el) => {
-    el.onclick = () => {
-      const go = el.dataset.go;
-      if (go === 'liked') return nav('liked');
-      if (go === 'fresh') return nav('library');
-      if (go === 'prep') return nav('djexport');
-    };
-  });
-}
-
 async function drawRecents(rec) {
   const row = $('recent-row');
   const hint = $('recent-hint');
@@ -1704,7 +1715,7 @@ async function openPlaylist(pid, push = true) {
   plnEl.textContent = list.length;
   paintPlMode();
   const totalS = list.reduce((a, t) => a + (t.duration || 0), 0);
-  pldurEl.textContent = list.length ? `${Math.round(totalS / 60)} min` : '';
+  pldurEl.textContent = list.length ? `${Math.round(totalS / 60).toLocaleString()} min` : '';
   state.sort = { key: 'pos', dir: 1 };
   function paintPlMode() {
     const mode = plView();
@@ -1923,12 +1934,12 @@ async function renderLibrary() {
   setNav('library'); state.playlistId = null; renderSidebar();
   $('view-title').textContent = 'Playlists';
   const v = $('view');
-  v.innerHTML = `${heroBanner('PLAYLISTS', 'Playlists', 'The sets you build — play one, prep it, export it.')}<div class="lib-actions">
+  v.innerHTML = `<h1 class="sr-only">Playlists</h1><div class="lib-actions">
       <button class="btn btn-primary" id="lib-upload">Upload track</button>
       <button class="btn btn-ghost" id="lib-newpl">New playlist</button>
       <button class="btn btn-ghost" id="hist-import">Playlist from most-played</button>
     </div>
-    <div class="sec-title" style="margin-top:0">Playlists <small>${state.playlists.length} TOTAL</small></div>
+    <div class="sec-title" style="margin-top:0">Playlists <small>${Number(state.playlists.length).toLocaleString()} TOTAL</small></div>
     <div class="list-bar">${orderControls()}${viewSwitch('library', libView())}</div>
     <div class="pgrid" id="lib-grid"></div>`;
   const drawGrid = (view) => {
@@ -2242,7 +2253,7 @@ async function renderSongs(push = true) {
   renderSidebar();
   $('view-title').textContent = 'Library';
   const v = $('view');
-  v.innerHTML = `${heroBanner('LIBRARY', 'Library', 'Every track you own. Search it, filter it, play it.')}<div class="songs-chips" id="songs-chips"></div>
+  v.innerHTML = `<h1 class="sr-only">Library</h1><div class="songs-chips" id="songs-chips"></div>
     <div class="lib-actions songs-head">
       <input class="search" id="songs-q" placeholder="Filter by title, artist or album" autocomplete="off">
       <div class="mode-tabs" id="songs-filter">
@@ -2683,7 +2694,7 @@ async function renderSettings() {
   try { d = await api('/api/settings', { nocache: true }); } catch {}
   const s = d.settings || {};
   const l = d.llm || {};
-  v.innerHTML = `${heroBanner('SYSTEM', 'Settings', 'Your identity, taste and playback defaults.')}
+  v.innerHTML = `<h1 class="sr-only">Settings</h1>
     <div class="set-grid">
       <section class="set-card" data-tone="acc">
         <h2>You</h2>
@@ -3431,7 +3442,7 @@ async function renderAskAi() {
   state.view = 'askai'; state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'A&R';
   const v = $('view');
-  v.innerHTML = `${heroBanner('ASSISTANT', 'A&R', 'Finds, builds and fetches — in your library, and outside it.')}<div class="search-wrap">
+  v.innerHTML = `<h1 class="sr-only">A&amp;R</h1><div class="search-wrap">
       <input class="search" id="ai-q" placeholder="Ask, build or teach: 20 dark techno I don't have · no Imagine Dragons" autocomplete="off">
       <div class="ask-hint">
         <button class="ask-ex">10 ambient tracks I don't have</button>
@@ -3481,7 +3492,7 @@ async function renderSearch() {
   setNav('search'); state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'Search';
   const v = $('view');
-  v.innerHTML = `${heroBanner('SEARCH', 'Search', 'Find a track, an artist, an album.')}
+  v.innerHTML = `<h1 class="sr-only">Search</h1>
     <div class="search-wrap">
       <div class="search-field">
         <input class="search" id="q" placeholder="Search tracks, artists and albums" autocomplete="off">
@@ -3575,7 +3586,7 @@ async function renderSearch() {
     if (state.genreFilter) { renderGenreView(res, all, 60); return; }
     res.innerHTML = '';
     if (!s) {
-      res.innerHTML = `<div class="sec-title" style="margin-top:0">Browse all <small>${all.length} TRACKS</small></div>`;
+      res.innerHTML = `<div class="sec-title" style="margin-top:0">Browse all <small>${Number(all.length).toLocaleString()} TRACKS</small></div>`;
       const g = document.createElement('div'); g.className = 'pgrid';
       for (const p of state.playlists) g.appendChild(pcard(p));
       res.appendChild(g); return;
@@ -4068,7 +4079,7 @@ function trow(t, i, list) {
   el.innerHTML = `
     <div class="tno"><span class="tno-num">${String(i + 1).padStart(2, '0')}</span><button class="tno-play" aria-label="Play">${IC.play}</button></div>
     ${artTag(t, 'tart', 96)}
-    <div class="tmeta"><div class="tt">${esc(t.title)}</div>${t.album ? `<div class="talbum-line">${t.artist ? `<span class="tal-artist alink" data-kind="artist">${esc(t.artist)}</span><span class="tal-sep"> &middot; </span>` : ''}<span class="alink">${esc(t.album)}</span></div>` : ''}${genreTag(t) ? `<button class="genrechip" data-kind="genre">${esc(genreTag(t))}</button>` : ''}${t.bpm ? `<div class="tbpm">${Math.round(t.bpm)} BPM${t.key ? ` <button class="keychip key-${keyHueClass(t.key, t.key_scale)}" data-kind="key" title="Sort by key">${esc(keyLabel(t))}</button>` : ''}</div>` : ''}</div>
+    <div class="tmeta"><div class="tt">${esc(t.title)}</div>${(t.artist || t.album) ? `<div class="talbum-line${t.album ? '' : ' no-album'}">${t.artist ? `<span class="tal-artist alink" data-kind="artist">${esc(t.artist)}</span>` : ''}${t.artist && t.album ? '<span class="tal-sep"> &middot; </span>' : ''}${t.album ? `<span class="alink" data-kind="album">${esc(t.album)}</span>` : ''}</div>` : ''}${genreTag(t) ? `<button class="genrechip" data-kind="genre">${esc(genreTag(t))}</button>` : ''}${t.bpm ? `<div class="tbpm">${Math.round(t.bpm)} BPM${t.key ? ` <button class="keychip key-${keyHueClass(t.key, t.key_scale)}" data-kind="key" title="Sort by key">${esc(keyLabel(t))}</button>` : ''}</div>` : ''}</div>
     <div class="tartist"><span class="alink ${t.artist ? '' : 'muted'}" data-kind="artist">${esc(t.artist || 'unknown artist')}</span></div>
     <div class="talbum"><span class="alink" data-kind="album">${esc(t.album || '')}</span></div>
     <div class="tadded">${esc(added)}</div>
@@ -4527,38 +4538,28 @@ function openBulkEdit(idsArg, afterSave) {
     const vals = rows.map((r) => String(r[key] ?? ''));
     return vals.length && vals.every((v) => v === vals[0]) ? vals[0] : '';
   };
-  const album = same('album');
-  const year = same('year');
-  markCtxOpen();
-  const m = $('ctx');
-  m.innerHTML = `<div class="ctx-title">Edit ${ids.length} track${ids.length === 1 ? '' : 's'}</div>
-    <div class="ctx-form">
-      <label class="set-check"><input type="checkbox" id="bulk-album-on" checked> Set album</label>
-      <label>Album<input id="bulk-album" value="${esc(album)}" placeholder="album name"></label>
-      <label class="set-check"><input type="checkbox" id="bulk-year-on"> Set year</label>
-      <label>Year<input id="bulk-year" inputmode="numeric" value="${esc(year)}" placeholder="e.g. 1998"></label>
-      <div class="ctx-row"><button class="btn btn-primary" id="bulk-save">Save</button><button class="btn btn-ghost" id="bulk-cancel">Cancel</button></div>
-    </div>`;
-  m.classList.add('open'); markCtxOpen();
-  m.style.left = Math.max(8, innerWidth / 2 - 170) + 'px';
-  m.style.top = '12%';
-  m.onclick = null;
-  m.querySelector('#bulk-cancel').onclick = () => closeCtx(true);
-  m.querySelector('#bulk-save').onclick = async () => {
-    const body = { ids };
-    if (m.querySelector('#bulk-album-on').checked) body.album = m.querySelector('#bulk-album').value.trim();
-    if (m.querySelector('#bulk-year-on').checked) body.year = m.querySelector('#bulk-year').value.trim();
-    if (body.album === undefined && body.year === undefined) { toast('Tick album or year first', 4000); return; }
-    try {
-      const r = await api('/api/tracks/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-      closeCtx(true);
+  openMetaDialog({
+    title: `Edit ${ids.length} track${ids.length === 1 ? '' : 's'}`,
+    subtitle: 'Album and year apply to every selected track.',
+    fields: [
+      { key: 'album', label: 'Album', value: same('album'), toggle: true, checked: true, toggleLabel: 'Set album', placeholder: 'album name' },
+      { key: 'year', label: 'Year', value: same('year'), toggle: true, checked: false, toggleLabel: 'Set year', inputmode: 'numeric', placeholder: 'e.g. 1998' },
+    ],
+    onSave: async (body) => {
+      if (body.album === undefined && body.year === undefined) return 'Tick album or year first';
+      const res = await fetch('/api/tracks/edit', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids, ...body }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return data.error || 'Could not update those tracks';
       state.allTracks = null;
       bustCache();
       clearSelection();
-      toast(`${r.updated} track${r.updated === 1 ? '' : 's'} updated`, 4000);
+      toast(`${data.updated} track${data.updated === 1 ? '' : 's'} updated`, 4000);
       if (typeof afterSave === 'function') afterSave(body); else refreshView();
-    } catch { toast('Could not update those tracks', 4000); }
-  };
+      return null;
+    },
+  });
 }
 
 async function selCreatePlaylist() {
@@ -4679,6 +4680,7 @@ function restoreQueue() {
     state.origin = s.origin || '';
     state.current = state.queue[state.qi] || null;
     if (state.current) {
+      const app = $('app'); if (app) app.classList.remove('no-track');
       paintNowPlaying();
       $('pb-badge').hidden = false;
     }
@@ -4954,6 +4956,7 @@ function logPlay(ev, extra = {}) {
 }
 
 function playList(list, i = 0, shuffled = false, origin = '') {
+  const app = $('app'); if (app) app.classList.remove('no-track');
   if (!list.length) return;
   state.origin = origin;
   state.queue = shuffled ? shuffleArr([...list]) : [...list];

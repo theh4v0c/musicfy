@@ -61,6 +61,7 @@ const VIEWS = [
 const SIZES = [
   ['desktop', 1440, 900, false],
   ['phone', 390, 844, true],
+  ['small', 360, 640, true],
 ];
 
 const round = (n) => Math.round(n);
