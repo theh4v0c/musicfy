@@ -4895,7 +4895,7 @@ const server = http.createServer(async (req, res) => {
           'GET  /api/stats', 'GET /api/cover/:id', 'GET /api/cover-playlist/:id', 'GET /api/stream/:id',
           'POST /api/upload/track', 'POST /api/playlists/:id/cover', 'POST /api/listen',
         ],
-        auth: 'none at the app layer; exposure is gated by Pangolin SSO at musicfy.wnlab.com',
+        auth: 'none at the app layer by default; set MUSICFY_TOKEN or put an authenticated proxy in front',
       });
     }
 

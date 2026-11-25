@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Documentation audit: removed the remaining hostname/proxy/personal references, corrected
+  the stale duplicate-key and endpoint descriptions, the test count and the 360px gate,
+  and added demo screenshots to the README.
+
 ## 0.1.1 — 2026-11-25
 
 Licensing and distribution notices.

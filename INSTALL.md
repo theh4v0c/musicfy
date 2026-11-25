@@ -126,8 +126,19 @@ WantedBy=multi-user.target
 
 ### Docker (optional)
 
-One image with Node 22.13+, ffmpeg, and the two Python venvs; mount `owned/` and `data/` as
-volumes; expose 8710 on localhost only.
+One image with Node 22, ffmpeg and a shared Python venv (yt-dlp + librosa), built from the
+included `Dockerfile`:
+
+```sh
+docker build -t musicfy .
+docker run -d --name musicfy -p 127.0.0.1:8710:8710 \
+  -v musicfy-data:/data -v /path/to/music:/music musicfy
+```
+
+`/data` holds the database and settings; the Python venv is inside the image. `/music` is
+the library root (`MUSICFY_OWNED`). The image runs as the `node` user, so the mounted music
+directory must be readable by it. For a LAN install, publish `8710:8710` and set a token;
+otherwise keep the `127.0.0.1` binding above.
 
 ---
 
@@ -144,9 +155,9 @@ The Ask/Agent features use this endpoint only to parse a request into an intent;
 library query itself is deterministic (`core/query.js`). If the endpoint is unreachable,
 everything still works with the local planner.
 
-**Security note:** the current build has no app-layer auth. Do not expose the port to the
-internet. Put it behind a VPN or an SSO proxy, and bind it to `127.0.0.1` if the proxy is
-on the same host.
+**Security note:** there are no per-user accounts or password reset; authentication is one
+optional shared token (`MUSICFY_TOKEN`). Do not expose the port to the internet without a
+VPN or an authenticated proxy, and bind it to `127.0.0.1` if the proxy is on the same host.
 
 ---
 
@@ -182,7 +193,7 @@ done; see `MILESTONES.md`.
 - **`MUSICFY_TOKEN`** — set a shared secret and every request needs it. Visit
   `http://host:8710/?token=<secret>` once; the server sets an HttpOnly cookie and
   redirects to the clean URL. API clients can send `Authorization: Bearer <secret>`.
-  Unset = no auth (current LAN behaviour).
+  Unset leaves the app open; only do that on a trusted LAN.
 - **`MUSICFY_ORIGINS`** — comma-separated extra origins allowed to make writes
   (needed when a proxy rewrites `Host`, e.g. `https://musicfy.example.com`).
 - **`MUSICFY_BIND`** — bind host, default `0.0.0.0`. Set `127.0.0.1` when a reverse proxy

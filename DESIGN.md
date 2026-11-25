@@ -3,7 +3,7 @@
 **Status: binding.** This file and `design/tokens.json` are the source of truth for the
 interface. Where this document and any CSS disagree, the CSS is wrong. Nothing in the
 visual layer changes without changing this document first. This stays in force until
-Roger says otherwise.
+this document is deliberately changed.
 
 ---
 
@@ -212,8 +212,9 @@ its label, not a full-width input.
 - Top bar: 64px desktop, 56px phone, one 30px icon control per side.
 - The view is the only scroller. Page padding 26/28/48 desktop, 18/16/130 phone — the
   130 clears the mini player and the bottom bar.
-- The home masthead does one job: greet and offer Flow. On-deck picks and the quick
-  counters belong below the first content rail, so music starts in the top third.
+- The home masthead does one job: greet and offer Flow. On-deck picks sit below the
+  first content rail, so music starts in the top third; the old library counters were
+  removed.
 - Bottom bar 60px + safe-area; the mini player floats at 64px from the bottom.
 - Breakpoints, and only these three: **920** (shell switches to phone/tablet), **760**
   (dense phone rules), **1281** (wide table columns). A new breakpoint is a design
@@ -266,9 +267,9 @@ These are real defects from this project, not hypotheticals:
 
 ```bash
 node bin/design-check.mjs          # tokens ↔ CSS ↔ built pages, exits non-zero on drift
-NODE_PATH=… node bin/design-audit.mjs   # the measurement table, every view, 1440 and 390
+NODE_PATH=… node bin/design-audit.mjs   # measurement table, every view, 1440 / 390 / 360
 bash bin/smoke.sh                  # API behaviour
-node bin/test.mjs                  # 50 API tests
+node bin/test.mjs                  # 61 API tests
 ```
 
 `design-check` is the gate. It checks that every `--r-*`, `--ctl-*`, `--fs-*` variable

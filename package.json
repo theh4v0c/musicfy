@@ -30,7 +30,8 @@
     "SECURITY.md",
     "LICENSE",
     "CONTRIBUTING.md",
-    "THIRD_PARTY.md"
+    "THIRD_PARTY.md",
+    "docs/screenshots/"
   ],
   "scripts": {
     "start": "node core/core.js",

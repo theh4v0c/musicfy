@@ -26,7 +26,7 @@ Web assets are versioned with `?v=N` in `web/index.html`. Bump it on every deplo
 
 ## Data model
 
-- `tracks`: one row per artist and title. `dup_key = normalise(artist)|normalise(title)` with a UNIQUE index, so duplicates cannot be inserted. Album, case, feat blocks, remaster and deluxe suffixes are stripped before hashing.
+- `tracks`: one row per artist and title. `dup_key = normalise(artist)|normalise(title)` with a UNIQUE index. Album, case, `feat` blocks, bracketed suffixes and hyphenated `- Remastered`/`- Single Version`/`- Radio Edit` suffixes are stripped before hashing; a parenthetical edition such as `(Remastered 2006)` stays part of the title, so an original and a remaster remain separate records.
 - `files`: one row per owned file, tier `owned`. One file per track is enforced in the download ingest: the better copy wins, ranked by codec first then bitrate (`fileQuality()`), so a 254k mp3 transcoded from 160k AAC loses to the original AAC.
 - `playlists`, `playlist_tracks` (ordered, position), `listens`, `likes`, `resolutions` (which rung served a track and at what quality), `jobs` (download queue: state, progress, detail), `settings` (`auto_download_plays`).
 - History: `spotify_plays`, `taste_tracks`, `taste_artists`, `play_edges`, `history_files` ledger.
@@ -601,7 +601,7 @@ Library: `GET/POST /api/playlists`, `GET/PATCH/DELETE /api/playlists/:id`, `POST
 
 Discovery: `GET /api/search/ladder?q=`, `GET /api/ladder/stream/{youtube,soundcloud,generic}`, `GET /api/prewarm/:id`, `POST /api/ladder/download`, `GET /api/jobs/:id`, `GET /api/downloads`, `POST /api/downloads/:id/retry`, `POST /api/downloads/:id/cancel`, `POST /api/downloads/retry-failed`, `POST /api/downloads/cancel-all`, `POST /api/downloads/clear-failed`, `GET /api/health/rungs`.
 
-Maintenance: `POST /api/mirror/spotify`, `POST /api/mirror/track`, `POST /api/history/scan`, `POST /api/history/materialize`, `POST /api/maintenance/repair`, `POST /api/maintenance/merge-duplicates`, `POST /api/maintenance/dedupe`, `POST /api/covers/fill`, `GET/POST /api/settings`, `GET/POST /api/soundcloud/token`, `GET /api/docs` (generated list), `GET /api/stats`.
+Maintenance: `POST /api/mirror/spotify`, `POST /api/mirror/track`, `POST /api/history/scan`, `POST /api/history/materialize`, `POST /api/maintenance/repair`, `GET /api/maintenance/duplicates`, `POST /api/maintenance/dedupe`, `POST /api/maintenance/dedupe-files`, `POST /api/tracks/:id/unlock`, `POST /api/covers/fill`, `GET/POST /api/settings`, `GET/POST /api/soundcloud/token`, `GET /api/docs` (generated list), `GET /api/stats`.
 
 ## Web app notes
 
@@ -1007,7 +1007,7 @@ Source archive `backups/musicfy-src-<stamp>.tar.gz` on the Mac and in the Pi bac
 ## Rules that must not be broken
 
 - Spotify is metadata only. There is no playback path through Spotify and none may be added.
-- Internet exposure only through Pangolin.
+- Internet exposure only through an authenticated reverse proxy or VPN.
 - No paid services, and no paid source rung. Only free sources and optional free-account tokens.
 - Always take a source and database backup before modifying code.
 - No emojis in the UI, no em dashes in anything user facing, no marketing copy in the interface.

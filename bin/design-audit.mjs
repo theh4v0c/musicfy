@@ -5,7 +5,7 @@
  * every interactive control, groups them by role, and fails when two views disagree
  * about the height, the type size or the radius of the same role.
  *
- *   BASE=http://LAN_IP:8710 node bin/design-audit.mjs
+ *   BASE=http://localhost:8710 node bin/design-audit.mjs
  *   BASE=... node bin/design-audit.mjs --json     (machine output)
  *
  * Roles come from the class, not from the page:
@@ -21,7 +21,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 let chromium;
-for (const id of ['playwright', '/Users/macmini/Desktop/agents/cognitive_core/node_modules/playwright']) {
+for (const id of [process.env.PLAYWRIGHT_PATH, 'playwright'].filter(Boolean)) {
   try { ({ chromium } = require(id)); break; } catch {}
 }
 if (!chromium) {

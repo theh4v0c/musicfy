@@ -3,7 +3,7 @@
 ## The design source of truth
 
 `DESIGN.md` and `design/tokens.json` govern this app's interface. They are binding
-until Roger says otherwise. Where a stylesheet and that document disagree, the
+until this document is deliberately changed. Where a stylesheet and that document disagree, the
 stylesheet is wrong.
 
 Change order, every time:
@@ -11,7 +11,7 @@ Change order, every time:
 1. `design/tokens.json` (or `DESIGN.md`) first.
 2. `web/app.css` reads the token. Never write a raw size.
 3. `node bin/design-check.mjs` — tokens ↔ CSS, literal scans.
-4. `node bin/design-check.mjs --dom` — the built pages, every view, 1440 and 390.
+4. `node bin/design-check.mjs --dom` — the built pages, every view, 1440, 390 and 360.
 5. `bash bin/smoke.sh && node bin/test.mjs` — API behaviour.
 
 A check that fails means the work is not done. Do not "adjust the check" to make it
@@ -32,7 +32,7 @@ pass; adjust the CSS or update the token deliberately, and say which.
 - A styling class does one job. Never share a layout class between rows with different
   contents (that is how `.lib-actions` broke two pages at once).
 - Never let a service worker own a media response.
-- Deploy: `rsync -az web/ plm:/opt/musicfy/web/ && rsync -az core/ plm:/opt/musicfy/core/ && ssh plm 'sudo systemctl restart musicfy-core'`.
+- Deploy: `rsync -az web/ HOST:/opt/musicfy/web/ && rsync -az core/ HOST:/opt/musicfy/core/ && ssh HOST 'sudo systemctl restart musicfy-core'`.
   Bump `?v=` in `web/index.html`.
 - Verify through the client path, not `curl`: the gzip cache is keyed by content hash
   now, but the browser is the only honest witness.

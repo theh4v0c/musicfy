@@ -25,6 +25,18 @@ musicfy start
 the rest. The service still runs on one port and reads every path from the environment;
 see `INSTALL.md` for the manual route and the env table.
 
+## A look
+
+Screenshots use a small demo library, not a real one.
+
+| Library | Prep |
+|---|---|
+| ![Library: tracks, filters and album art](docs/screenshots/library.jpg) | ![Prep: playlists with analysis state and export actions](docs/screenshots/prep.jpg) |
+
+| Album | Playlist on a phone |
+|---|---|
+| ![Album page in running order](docs/screenshots/album.jpg) | ![Playlist on a phone, with artist under each title](docs/screenshots/playlist-phone.jpg) |
+
 ## What it does
 
 - **Library** of tracks, albums, artists and playlists in `node:sqlite`.

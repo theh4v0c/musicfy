@@ -402,7 +402,7 @@ $('ctx').addEventListener('click', async (e) => {
     return;
   }
   if (act === 'offline') {
-    if (!('serviceWorker' in navigator)) { toast('Offline playback needs HTTPS — open the Pangolin URL', 6000); return; }
+    if (!('serviceWorker' in navigator)) { toast('Offline playback needs HTTPS — open the https:// URL', 6000); return; }
     const on = !(state.offlineIds && state.offlineIds.has(t.id));
     postToSw(on ? { type: 'cache-track', id: t.id } : { type: 'uncache-track', id: t.id });
     toast(on ? 'Saving for offline…' : 'Removed from offline', 4000);
