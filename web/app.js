@@ -2942,9 +2942,21 @@ async function renderSettings() {
     maint('Repairing metadata…');
     try {
       const r = await api('/api/maintenance/repair', { method: 'POST' });
-      maint(`Repair: ${r.fixed_year} year${r.fixed_year === 1 ? '' : 's'} fixed · ${r.cleared_placeholder_album} placeholder album${r.cleared_placeholder_album === 1 ? '' : 's'} cleared${r.trimmed ? ` · ${r.trimmed} titles trimmed` : ''}`, 'ok');
+      let durations = 0;
+      try { const d = await api('/api/maintenance/fill-durations', { method: 'POST' }); durations = d.fixed || 0; } catch {}
+      const bits = [];
+      if (r.fixed_year) bits.push(`${Number(r.fixed_year).toLocaleString()} year${r.fixed_year === 1 ? '' : 's'} normalised`);
+      if (r.cleared_placeholder_album) bits.push(`${r.cleared_placeholder_album} placeholder album${r.cleared_placeholder_album === 1 ? '' : 's'} cleared`);
+      if (r.cleaned_titles) bits.push(`${r.cleaned_titles} media label${r.cleaned_titles === 1 ? '' : 's'} removed from titles`);
+      if (r.trimmed) bits.push(`${r.trimmed} trimmed`);
+      if (durations) bits.push(`${durations} duration${durations === 1 ? '' : 's'} filled`);
+      maint(bits.length
+        ? `Repair: ${bits.join(' · ')}${r.unknown_artists ? ` · ${r.unknown_artists} still have no artist` : ''}`
+        : `Repair: nothing to fix — years, albums and titles are clean${r.unknown_artists ? `; ${r.unknown_artists} tracks have no artist` : ''}.`,
+        bits.length ? 'ok' : 'muted');
       state.allTracks = null;
-    } catch { maint('Repair failed', 'bad'); }
+      bustCache();
+    } catch (e) { maint(`Repair failed${e.message ? ` (${e.message})` : ''}`, 'bad'); }
     setRepair.disabled = false;
   };
   const setGenres = document.getElementById('set-genres');

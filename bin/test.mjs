@@ -125,6 +125,10 @@ const recs = await j('/api/recommend?limit=50');
 const childFree = (recs.body?.picks || []).every((t) => t.genre_family !== 'children');
 ok('children are not recommended while the preference is off', tasteCfg.taste_include_children === true || childFree, JSON.stringify(recs.body?.profile));
 
+console.log('maintenance repair');
+const mr = await post('/api/maintenance/repair', {});
+ok('metadata repair reports what it changed', mr.status === 200 && mr.body?.ok && 'fixed_year' in mr.body && 'cleaned_titles' in mr.body, JSON.stringify(mr.body));
+
 console.log('analysis version');
 const an = await j('/api/analyze/status');
 ok('analysis reports its version', Number(an.body?.version) >= 2, JSON.stringify(an.body));

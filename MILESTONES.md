@@ -6,6 +6,25 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-25 · Maintenance repair actually repairs, and says so (`v489`)
+
+The Settings button returned "0 years fixed" on a library where 538 rows held years as
+`2010.0`: the old code read `Number('2010.0')` (a valid year), so it considered them
+clean, and it bound the number back into a TEXT column that SQLite rendered as `2010.0`
+again. There was no change, hence no message beyond zero.
+
+- Years are normalised to integer text (`2010.0` → `2010`), impossible years cleared.
+- Placeholder albums now include `NA` / `N/A` and `YouTube`; media labels such as
+  `(Official Audio)`, `(Lyric Video)`, `(Visualizer)` and a trailing `- Topic` are removed.
+- Missing durations are filled as part of the same action; the result names every kind of
+  change and how many tracks still have no artist.
+- When there is nothing left it says "nothing to fix — years, albums and titles are
+  clean" instead of a row of zeros.
+- First run on the live library: 538 years normalised, 2 placeholder albums cleared, 1
+  media label removed; 45 tracks still have no artist (reported, not invented).
+
+Tests 55 → 56, unit 13/13, design-check and smoke green.
+
 ### 2026-11-24 · Album covers: exact artist+album, and a person chooses (`v487`)
 
 Forbidden's *Green* had the wrong cover on every track, and the album page only offered

@@ -2563,24 +2563,42 @@ const server = http.createServer(async (req, res) => {
       return json(res, 202, { started: rows.length > 0, count: rows.length });
     }
 
-    // metadata repair: clear impossible years, collapse placeholder albums, trim whitespace
+    // metadata repair: normalise years, collapse placeholder albums, strip media noise,
+    // trim whitespace. Reports every kind of change; a button that only says "0" on a
+    // library full of `2010.0` years looks dead.
     if (u.pathname === '/api/maintenance/repair' && req.method === 'POST') {
       const thisYear = new Date().getFullYear();
-      let fixedYear = 0, fixedAlbum = 0, trimmed = 0;
+      let fixedYear = 0, fixedAlbum = 0, trimmed = 0, cleanedTitles = 0;
       const rows = db.prepare("SELECT id, title, artist, album, year FROM tracks").all();
       const upd = db.prepare('UPDATE tracks SET title=?, artist=?, album=?, year=? WHERE id=?');
+      const PLACEHOLDER = new Set(['web', 'unknown', 'youtube', 'youtube music', 'na', 'n/a', 'untitled']);
       for (const t of rows) {
-        const title = (t.title || '').replace(/\s+/g, ' ').trim();
-        const artist = (t.artist || '').replace(/\s+/g, ' ').trim();
+        let title = (t.title || '').replace(/\s+/g, ' ').trim();
+        let artist = (t.artist || '').replace(/\s+/g, ' ').trim();
         let album = (t.album || '').replace(/\s+/g, ' ').trim();
-        let year = Number(t.year) || null;
         let changed = false;
-        if (year !== null && (year < 1900 || year > thisYear + 1)) { year = null; fixedYear++; changed = true; }
-        if (album && (album.toLowerCase() === 'web' || album.toLowerCase() === 'unknown' || album === title)) { album = ''; fixedAlbum++; changed = true; }
         if (title !== t.title || artist !== t.artist) trimmed++;
-        if (changed || title !== t.title || artist !== t.artist) upd.run(title, artist, album, year, t.id);
+
+        // 2010.0 -> 2010, impossible years -> empty
+        const rawYear = t.year == null || String(t.year).trim() === '' ? null : Number(t.year);
+        let year = rawYear !== null && Number.isFinite(rawYear) ? Math.trunc(rawYear) : null;
+        if (year !== null && (year < 1900 || year > thisYear + 1)) year = null;
+        if (String(t.year ?? '') !== String(year ?? '')) { fixedYear += 1; changed = true; }
+
+        if (album && (PLACEHOLDER.has(album.toLowerCase()) || album === title)) { album = ''; fixedAlbum += 1; changed = true; }
+        // YouTube titles keep their media label; it is not part of the song
+        const clean = title.replace(/\s*[\[(]\s*(official\s*(audio|video|music\s*video)|lyric[s]?\s*video|visuali[sz]er|audio)\s*[\])]\s*$/i, '').trim();
+        if (clean && clean !== title) { title = clean; cleanedTitles += 1; changed = true; }
+        artist = artist.replace(/\s*-\s*topic$/i, '').trim();
+        if (title !== t.title || artist !== t.artist) changed = true;
+        // the column is TEXT: bind the number as a string, or SQLite writes 2010.0 again
+        if (changed) upd.run(title, artist, album, year === null ? null : String(year), t.id);
       }
-      json(res, 200, { ok: true, fixed_year: fixedYear, cleared_placeholder_album: fixedAlbum, trimmed });
+      const unknownArtists = db.prepare("SELECT COUNT(*) c FROM tracks WHERE lower(COALESCE(artist,'')) IN ('', 'unknown', 'unknown artist')").get().c;
+      json(res, 200, {
+        ok: true, fixed_year: fixedYear, cleared_placeholder_album: fixedAlbum,
+        trimmed, cleaned_titles: cleanedTitles, unknown_artists: unknownArtists,
+      });
       return;
     }
 

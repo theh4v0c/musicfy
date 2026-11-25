@@ -318,7 +318,7 @@ toast that vanishes is not an answer.
 
 | button | what it does | reports |
 |---|---|---|
-| Repair metadata | whitespace, years, placeholder albums (`Web`, `Unknown`) | years fixed, albums cleared, titles trimmed |
+| Repair metadata | `2010.0` years, impossible years, placeholder albums (`Web`, `Unknown`, `NA`), media labels in titles (`(Official Audio)`), whitespace, missing durations | years normalised · albums cleared · labels removed · titles trimmed · durations filled · how many still have no artist |
 | Fill genres | MusicBrainz artist tags, one artist every 1.5 s, split across collaborators | artists checked · newly tagged · tracks with a genre, **live** |
 | Fix covers | official album art for tracks with none | tried · found · still without art · the titles the catalogue could not match |
 | Remove duplicate files | keeps the best copy per track, deletes the rest | files removed · tracks affected |
