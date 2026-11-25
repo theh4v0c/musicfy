@@ -58,6 +58,7 @@ const IC = {
   chevDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
 };
 const fmt = (s) => (!s || !isFinite(s)) ? '0:00' : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const fmtSize = (bytes) => `${(Number(bytes || 0) / 1e9).toLocaleString(LOC(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} GB`;
 const artUrl = (t, s) => t && t.has_art ? `/api/cover/${t.id}?s=${s}&v=${state.artV || 0}` : null;
 // deterministic gradient from a seed, so every placeholder has its own colour, not a flat box
 function gradFor(seed) {
@@ -897,9 +898,9 @@ function renderSlibItems() {
     row.className = 'slib-item' + (state.playlistId === p.id ? ' on' : '');
     row.innerHTML = p.liked
       ? `<div class="slib-art ph" style="display:flex;align-items:center;justify-content:center;color:var(--liked)">${IC.heartFull}</div>
-         <div style="min-width:0"><div class="slib-name">Liked Songs</div><div class="slib-sub">${p.n} songs</div></div>`
+         <div style="min-width:0"><div class="slib-name">Liked Songs</div><div class="slib-sub">${p.n} ${Number(p.n) === 1 ? 'song' : 'songs'}</div></div>`
       : `<img class="slib-art" src="/api/cover-playlist/${encodeURIComponent(p.id)}?s=88&v=${state.artV || 0}" alt="" loading="lazy" data-cover-hide>
-         <div style="min-width:0"><div class="slib-name"><span class="pl-idx">${idxLabel(p.idx)}</span>${esc(p.name)}</div><div class="slib-sub">${p.n_tracks} tracks</div></div>`;
+         <div style="min-width:0"><div class="slib-name"><span class="pl-idx">${idxLabel(p.idx)}</span>${esc(p.name)}</div><div class="slib-sub">${p.n_tracks} ${Number(p.n_tracks) === 1 ? 'track' : 'tracks'}</div></div>`;
     row.onclick = () => p.liked ? nav('liked') : openPlaylist(p.id);
     if (!p.liked) {
       row.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); openPlaylistMenu(p, e.clientX, e.clientY); };
@@ -1674,7 +1675,7 @@ async function openPlaylist(pid, push = true) {
       <div>
         <div class="plhead-kicker">PLAYLIST${plNo ? ` <span class="pl-idx">${idxLabel(plNo)}</span>` : ''}</div>
         <h1 class="plhead-name">${esc(p.name)}</h1>
-        <div class="plhead-meta"><b id="pln">...</b> tracks &middot; <span id="pldur"></span><span id="plan">${p.kind === 'listen'
+        <div class="plhead-meta"><b id="pln">...</b> <span id="pln-w">tracks</span> &middot; <span id="pldur"></span><span id="plan">${p.kind === 'listen'
           ? ' &middot; listening only'
           : (!p.owned ? ' &middot; no audio'
             : (p.prepped === p.owned ? ' &middot; analysed, current' : ` &middot; ${Math.max(0, (p.owned || 0) - (p.prepped || 0))} need analysis`))}</span></div>
@@ -1729,6 +1730,7 @@ async function openPlaylist(pid, push = true) {
     };
   });
   plnEl.textContent = list.length;
+  const plnW = document.getElementById('pln-w'); if (plnW) plnW.textContent = list.length === 1 ? 'track' : 'tracks';
   paintPlMode();
   const totalS = list.reduce((a, t) => a + (t.duration || 0), 0);
   pldurEl.textContent = list.length ? `${Math.round(totalS / 60).toLocaleString(LOC())} min` : '';
@@ -2556,7 +2558,7 @@ async function renderSongs(push = true) {
   const statsEl = $('songs-stats');
   if (statsEl) {
     api('/api/stats').then((s) => {
-      statsEl.textContent = `${Number(s.tracks).toLocaleString(LOC())} tracks · ${(s.owned_bytes / 1073741824).toFixed(1)} GB on disk`;
+      statsEl.textContent = `${Number(s.tracks).toLocaleString(LOC())} tracks · ${fmtSize(s.owned_bytes)} on disk`;
     }).catch(() => { statsEl.textContent = `${all.length} tracks`; });
   }
 
@@ -2567,8 +2569,10 @@ async function renderSongs(push = true) {
     if (filter === 'owned') list = list.filter((t) => hasAudio(t));
     if (filter === 'mirror') list = list.filter((t) => !hasAudio(t));
     if (query) {
-      const q = query.toLowerCase();
-      list = list.filter((t) => `${t.title} ${t.artist} ${t.album}`.toLowerCase().includes(q));
+      // in Brazil people type without accents: "abris" must find "Ábris"
+      const fold = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      const q = fold(query);
+      list = list.filter((t) => fold(`${t.title} ${t.artist} ${t.album}`).includes(q));
     }
     if (sort.key === 'pos') {
       // the order the page loaded is position one; the header toggles it
@@ -2847,6 +2851,7 @@ async function renderSettings() {
       <span id="set-update-msg" class="set-note">Checking for updates...</span>
       <button class="btn btn-ghost" id="set-check-update" type="button">Check for updates</button>
       <button class="btn btn-ghost" id="set-update" type="button" hidden>Update now</button>
+      <button class="btn btn-ghost" id="set-restart" type="button" hidden>Restart now</button>
     </div>
     </div>`;
   // what the player did last, including while the screen was locked
@@ -2861,7 +2866,7 @@ async function renderSettings() {
   Promise.all([api('/api/stats', { nocache: true }), api('/api/analyze/status', { nocache: true })]).then(([st, an]) => {
     const f = document.getElementById('set-facts');
     if (!f) return;
-    f.innerHTML = `<div><b>${Number(st.tracks).toLocaleString(LOC())}</b> tracks</div><div><b>${(st.owned_bytes / 1e9).toFixed(2)} GB</b> on disk</div><div><b>${Number(st.listens).toLocaleString(LOC())}</b> plays recorded</div>`
+    f.innerHTML = `<div><b>${Number(st.tracks).toLocaleString(LOC())}</b> tracks</div><div><b>${fmtSize(st.owned_bytes)}</b> on disk</div><div><b>${Number(st.listens).toLocaleString(LOC())}</b> plays recorded</div>`
       + `<div><b>${Number(an.current).toLocaleString(LOC())}</b> current · <b>${Number(an.outdated).toLocaleString(LOC())}</b> without cue points</div>`;
   }).catch(() => {});
   // one button that collects the client log and the server's media requests, so a stop in
@@ -2944,12 +2949,20 @@ async function renderSettings() {
   const updateMsg = document.getElementById('set-update-msg');
   const updateBtn = document.getElementById('set-update');
   const checkBtn = document.getElementById('set-check-update');
+  const restartBtn = document.getElementById('set-restart');
   const checkUpdate = async () => {
     if (!updateMsg) return;
     updateMsg.textContent = 'Checking for updates...';
     try {
       const r = await api('/api/update/status?check=1', { nocache: true });
       if (versionEl && r.version) versionEl.textContent = `v${r.version}`;
+      // files newer than the running process: the update happened, the restart did not
+      if (r.pending_restart) {
+        updateMsg.textContent = `Version ${r.disk} is installed. Restart to run it.`;
+        if (updateBtn) updateBtn.hidden = true;
+        if (restartBtn) restartBtn.hidden = false;
+        return;
+      }
       if (r.error) { updateMsg.textContent = `Could not check: ${r.error}`; if (updateBtn) updateBtn.hidden = true; return; }
       if (!r.git) {
         // a bundle install compares versions with the published release
@@ -2972,6 +2985,18 @@ async function renderSettings() {
     } catch (e) { updateMsg.textContent = `Could not check: ${e.message || 'unknown error'}`; }
   };
   if (checkBtn) checkBtn.onclick = checkUpdate;
+  if (restartBtn) restartBtn.onclick = async () => {
+    restartBtn.disabled = true;
+    updateMsg.textContent = 'Restarting…';
+    try {
+      await api('/api/restart', { method: 'POST' });
+      // the server replaces itself; wait for the new process, then reload the page
+      setTimeout(() => { try { location.reload(); } catch {} }, 4000);
+    } catch (e) {
+      updateMsg.textContent = `Restart failed: ${e.message || 'unknown error'}`;
+      restartBtn.disabled = false;
+    }
+  };
   if (updateBtn) updateBtn.onclick = async () => {
     if (!confirm(tr('Update MUSICFY now? The new version is downloaded first; a restart is needed before it is active.'))) return;
     updateBtn.disabled = true;
@@ -2984,6 +3009,7 @@ async function renderSettings() {
         toast('Updated; MUSICFY is restarting', 8000);
       } else {
         updateMsg.textContent = `Updated${data.to ? ` to ${data.to}` : ''}. Restart with: ${data.restart || 'musicfy restart'}`;
+        if (restartBtn) restartBtn.hidden = false;
         toast('Update pulled; restart MUSICFY to apply it', 8000);
       }
       updateBtn.hidden = true;
@@ -3782,13 +3808,14 @@ async function renderSearch() {
     if (mode === 'ladder') { await drawLadder(s); return; }
 
     // match word by word: "burial archangel" must find Archangel by Burial
-    const rawWords = s.split(/\s+/).filter(Boolean);
+    const fold = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const rawWords = fold(s).split(/\s+/).filter(Boolean);
     const words = rawWords.filter((w) => w.length > 2);
     const needHits = words.length >= 2 ? 2 : 1;
     const scored = all.map(t => {
-      const tt = String(t.title || '').toLowerCase();
-      const aa = String(t.artist || '').toLowerCase();
-      const al = String(t.album || '').toLowerCase();
+      const tt = fold(t.title);
+      const aa = fold(t.artist);
+      const al = fold(t.album);
       let score = 0;
       let hits = 0;
       for (const w of words) {
@@ -3818,7 +3845,8 @@ async function renderSearch() {
       topEl.querySelector('.topresult-play').onclick = () => playList([top], 0, false, 'Search');
       res.appendChild(topEl);
       const artists = {};
-      all.forEach(t => { const a = (t.artist || '').toLowerCase().trim(); if (a && (a.includes(s) || s.includes(a))) artists[t.artist] = (artists[t.artist] || 0) + 1; });
+      const sf = fold(s);
+      all.forEach(t => { const a = fold(t.artist).trim(); if (a && (a.includes(sf) || sf.includes(a))) artists[t.artist] = (artists[t.artist] || 0) + 1; });
       const topArtist = Object.entries(artists).sort((x, y) => y[1] - x[1])[0];
       if (topArtist && topArtist[1] > 0) {
         const aEl = document.createElement('div');
@@ -4536,7 +4564,7 @@ async function renderArtist(name, push = true) {
       <div>
         <div class="plhead-kicker">ARTIST</div>
         <h1 class="plhead-name">${esc(name)}</h1>
-        <div class="plhead-meta"><b id="g-n">...</b> tracks <span id="g-albums"></span></div>
+        <div class="plhead-meta"><b id="g-n">...</b> <span id="g-n-w">tracks</span> <span id="g-albums"></span></div>
         <div class="plhead-actions">
           <button class="btn btn-primary" id="g-play">${IC.play}&nbsp; Play</button>
         </div>
@@ -4549,6 +4577,7 @@ async function renderArtist(name, push = true) {
   if (!gnA || !elA) return;
   const albums = [...new Set(list.map((t) => t.album).filter(Boolean))];
   gnA.textContent = list.length;
+  { const w = $('g-n-w'); if (w) w.textContent = list.length === 1 ? 'track' : 'tracks'; }
   const gaA = $('g-albums');
   if (gaA) gaA.textContent = albums.length ? `· ${albums.length} album${albums.length === 1 ? '' : 's'}` : '';
   if (!list.length) { elA.innerHTML = `<div class="empty">No owned tracks for this artist yet. Search the web and download some.</div>`; return; }
@@ -4595,7 +4624,7 @@ async function renderAlbum(name, push = true) {
       <div>
         <div class="plhead-kicker">ALBUM</div>
         <h1 class="plhead-name">${esc(name)}</h1>
-        <div class="plhead-meta"><b id="g-n">...</b> tracks &middot; ${esc(first?.artist || '')}</div>
+        <div class="plhead-meta"><b id="g-n">...</b> <span id="g-n-w">tracks</span> &middot; ${esc(first?.artist || '')}</div>
         <div class="plhead-actions">
           <button class="btn btn-primary" id="g-play">${IC.play}&nbsp; Play</button>
           <button class="btn btn-ghost" id="g-dl">Download album</button>
@@ -4614,6 +4643,7 @@ async function renderAlbum(name, push = true) {
   const gnB = $('g-n'); const elB = $('g-list');
   if (!gnB || !elB) return;
   gnB.textContent = list.length;
+  { const w = $('g-n-w'); if (w) w.textContent = list.length === 1 ? 'track' : 'tracks'; }
   if (!list.length) elB.innerHTML = `<div class="empty">Nothing from this album is here yet. Use Download album to fetch the full tracklist.</div>`;
   else list.forEach((t, i) => { registerRow(t); elB.appendChild(trow(t, i, list)); });
   const gpB = $('g-play'); if (gpB) gpB.onclick = () => { if (list.length) playList(list, 0, false, name); };
@@ -4794,7 +4824,7 @@ function paintPill() {
   const el = $('pill');
   if (!el) return;
   api('/api/stats', { nocache: true }).then((s) => {
-    el.textContent = `${Number(s.tracks).toLocaleString(LOC())} TRACKS · ${(s.owned_bytes / 1073741824).toFixed(1)} GB`;
+    el.textContent = `${Number(s.tracks).toLocaleString(LOC())} TRACKS · ${fmtSize(s.owned_bytes)}`;
   }).catch(() => { el.textContent = ''; });
 }
 

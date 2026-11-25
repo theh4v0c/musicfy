@@ -306,6 +306,12 @@
     'Download to device (zip)': 'Baixar para o aparelho (zip)',
     'Copy playback log': 'Copiar registro de reprodução',
     'Up to date.': 'Em dia.',
+    'Restart now': 'Reiniciar agora', 'Restarting…': 'Reiniciando…',
+    'Loading': 'Carregando', 'Buffering': 'Carregando áudio', 'Reconnecting': 'Reconectando',
+    'Next track': 'Próxima faixa', 'Nothing to build from this one.': 'Nada para montar com isto.',
+    'listening': 'em audição', 'Queue': 'Fila', 'Undo': 'Desfazer',
+
+
     'Updated. Restarting…': 'Atualizado. Reiniciando…',
     'Updated; MUSICFY is restarting': 'Atualizado; o MUSICFY está reiniciando',
     'Update pulled; restart MUSICFY to apply it': 'Atualização baixada; reinicie o MUSICFY para aplicar',
@@ -446,6 +452,12 @@
     [/^(.+): under (\d+) BPM\.$/, (m) => `${m[1]}: abaixo de ${m[2]} BPM.`],
     [/^(.+) — choose a cover$/, (m) => `${m[1]} — escolha uma capa`],
     [/^Version (.+) is available\.$/, (m) => `A versão ${m[1]} está disponível.`],
+    [/^Play (\d+)$/, (m) => `Tocar ${m[1]}`],
+    [/^Queue (\d+)$/, (m) => `Fila ${m[1]}`],
+    [/^Queued (\d+)$/, (m) => `${m[1]} na fila`],
+
+    [/^Version (.+) is installed\. Restart to run it\.$/, (m) => `A versão ${m[1]} está instalada. Reinicie para executá-la.`],
+
     [/^Updated to (.+)\. Restarting…$/, (m) => `Atualizado para ${m[1]}. Reiniciando…`],
     [/^Updated to (.+)\. Restart with: (.+)$/, (m) => `Atualizado para ${m[1]}. Reinicie com: ${m[2]}`],
     [/^Updated\. Restart with: (.+)$/, (m) => `Atualizado. Reinicie com: ${m[1]}`],
@@ -521,14 +533,14 @@
     [/^Analyzing ([\d,]+) tracks in the background$/, (m) => `Analisando ${m[1]} faixas em segundo plano`],
     [/^Show listening \((\d+)\)$/, (m) => `Mostrar audição (${m[1]})`],
     [/^Hide listening \((\d+)\)$/, (m) => `Ocultar audição (${m[1]})`],
-    [/^Analyse ([\d,]+) never analysed$/, (m) => `Analisar ${m[1]} nunca analisadas`],
-    [/^Analyze ([\d,]+) never analysed$/, (m) => `Analisar ${m[1]} nunca analisadas`],
+    [/^Analyse ([\d.,]+) never analysed$/, (m) => `Analisar ${m[1]} nunca analisadas`],
+    [/^Analyze ([\d.,]+) never analysed$/, (m) => `Analisar ${m[1]} nunca analisadas`],
     [/^Prep (\d+)$/, (m) => `Preparar ${m[1]}`],
     [/^Update (\d+)$/, (m) => `Atualizar ${m[1]}`],
     [/^(\d+)\/(\d+) up to date$/, (m) => `${m[1]}/${m[2]} em dia`],
     [/^(\d+) without cue points$/, (m) => `${m[1]} sem cue points`],
     [/^(\d+) need cue points$/, (m) => `${m[1]} precisam de cue points`],
-    [/^(\d+) never analysed$/, (m) => `${m[1]} nunca analisadas`],
+    [/^([\d.,]+) never analysed$/, (m) => `${m[1]} nunca analisadas`],
     [/^(\d+) never$/, (m) => `${m[1]} nunca`],
     [/^(\d+)\/(\d+) audio$/, (m) => `${m[1]}/${m[2]} áudio`],
     [/^Done ([\d,]+)$/, (m) => `Concluído ${m[1]}`],
@@ -556,7 +568,7 @@
     '.pcard-name', '.plhead-name', '.np-title', '.np-artist', '.np-album',
     '.crate-name', '.lrow-t b', '.crate-row-t b', '.mpick-t b', '.mast-name',
     '.album-chip b', '.q-title', '.q-sub', '.avoid-term',
-    '.pb-title', '.pb-artist', '.mini-title', '.mini-artist', '.ctx-name',
+    '.pb-title', '.pb-artist', '.mini-title', '.mini-artist', '.ctx-name', '#view-title', '.slib-name',
     '.apr-title', '.apr-artist', '.ap-title', '.ap-artist', '.np-ctx', '.mast-name',
     '.genrechip', '.keychip', '.tno', '.tdur', '.tbpm', '.trbadge', '.tadded',
     'script', 'style', 'textarea',
@@ -629,7 +641,9 @@
 
   function translate(root) {
     if (lang !== 'pt-BR' || !root) return;
-    if (root.nodeType === 3) return translateNode(root);
+    // a text node inserted on its own (the clock, a view title) is not walked, so the
+    // skip list has to be checked here too or user data gets translated
+    if (root.nodeType === 3) return isUserContent(root) ? undefined : translateNode(root);
     if (root.nodeType === 1) translateAttrs(root);
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
       acceptNode(n) {
@@ -654,7 +668,9 @@
     const obs = new MutationObserver((list) => {
       for (const m of list) {
         if (m.type === 'childList') m.addedNodes.forEach((n) => translate(n));
-        else if (m.type === 'characterData') translate(m.target);
+        else if (m.type === 'characterData') {
+          if (!isUserContent(m.target)) translateNode(m.target);
+        }
       }
     });
     obs.observe(document.body, { childList: true, subtree: true, characterData: true });

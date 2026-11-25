@@ -1,6 +1,6 @@
 {
   "name": "musicfy",
-  "version": "0.1.46",
+  "version": "0.1.47",
   "description": "Self-hosted music library, browser player and DJ prep bench",
   "license": "AGPL-3.0-or-later",
   "type": "commonjs",
@@ -36,7 +36,8 @@
     "AGENT_INSTALL.md",
     "DOMAIN.md",
     "core/release.js",
-    "bin/update-bundle.mjs"
+    "bin/update-bundle.mjs",
+    "core/text.js"
   ],
   "scripts": {
     "start": "node core/core.js",

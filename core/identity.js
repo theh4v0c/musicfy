@@ -62,7 +62,8 @@ const throttle = () => {
   return new Promise((r) => setTimeout(r, wait)).then(() => { lastCall = Date.now(); });
 };
 
-const norm = (s) => String(s || '').toLowerCase().replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+const { foldLower } = require('./text');
+const norm = (s) => foldLower(String(s || '').replace(/\(.*?\)|\[.*?\]/g, ' ')).replace(/[^a-z0-9]+/g, ' ').trim();
 
 function similarity(a, b) {
   const A = new Set(norm(a).split(' ').filter(Boolean));

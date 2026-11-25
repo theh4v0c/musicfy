@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.47 — 2026-11-25
+
+- Update status separates the running version from the version on disk. Files replaced
+  without a restart now read "Version X is installed. Restart to run it." with a Restart
+  now button; `/api/restart` works for a PID-file install and for one started by hand.
+- Names are no longer translated: the MutationObserver bypassed the skip list for single
+  text nodes, so a playlist called "Home" showed "Início".
+- Accents: search folds diacritics on both sides ("abris" finds "Ábris"), duplicate keys
+  and identity fold instead of deleting ("Björk" = "Bjork"), SQL text search uses the same
+  rule, and "não ouço há meses" is a last-played filter instead of the word "meses".
+- Playlist, album and artist headers read "1 faixa" in the source; one GB definition with
+  the locale decimal separator; Analyse accepts 1.204 and 1,204.
+- A&R names keep accents ("Criar uma lista com faixas…"); "Nothing by X" is Portuguese.
+- `/api/ask` answers a Portuguese help question in Portuguese, with Portuguese examples.
+- Action buttons (Play 3, Queue 3, Queued 3) and status words are translated.
+
 ## 0.1.46 — 2026-11-25
 
 - Installs without git can update. `musicfy update` on a bundle takes the latest release,

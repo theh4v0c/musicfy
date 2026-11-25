@@ -19,6 +19,7 @@ const analyser = require('./analyze');
 const queryEngine = require('./query');
 const llm = require('./llm');
 const release = require('./release');
+const { fold, foldLower } = require('./text');
 const genre = require('./genre');
 const repair = require('./repair');
 const agent = require('./agent');
@@ -53,8 +54,19 @@ let updateCache = { at: 0, data: null };
 function execFileP(cmd, args, opts) {
   return new Promise((resolve, reject) => execFile(cmd, args, opts, (err, stdout) => err ? reject(err) : resolve(String(stdout || ''))));
 }
+function diskVersion() {
+  try { return JSON.parse(fs.readFileSync(path.join(APP_ROOT, 'package.json'), 'utf8')).version || APP_VERSION; } catch { return APP_VERSION; }
+}
+
 async function updateInfo(check = false) {
-  const out = { version: APP_VERSION, git: false, behind: 0, branch: '', error: null, restart: 'musicfy restart' };
+  const onDisk = diskVersion();
+  const out = {
+    version: APP_VERSION, disk: onDisk, git: false, behind: 0, branch: '', error: null,
+    restart: 'musicfy restart',
+    // files replaced but the process still runs the old code: say it, do not compare
+    // the running version with the release and claim there is nothing to do
+    pending_restart: release.compare(onDisk, APP_VERSION) > 0,
+  };
   try {
     out.git = execFileSync('git', ['-C', APP_ROOT, 'rev-parse', '--is-inside-work-tree'], { timeout: 5000 }).toString().trim() === 'true';
   } catch {}
@@ -62,11 +74,16 @@ async function updateInfo(check = false) {
     // a bundle install still has releases to compare against
     out.bundle = true;
     if (!check) return out;
-    if (updateCache.data && Date.now() - updateCache.at < 5 * 60 * 1000) return { ...updateCache.data, version: APP_VERSION };
+    if (updateCache.data && Date.now() - updateCache.at < 5 * 60 * 1000) {
+      // the release answer is cached, the disk state is not: a file update can happen
+      // between two checks and the user must see that a restart is pending
+      return { ...updateCache.data, version: APP_VERSION, disk: onDisk,
+        pending_restart: release.compare(onDisk, APP_VERSION) > 0 };
+    }
     try {
       const rel = await release.latest();
       out.latest = rel.version;
-      out.behind = release.compare(rel.version, APP_VERSION) > 0 ? 1 : 0;
+      out.behind = release.compare(rel.version, onDisk) > 0 ? 1 : 0;
       out.page = rel.page;
     } catch (e) {
       out.error = String(e.message || e).split('\n')[0].slice(0, 160);
@@ -110,6 +127,8 @@ fs.mkdirSync(paths.LOGS, { recursive: true });
 
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 const db = new DatabaseSync(DB_PATH);
+// SQLite's lower()/LIKE are ASCII-only; this gives SQL the same folding the JS side uses
+try { db.function('mf_fold', { deterministic: true }, (v) => foldLower(v)); } catch {}
 // analysis, downloads and a maintenance script can write at once: wait for the lock
 db.exec('PRAGMA busy_timeout=5000');
 try { db.exec('PRAGMA journal_mode=WAL'); } catch {}
@@ -153,7 +172,7 @@ setTimeout(() => {
 // one row per artist + title: album differences must not create twins
 try { db.exec('ALTER TABLE tracks ADD COLUMN dup_key TEXT'); } catch {}
 function dupKeyOf(artist, title) {
-  const norm = (s) => String(s || '').toLowerCase()
+  const norm = (s) => foldLower(s)
     .replace(/\((?:feat\.?|ft\.?|with)[^)]*\)/g, ' ')
     .replace(/\[[^\]]*\]/g, ' ')
     .replace(/\s+-\s+(?:remaster(?:ed)?|remastered \d+|single version|album version|radio edit)\b.*$/g, ' ')
@@ -286,7 +305,7 @@ function trackTagMeta(db, tid) {
   } };
 }
 const uidOf = (a, al, t) =>
-  `${(a || '').toLowerCase().trim()}|${(al || '').toLowerCase().trim()}|${(t || '').toLowerCase().trim()}`
+  `${foldLower(a).trim()}|${foldLower(al).trim()}|${foldLower(t).trim()}`
     .replace(/\s+/g, ' ');
 
 // ---------- helpers ----------
@@ -3258,6 +3277,26 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/api/update/status' && req.method === 'GET') {
       return json(res, 200, await updateInfo(u.searchParams.get('check') === '1'));
     }
+    if (u.pathname === '/api/restart' && req.method === 'POST') {
+      const systemd = fs.existsSync('/run/systemd/system');
+      json(res, 200, { ok: true, restarting: !systemd });
+      setTimeout(() => {
+        try {
+          if (systemd) {
+            const child = spawn('systemctl', ['restart', 'musicfy'], { detached: true, stdio: 'ignore' });
+            child.unref();
+          } else {
+            // the CLI stops the pid it knows and starts a fresh process; without a pid file
+            // it starts one, which is exactly what a manually started install needs
+            const cli = path.join(APP_ROOT, 'bin', 'musicfy.mjs');
+            const child = spawn(process.execPath, [cli, 'restart'], { detached: true, stdio: 'ignore' });
+            child.unref();
+          }
+        } catch {}
+      }, 800);
+      return;
+    }
+
     if (u.pathname === '/api/update' && req.method === 'POST') {
       const info = await updateInfo(true);
       if (!info.git) {
@@ -3970,20 +4009,33 @@ const server = http.createServer(async (req, res) => {
         // capability questions are answered directly: they are not a library search,
         // and letting the text parser turn "can you assist" into keywords is nonsense
         const ql = question.toLowerCase().replace(/[?.!]+$/, '').trim();
+        const askLang = String(req.headers['x-mf-lang'] || b.lang || 'en').toLowerCase().startsWith('pt') ? 'pt-BR' : 'en';
         const wantsHelp = /^(help|capabilities|what can you do|what do you do|what can you (?:assist|help)(?: me)? with|how can you help|who are you|what is this|what are you)$/.test(ql)
-          || /^what can you (?:do|assist|help)\b/.test(ql);
+          || /^what can you (?:do|assist|help)\b/.test(ql)
+          // Portuguese capability questions reached the text parser and answered with a search
+          || /^(ajuda|socorro|o que (?:voc[eê]|vc) (?:pode|faz|sabe)(?: fazer)?|quem (?:é|e) (?:voc[eê]|vc)|para que serve|como (?:voc[eê]|vc) (?:ajuda|funciona))$/.test(ql);
         if (wantsHelp) {
-          const examples = [
-            'tracks in Dm between 120 and 130 bpm',
-            'techno I never played',
-            'create a playlist of 20 ambient tracks',
-            'how much of my library has audio',
-            'download the album Random Access Memories',
-          ];
+          const examples = askLang === 'pt-BR'
+            ? [
+              'faixas em Dm entre 120 e 130 bpm',
+              'techno que nunca toquei',
+              'criar uma lista com 20 faixas ambient',
+              'quanto da minha biblioteca tem áudio',
+              'baixar o álbum Random Access Memories',
+            ]
+            : [
+              'tracks in Dm between 120 and 130 bpm',
+              'techno I never played',
+              'create a playlist of 20 ambient tracks',
+              'how much of my library has audio',
+              'download the album Random Access Memories',
+            ];
+          const answer = askLang === 'pt-BR'
+            ? 'Eu procuro na sua biblioteca e monto coisas a partir dela. Encontro faixas por tonalidade, tempo, ano, gênero, número de reproduções ou se o áudio está baixado; busco por título, artista ou álbum; crio uma lista com qualquer um desses filtros; informo a cobertura da biblioteca; e baixo um álbum ou o áudio que falta. Não navego na web nem respondo perguntas gerais.'
+            : 'I search your library and build things from it. I can find tracks by key, tempo, year, genre, play count or whether the audio is downloaded; find by title, artist or album; create a playlist from any of those filters; report library coverage; and download a missing album or missing audio. I do not browse the web or answer general questions.';
           return json(res, 200, {
-            question, source: 'help', count: 0, results: [], filters: null,
-            answer: 'I search your library and build things from it. I can find tracks by key, tempo, year, genre, play count or whether the audio is downloaded; find by title, artist or album; create a playlist from any of those filters; report library coverage; and download a missing album or missing audio. I do not browse the web or answer general questions.',
-            examples,
+            question, source: 'help', lang: askLang, count: 0, results: [], filters: null,
+            answer, examples,
           });
         }
 

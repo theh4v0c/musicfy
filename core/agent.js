@@ -454,13 +454,15 @@ async function execute(db, plan, deps, lang = 'en') {
 
 // ---------- guided actions: build a proposal, execute only on confirm ----------
 function dupOf(artist, title) {
-  const norm = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const { foldLower } = require('./text');
+  const norm = (v) => foldLower(v).replace(/[^a-z0-9]+/g, ' ').trim();
   return `${norm(artist)}|${norm(title)}`;
 }
 
 function listName(query) {
+  // \w is ASCII: it turned "não" into "n o" and stored that in the playlist name
   const n = String(query || '')
-    .replace(/[^\w\s'-]/g, ' ')
+    .replace(/[^\p{L}\p{N}\s'-]/gu, ' ')
     .replace(/\b\d+\b/g, ' ')
     .replace(/\b(create|make|build|please|a|an|the|playlist|of|with|for|me|tracks?|songs?|items?|top|rated|best|rating|at|around|about|bpm|by|like|i|my|library|outside|unheard|discover|don'?t|do|not|have|own|it|from|that|this)\b/gi, ' ')
     .replace(/\s+/g, ' ').trim();
@@ -946,7 +948,7 @@ async function propose(db, plan, lang = 'en') {
       else if (targetOnline && identity.recentError()) reasonBits.push('The catalogue did not answer just now, so this is your library only.');
       else reasonBits.push(targetOnline ? 'Nothing new turned up this time.' : 'All from your library.');
     }
-    if (!tracks.length && wantedArtist) name = `Nothing by ${wantedArtist}`;
+    if (!tracks.length && wantedArtist) name = say(lang, `Nothing by ${wantedArtist}`, `Nada de ${wantedArtist}`);
     return {
       kind: 'playlist', name, trackIds: local.map((t) => t.id), online, tracks,
       download: !!plan.args.download,

@@ -1,6 +1,7 @@
 'use strict';
 // Deterministic query engine over the library. No model involved: if the question can be
 // answered from the database, this answers it exactly.
+const { foldLower } = require('./text');
 const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const FLAT = { Db: 'C#', Eb: 'D#', Gb: 'F#', Ab: 'G#', Bb: 'A#' };
 
@@ -142,11 +143,22 @@ function parse(text, db) {
   if (filters.genre) work = work.replace(new RegExp(String(filters.genre).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ');
   for (const w of ['metal','electronic','techno','house','ambient','jazz','classical','hip','hop']) work = work.replace(new RegExp('\\b' + w + '\\b', 'gi'), ' ');
 
+  // "not heard in months" is a time filter, not the word "meses"
+  const stale = work.match(/\b(?:n[aã]o\s+)?(?:ou[cç]o|ouve|ouvi|ouviu|toc[oa]|tocou|toquei|escut[oa]|escutou)\s+(?:h[aá]\s+)?(\d+)?\s*(meses?|semanas?|dias?|anos?)\b/i);
+  if (stale) {
+    const n = Number(stale[1] || 1);
+    const unit = String(stale[2]).toLowerCase();
+    const days = /ano/.test(unit) ? n * 365 : /m[eê]s|mes/.test(unit) ? n * 30 : /semana/.test(unit) ? n * 7 : n;
+    filters.staleDays = Math.max(1, Math.round(days));
+    notes.push(`not played in ${filters.staleDays} days`);
+    work = work.replace(stale[0], ' ');
+  }
+
   // whatever is left of the sentence is treated as text over title, artist and album
   const stop = new Set(['the','a','an','my','me','of','in','for','with','and','or','to','from','that','which','are','is','do','does','did','i','have','has','what','who','when','where','how','any','some','all','please','list','give','show','find','create','make','build','playlist','songs','song','tracks','track','never','played','want','need','like','by','on','at','key','bpm','played','times','not','no','audio','downloaded','local','owned','random','shuffle','newest','oldest','most','top','popular','trending','between','above','below','over','under','around','about','near','kids','kid','children','child','can','could','would','should','you','your','yours','assist','help','able','tell','know','explain','capability','capabilities','commands','command','there','it','this','us','we','rated','rating','ratings','best',
     // Portuguese filler: without these, 'uma lista com 10 faixas' searched for 'uma com'
     'uma','um','com','sem','para','por','dos','das','do','da','no','na','nos','nas','que','eu','meu','minha','os','as','e','ou','de','em','ao','aos','mais','menos','sobre','entre','quero','preciso','tenho','nao','não','tocar','tocando','algum','alguma','alguns','algumas','isso','este','esta','esse','essa','aquele','aquela','muito','pouco','pouca','so','só','tambem','também','mas','como','quando','onde','qual','quais','quem','favor','many','much','quantas','quantos']);
-  const rest = work.replace(/[^a-z0-9#\s]/g, ' ')
+  const rest = foldLower(work).replace(/[^a-z0-9#\s]/g, ' ')
     .split(/\s+/)
     .filter((w) => w.length > 2 && !stop.has(w) && !/^\d+$/.test(w));
   if (rest.length) { filters.text = rest.slice(0, 6); notes.push(`text ${rest.slice(0, 6).join(' ')}`); }
@@ -155,7 +167,17 @@ function parse(text, db) {
   return filters;
 }
 
+const foldSupport = new WeakMap();
+function hasFold(db) {
+  if (foldSupport.has(db)) return foldSupport.get(db);
+  let ok = false;
+  try { db.prepare('SELECT mf_fold(?) AS v').get('Á'); ok = true; } catch {}
+  foldSupport.set(db, ok);
+  return ok;
+}
+
 function run(db, filters) {
+  const foldSql = hasFold(db);
   const where = [];
   const params = [];
   if (filters.key) { where.push('t.key = ?'); params.push(filters.key); }
@@ -171,6 +193,10 @@ function run(db, filters) {
     params.push(filters.genreLike, filters.genreLike);
   }
   if (filters.family) { where.push("lower(COALESCE(t.genre_family,'')) = ?"); params.push(filters.family); }
+  if (filters.staleDays) {
+    where.push(`NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id AND l.played_at >= strftime('%s','now') - ?)`);
+    params.push(Number(filters.staleDays) * 86400);
+  }
   if (filters.owned === true) where.push("EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')");
   if (filters.owned === false) where.push("NOT EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')");
   if (filters.plays) {
@@ -178,9 +204,11 @@ function run(db, filters) {
     if (filters.plays.max !== undefined) { where.push('(SELECT COUNT(*) FROM listens l WHERE l.track_id=t.id) <= ?'); params.push(filters.plays.max); }
   }
   if (filters.text && filters.text.length) {
-    const like = filters.text.map(() => "(lower(t.title) LIKE ? OR lower(COALESCE(t.artist,'')) LIKE ? OR lower(COALESCE(t.album,'')) LIKE ?)");
+    // mf_fold is registered by core.js; a plain connection (tests) falls back to lower()
+    const F = (col) => (foldSql ? `mf_fold(${col})` : `lower(${col})`);
+    const like = filters.text.map(() => `(${F('t.title')} LIKE ? OR ${F("COALESCE(t.artist,'')")} LIKE ? OR ${F("COALESCE(t.album,'')")} LIKE ?)`);
     where.push('(' + like.join(' OR ') + ')');
-    for (const w of filters.text) params.push(`%${w}%`, `%${w}%`, `%${w}%`);
+    for (const w of filters.text) { const v = `%${foldLower(w)}%`; params.push(v, v, v); }
   }
 
   const order = filters.order === 'random' ? 'RANDOM()'
