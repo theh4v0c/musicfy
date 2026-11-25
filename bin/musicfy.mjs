@@ -160,6 +160,20 @@ function version() {
   catch { return '0.0.0'; }
 }
 
+function ensureYtdlpWrapper(root) {
+  const bin = path.join(root, 'ytdlp-venv', 'bin');
+  const yt = path.join(bin, 'yt-dlp');
+  if (!fs.existsSync(yt)) return null;
+  const wrapper = path.join(bin, 'yt-dlp-musicfy');
+  const q = (x) => `'${String(x).replace(/'/g, "'\\''")}'`;
+  const body = `#!/bin/sh\nexec ${q(yt)} --js-runtimes node:${q(process.execPath)} --remote-components ejs:github "$@"\n`;
+  try {
+    fs.writeFileSync(wrapper, body, { mode: 0o755 });
+    fs.chmodSync(wrapper, 0o755);
+    return wrapper;
+  } catch { return null; }
+}
+
 async function setup() {
   ensureDirs();
   const port = String(options.port || valueOf('port', readEnv().MUSICFY_PORT || '8710'));
@@ -174,8 +188,6 @@ async function setup() {
     token = crypto.randomBytes(32).toString('base64url');
     console.log('Created a shared token for this install.');
   }
-  writeEnv({ MUSICFY_HOME: rootDir, MUSICFY_PORT: port, MUSICFY_BIND: bind, MUSICFY_OWNED: owned, ...(token ? { MUSICFY_TOKEN: token } : {}) });
-
   const nodeOk = Number(process.versions.node.split('.')[0]) > 22
     || (Number(process.versions.node.split('.')[0]) === 22 && Number(process.versions.node.split('.')[1]) >= 13);
   console.log(`Node       ${process.version}${nodeOk ? '' : '  (need 22.13+)'}`);
@@ -206,7 +218,14 @@ async function setup() {
     }
   }
 
-  const yt = process.env.MUSICFY_YTDLP || path.join(rootDir, 'ytdlp-venv', 'bin', 'yt-dlp');
+  const ytWrapper = ensureYtdlpWrapper(rootDir);
+  const currentYt = current.MUSICFY_YTDLP || '';
+  // keep an explicit custom downloader, otherwise use the wrapper with Node + EJS
+  const configuredYt = ytWrapper && (!currentYt || currentYt === path.join(rootDir, 'ytdlp-venv', 'bin', 'yt-dlp'))
+    ? ytWrapper : currentYt;
+  writeEnv({ MUSICFY_HOME: rootDir, MUSICFY_PORT: port, MUSICFY_BIND: bind, MUSICFY_OWNED: owned, ...(configuredYt ? { MUSICFY_YTDLP: configuredYt } : {}), ...(token ? { MUSICFY_TOKEN: token } : {}) });
+
+  const yt = configuredYt || process.env.MUSICFY_YTDLP || path.join(rootDir, 'ytdlp-venv', 'bin', 'yt-dlp');
   const an = process.env.MUSICFY_PYTHON || path.join(rootDir, 'essentia-venv', 'bin', 'python');
   console.log(`yt-dlp     ${fs.existsSync(yt) ? yt : (which('yt-dlp') || 'not installed yet')}`);
   console.log(`analyser   ${fs.existsSync(an) ? an : 'not installed yet'}`);
@@ -450,6 +469,11 @@ function update() {
   } else {
     console.log('This is not a git checkout. Update with your package manager, then run: musicfy restart');
     return 0;
+  }
+  const wrapper = ensureYtdlpWrapper(rootDir);
+  if (wrapper) {
+    const current = readEnv().MUSICFY_YTDLP || '';
+    if (!current || current === path.join(rootDir, 'ytdlp-venv', 'bin', 'yt-dlp')) writeEnv({ MUSICFY_YTDLP: wrapper });
   }
   if (systemdActive()) {
     console.log('Updated. Restart with: sudo systemctl restart musicfy');

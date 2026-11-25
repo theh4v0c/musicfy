@@ -395,6 +395,11 @@ musicfy doctor
 It prints a line for Node, ffmpeg, yt-dlp, the analyser, the database, HTTP and disk, and
 tells you which one failed.
 
+`musicfy setup` creates `yt-dlp-musicfy`, a wrapper that runs yt-dlp with the installed
+Node runtime and the open-source EJS challenge solver. `musicfy update` creates the same
+wrapper for an existing install. If you upgraded from an older build, run
+`musicfy setup --root "$HOME/.musicfy" --skip-deps` once.
+
 | What you see | What it means | What to do |
 |---|---|---|
 | `musicfy: command not found` | `~/.local/bin` is not in your PATH | `export PATH="$HOME/.local/bin:$PATH"`, or close and reopen Terminal |
@@ -511,7 +516,7 @@ The first boot creates `data/`, `logs/` and the schema. Nothing has to be seeded
 | `MUSICFY_OWNED` | `$MUSICFY_HOME/owned` | the audio library (may be another mount) |
 | `MUSICFY_DB` | `$MUSICFY_DATA/musicfy.db` | the SQLite file |
 | `MUSICFY_BIN` | `$MUSICFY_HOME/ytdlp-venv/bin` | where the downloader lives |
-| `MUSICFY_YTDLP` | `$MUSICFY_BIN/yt-dlp` | the downloader binary |
+| `MUSICFY_YTDLP` | `$MUSICFY_BIN/yt-dlp-musicfy` after setup, otherwise `$MUSICFY_BIN/yt-dlp` | the downloader wrapper |
 | `MUSICFY_PYTHON` | `$MUSICFY_HOME/essentia-venv/bin/python` | the analyser interpreter |
 | `MUSICFY_FFMPEG` | found on `PATH` | ffmpeg |
 | `MUSICFY_FFPROBE` | found on `PATH` | ffprobe |

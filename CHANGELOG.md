@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.20 — 2026-11-25
+
+- `musicfy setup` creates a `yt-dlp-musicfy` wrapper that uses the installed Node runtime
+  and yt-dlp's open-source EJS challenge solver. New installs no longer need the manual
+  wrapper procedure for YouTube signature/JS challenges.
+- `musicfy update` creates/updates the wrapper for an existing install; an older build can
+  run `musicfy setup --skip-deps` once.
+
 ## 0.1.19 — 2026-11-25
 
 - Download errors now include the last yt-dlp reason instead of only "clients and search
