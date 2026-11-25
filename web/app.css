@@ -386,6 +386,8 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .set-card label { display: flex; flex-direction: column; gap: 5px; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-mute); margin-bottom: 10px; }
 .set-card input, .set-card select { font-family: inherit; font-size: 13px; padding: 8px 10px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--bg-elev2); color: var(--fg); }
 .set-note { font-size: 11px; color: var(--fg-mute); }
+.set-list { margin: 8px 0 10px; padding-left: 15px; display: grid; gap: 4px; }
+.set-list li { list-style: disc; }
 .set-card .set-note + label, .set-card .set-note + .set-check { margin-top: 10px; }
 .set-actions { display: flex; gap: 12px; align-items: center; }
 .set-facts { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--fg-soft); }

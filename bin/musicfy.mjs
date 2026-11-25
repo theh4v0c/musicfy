@@ -160,6 +160,24 @@ function version() {
   catch { return '0.0.0'; }
 }
 
+// A virtual machine is usually a rented server: its address is shared, watched, and
+// treated worse by YouTube than a home connection. Two parallel downloads finish a queue
+// faster there than four that trip a rate limit.
+function isVirtualized() {
+  try {
+    const v = capture('systemd-detect-virt');
+    if (v && v !== 'none') return true;
+  } catch {}
+  try {
+    const dmi = fs.readFileSync('/sys/class/dmi/id/product_name', 'utf8').trim().toLowerCase();
+    if (/kvm|vmware|virtualbox|qemu|openstack|bochs|hyper-v|ec2|compute engine|droplet|vultr|hostinger|hetzner/.test(dmi)) return true;
+  } catch {}
+  try {
+    if (/hypervisor/.test(fs.readFileSync('/proc/cpuinfo', 'utf8'))) return true;
+  } catch {}
+  return false;
+}
+
 function ensureYtdlpWrapper(root) {
   const bin = path.join(root, 'ytdlp-venv', 'bin');
   const yt = path.join(bin, 'yt-dlp');
@@ -223,7 +241,10 @@ async function setup() {
   // keep an explicit custom downloader, otherwise use the wrapper with Node + EJS
   const configuredYt = ytWrapper && (!currentYt || currentYt === path.join(rootDir, 'ytdlp-venv', 'bin', 'yt-dlp'))
     ? ytWrapper : currentYt;
-  writeEnv({ MUSICFY_HOME: rootDir, MUSICFY_PORT: port, MUSICFY_BIND: bind, MUSICFY_OWNED: owned, ...(configuredYt ? { MUSICFY_YTDLP: configuredYt } : {}), ...(token ? { MUSICFY_TOKEN: token } : {}) });
+  const concurrency = current.MUSICFY_DOWNLOAD_CONCURRENCY
+    ? {}
+    : { MUSICFY_DOWNLOAD_CONCURRENCY: String(isVirtualized() ? 2 : 4) };
+  writeEnv({ MUSICFY_HOME: rootDir, MUSICFY_PORT: port, MUSICFY_BIND: bind, MUSICFY_OWNED: owned, ...(configuredYt ? { MUSICFY_YTDLP: configuredYt } : {}), ...(token ? { MUSICFY_TOKEN: token } : {}), ...concurrency });
 
   const yt = configuredYt || process.env.MUSICFY_YTDLP || path.join(rootDir, 'ytdlp-venv', 'bin', 'yt-dlp');
   const an = process.env.MUSICFY_PYTHON || path.join(rootDir, 'essentia-venv', 'bin', 'python');
@@ -231,6 +252,7 @@ async function setup() {
   console.log(`analyser   ${fs.existsSync(an) ? an : 'not installed yet'}`);
   console.log(`\nConfig     ${envFile}`);
   console.log(`Audio      ${owned}`);
+  console.log(`Downloads  ${current.MUSICFY_DOWNLOAD_CONCURRENCY || (isVirtualized() ? 2 : 4)} at once${isVirtualized() ? ' (server address)' : ''}`);
   console.log(`Database   ${path.join(rootDir, 'data', 'musicfy.db')}`);
   printToken(`http://localhost:${port}`, token);
   console.log(`\nNext: musicfy start      (or: musicfy service install)`);
@@ -328,6 +350,97 @@ function logs() {
   let text = '';
   try { text = fs.readFileSync(logFile, 'utf8'); } catch { console.log(`No log yet: ${logFile}`); return; }
   console.log(text.split(/\r?\n/).slice(-100).join('\n'));
+}
+
+// A rented address is not a home line: YouTube may rate limit it, ask for a login, or
+// route it badly over IPv6. This probes the three facts that decide the settings, so a new
+// install does not discover them one failed download at a time.
+async function netcheck() {
+  ensureDirs();
+  const env = readEnv();
+  const yt = env.MUSICFY_YTDLP || process.env.MUSICFY_YTDLP || path.join(rootDir, 'ytdlp-venv', 'bin', 'yt-dlp');
+  if (!fs.existsSync(yt)) {
+    console.error(`yt-dlp is not installed at ${yt}. Run: musicfy setup`);
+    return 1;
+  }
+  const probe = (args, timeoutMs = 45000) => new Promise((resolve) => {
+    const started = Date.now();
+    const child = spawn(yt, ['--simulate', '--no-warnings', ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '', err = '';
+    child.stdout.on('data', (d) => { out += d; });
+    child.stderr.on('data', (d) => { err += d; });
+    const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch {} resolve({ ok: false, reason: 'timeout', out, err, ms: Date.now() - started }); }, timeoutMs);
+    child.on('error', (e) => { clearTimeout(timer); resolve({ ok: false, reason: e.message, out, err, ms: Date.now() - started }); });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ ok: code === 0 && !!out.trim(), code, out, err, ms: Date.now() - started });
+    });
+  });
+  const classify = (r) => {
+    if (r.ok) return 'ok';
+    if (/Sign in to confirm|not a bot/i.test(r.err)) return 'bot check';
+    if (/HTTP Error 429|Too Many Requests/i.test(r.err)) return 'rate limited';
+    if (/HTTP Error 403/i.test(r.err)) return '403 forbidden';
+    if (r.reason === 'timeout') return 'timeout';
+    return (r.err.split('\n').filter(Boolean).pop() || 'failed').slice(0, 70);
+  };
+  // a search exercises the same path a real download takes, and does not depend on one
+  // video staying online or being available in this country
+  const video = 'ytsearch1:burial archangel';
+  console.log('Probing this address (one request each, about a minute)…');
+  const ytDefault = await probe(['--print', '%(title)s', video]);
+  const ytState = classify(ytDefault);
+  const sc = await probe(['--flat-playlist', '--print', '%(title)s', 'scsearch1:burial archangel']);
+  const scState = classify(sc);
+  let ipv4 = null;
+  if (!ytDefault.ok || ytDefault.ms > 8000) {
+    ipv4 = await probe(['--force-ipv4', '--print', '%(title)s', video]);
+  }
+  console.log(`youtube     ${ytState}${ytDefault.ok ? ` · ${ytDefault.ms} ms to extract` : ''}`);
+  console.log(`soundcloud  ${scState}${sc.ok ? ` · ${sc.ms} ms` : ''}`);
+  if (ipv4) console.log(`youtube -4  ${classify(ipv4)}${ipv4.ok ? ` · ${ipv4.ms} ms` : ''}`);
+
+  const want = {};
+  const notes = [];
+  if (ytState === 'rate limited') {
+    want.MUSICFY_DOWNLOAD_CONCURRENCY = '1';
+    notes.push('YouTube is rate limiting this address. One download at a time, then wait.');
+  } else if (!ytDefault.ok && isVirtualized()) {
+    want.MUSICFY_DOWNLOAD_CONCURRENCY = '2';
+  }
+  if (ytState === 'bot check' || ytState === '403 forbidden') {
+    notes.push('YouTube wants a login from this address. Download a cookies.txt while logged in and set MUSICFY_YTDLP_COOKIES=/path/cookies.txt.');
+    if (sc.ok) {
+      want.MUSICFY_PREFER_SOUNDCLOUD = '1';
+      notes.push('SoundCloud works here, so it is tried first.');
+    }
+  }
+  if (ipv4 && ipv4.ok && (!ytDefault.ok || ipv4.ms * 1.5 < ytDefault.ms)) {
+    want.MUSICFY_YTDLP_IPV4 = '1';
+    notes.push(`The IPv4 route is faster (${ipv4.ms} ms vs ${ytDefault.ms} ms).`);
+  }
+  if (!ytDefault.ok && !sc.ok) {
+    notes.push('Neither source answers. Downloads from this address will fail until it is unblocked or a proxy is used; uploads, playback and the library still work.');
+  }
+  if (flags.has('--apply') && Object.keys(want).length) {
+    writeEnv(want);
+    console.log('\nApplied to musicfy.env:');
+    for (const [k, v] of Object.entries(want)) console.log(`  ${k}=${v}`);
+    console.log('Restart to use it: musicfy restart');
+  } else if (notes.length) {
+    console.log('\nWhat to do:');
+    for (const n of notes) console.log('  - ' + n);
+    if (Object.keys(want).length) console.log('\nApply the settings with: musicfy netcheck --apply');
+  } else if (ytDefault.ok) {
+    console.log('\nThis address is fine for downloads. No change needed.');
+  } else {
+    console.log('\nYouTube failed from this address and SoundCloud answered; downloads will only work for tracks SoundCloud carries.');
+    if (!Object.keys(want).length) console.log('Apply: MUSICFY_PREFER_SOUNDCLOUD=1 in musicfy.env');
+  }
+  if (sc.ok && !ytDefault.ok && !flags.has('--apply')) {
+    console.log('Try again with: musicfy netcheck --apply');
+  }
+  return ytDefault.ok || sc.ok ? 0 : 1;
 }
 
 async function doctor() {
@@ -597,6 +710,7 @@ try {
     case 'status': code = await status(); break;
     case 'logs': logs(); break;
     case 'doctor': code = await doctor(); break;
+    case 'netcheck': code = await netcheck(); break;
     case 'backup': code = backup(); break;
     case 'restore': code = await restore(); break;
     case 'token': code = token(); break;

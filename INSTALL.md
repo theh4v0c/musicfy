@@ -532,43 +532,100 @@ The first boot creates `data/`, `logs/` and the schema. Nothing has to be seeded
 
 ### Downloads on a server address
 
-YouTube treats a home connection and a datacenter address differently. A home line gets
-the full-speed stream; a VPS often gets `429 Too Many Requests`, a bot check, or a slow
-IPv6 route, and each retry costs time before the next source is tried.
+YouTube treats a home connection and a rented server differently. A home line gets the
+full-speed stream. A VPS often gets `429 Too Many Requests`, `Sign in to confirm you're not
+a bot`, or a slow IPv6 route — and each retry costs time before the next source is tried.
 
-MUSICFY now fails fast: once a YouTube attempt reports 429 or a bot check, it stops walking
-the client list and goes to SoundCloud instead of spending minutes on clients that meet the
-same wall. `--concurrent-fragments 8` is used on both the direct and search paths.
+`musicfy setup` writes a starting value: **4 downloads at once on a home machine, 2 on a
+virtual machine**. It also creates `yt-dlp-musicfy`, the wrapper that gives yt-dlp a
+JavaScript runtime and the open-source EJS challenge solver.
 
-If downloads are still slow on a VPS, try in `~/.musicfy/musicfy.env`, one at a time:
+Run the address check once after installing:
 
-```ini
-MUSICFY_DOWNLOAD_CONCURRENCY=2
-MUSICFY_YTDLP_IPV4=1
-MUSICFY_PREFER_SOUNDCLOUD=1
+```sh
+musicfy netcheck
 ```
 
-Then `musicfy restart`. Concurrency 1 is the safest for a rate limit but it also means one
-slow retry blocks every other job; 2 usually finishes a queue faster without tripping the
-limit again.
+It makes one request to YouTube and one to SoundCloud and prints what this address can do:
 
-When YouTube answers `Sign in to confirm you're not a bot`, the address itself is flagged and
-no player client gets past it. SoundCloud is tried first for that reason. Tracks that only
-exist on YouTube need a session: export `cookies.txt` from a browser where you are logged
-in to YouTube (a private window, export, then close it), copy it to the server, and point
-MUSICFY at it:
+```
+youtube     bot check
+soundcloud  ok · 1136 ms
+youtube -4  bot check
+
+What to do:
+  - YouTube wants a login from this address. Download a cookies.txt while logged in and set
+    MUSICFY_YTDLP_COOKIES=/path/cookies.txt.
+  - SoundCloud works here, so it is tried first.
+```
+
+Then apply what it recommends:
+
+```sh
+musicfy netcheck --apply
+musicfy restart
+```
+
+`--apply` only writes the keys it can justify: `MUSICFY_PREFER_SOUNDCLOUD=1` when YouTube is
+blocked and SoundCloud works, `MUSICFY_YTDLP_IPV4=1` when the IPv4 route is measurably
+faster, and a concurrency of 1 or 2 when the address is rate limited.
+
+The flags, if you prefer to set them by hand:
+
+| setting | when |
+|---|---|
+| `MUSICFY_DOWNLOAD_CONCURRENCY=1` | a `429` appears; one job at a time, then wait |
+| `MUSICFY_DOWNLOAD_CONCURRENCY=2` | a server address; two jobs finish faster than four that trip the limit |
+| `MUSICFY_YTDLP_IPV4=1` | the IPv4 route is faster than IPv6 (`netcheck` measures it) |
+| `MUSICFY_PREFER_SOUNDCLOUD=1` | YouTube asks for a login, SoundCloud answers |
+| `MUSICFY_YTDLP_COOKIES=/path/cookies.txt` | tracks that only exist on YouTube |
+
+Concurrency 1 is the safest against a rate limit, but one slow retry then blocks every
+other job; 2 usually finishes a queue faster without tripping the limit again.
+
+### YouTube requires a login
+
+`Sign in to confirm you're not a bot` is about the address, not about a player client.
+Every YouTube client meets the same wall, so the downloader stops walking the list and
+tries SoundCloud instead. Tracks that only exist on YouTube need a session.
+
+Export cookies from a browser where you are logged in to YouTube, on a computer you trust:
+
+```sh
+# with yt-dlp installed locally, this reads the browser and writes a cookie jar
+yt-dlp --cookies-from-browser chrome --cookies /tmp/yt-cookies.txt   --skip-download "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+```
+
+Copy it to the server and point MUSICFY at it:
+
+```sh
+scp /tmp/yt-cookies.txt root@YOUR_SERVER:/root/.musicfy/cookies.txt
+ssh root@YOUR_SERVER 'chmod 600 /root/.musicfy/cookies.txt'
+```
 
 ```ini
 MUSICFY_YTDLP_COOKIES=/root/.musicfy/cookies.txt
 ```
 
 ```sh
-chmod 600 /root/.musicfy/cookies.txt
 musicfy restart
 ```
 
-Treat that file as a password: it is a live session. Export it again when it expires. If `MUSICFY_YTDLP_IPV4=1` makes no difference, your IPv6 route was not the
-problem and you can drop it.
+Treat the file as a password: it is a live session. Export it again when it expires, and
+delete it from the laptop afterwards.
+
+### What still cannot be downloaded
+
+These are limits of the sources, not of MUSICFY:
+
+| Message | Meaning |
+|---|---|
+| `This video is DRM protected` | SoundCloud requires a paid account for that track; upload the file instead |
+| `truncated audio: 30s of 343s` | the only match is a preview or a clip; the search moves to the next result, then gives up |
+| `no source in search` | neither YouTube nor SoundCloud carries it, or the address is blocked |
+
+Uploading the file from a home computer always works and is the fallback that never depends
+on an address.
 
 `musicfy.env` under the data root holds the same values and is written with mode 600.
 The `install.sh` and `musicfy setup` routes use `~/.musicfy` as `MUSICFY_HOME` and write

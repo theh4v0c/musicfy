@@ -2724,15 +2724,16 @@ async function renderSettings() {
       <section class="set-card" data-tone="acc">
         <h2>You</h2>
         <label>Display name<input id="set-name" value="${esc(s.display_name || '')}" placeholder="Your name"></label>
-        <label>Email<input id="set-email" value="${esc(s.email || '')}" placeholder="you@example.com"></label>
+        <p class="set-note">The first word is used by the greeting on Home. Nothing else reads it.</p>
         <label>Timezone<input id="set-tz" value="${esc(s.timezone || '')}" placeholder="America/Sao_Paulo"></label>
-        <p class="set-note">IANA name, e.g. America/Sao_Paulo. Setting a city below fills it in automatically.</p>
+        <p class="set-note">IANA name, e.g. America/Sao_Paulo. Drives the greeting hour, the "at this hour you usually listen" line and the weather. Setting a city below fills it in automatically.</p>
         <label>Language
           <select id="set-lang">
             <option value="en"${window.I18N && window.I18N.lang === 'en' ? ' selected' : ''}>English</option>
             <option value="pt-BR"${window.I18N && window.I18N.lang === 'pt-BR' ? ' selected' : ''}>Português (Brasil)</option>
           </select>
         </label>
+        <p class="set-note">The interface language for this browser. Names of tracks, artists and playlists are never translated.</p>
       </section>
       <section class="set-card" data-tone="acc">
         <h2>Location</h2>
@@ -2758,21 +2759,30 @@ async function renderSettings() {
         <h2>Maintenance</h2>
         <p class="set-note">Housekeeping for the library itself. Nothing here changes your files unless it says so.</p>
         <div class="set-tools">
-          <button class="btn btn-ghost" id="set-repair" type="button">Repair metadata</button>
-          <button class="btn btn-ghost" id="set-genres" type="button">Fill genres</button>
-          <button class="btn btn-ghost" id="set-covers" type="button">Fix covers</button>
-          <button class="btn btn-ghost" id="set-dedupe" type="button">Remove duplicates</button>
-          <button class="btn btn-ghost" id="set-cache-clear" type="button">Clear cache</button>
+          <button class="btn btn-ghost" id="set-repair" type="button" title="Reads the tags of every file and fills title, artist, album, year and track number from MusicBrainz">Repair metadata</button>
+          <button class="btn btn-ghost" id="set-genres" type="button" title="Asks MusicBrainz for a genre per artist and stores a genre family for recommendations">Fill genres</button>
+          <button class="btn btn-ghost" id="set-covers" type="button" title="Downloads album art for albums that have none. Existing covers are kept">Fix covers</button>
+          <button class="btn btn-ghost" id="set-dedupe" type="button" title="Removes a copy only when two files are the same recording. Different versions are never merged">Remove duplicates</button>
+          <button class="btn btn-ghost" id="set-cache-clear" type="button" title="Drops cover, preview and page caches. No audio file is touched">Clear cache</button>
         </div>
+        <ul class="set-note set-list">
+          <li>Repair metadata reads the tags and fills title, artist, album, year and track number from MusicBrainz.</li>
+          <li>Fill genres tags one genre per artist and a family, which is what picks and Flow use.</li>
+          <li>Fix covers fetches album art for albums that have none; existing covers are kept.</li>
+          <li>Remove duplicates deletes a file only when it is the same recording; a remix, a live take or another bitrate stays.</li>
+          <li>Clear cache drops covers, previews and pages kept for speed. No audio file is touched.</li>
+        </ul>
         <p class="set-note" id="set-maint" data-tone="">Nothing run yet.</p>
         <p class="set-note" id="set-cache">cache -</p>
         <p class="set-note" id="set-rungs">sources -</p>
         <label>Auto-save after plays<input id="set-auto-dl" type="number" min="0" max="20" value="${Number(s.auto_download_plays ?? 2)}"></label>
-        <p class="set-note">0 turns automatic saving off.</p>
+        <p class="set-note">A streamed track with no file is downloaded after this many plays. 0 turns automatic saving off.</p>
       </section>
       <section class="set-card" data-tone="acc">
         <h2>Model endpoint</h2>
-        <p class="set-note">Used by A&amp;R and Ask to interpret requests. Covers, search, downloads and playback do not use it.</p>
+        <p class="set-note">A language model turns one sentence into a structured request: key, BPM, year, genre, plays, count and order. MUSICFY sends the sentence and nothing else — never your library, your files or your listening history.</p>
+        <p class="set-note">Two callers only. A&amp;R uses it when the request is a brief: a person, an age, an occasion, several likes ("a birthday set for a 7 year old who loves dinosaurs"). Ask uses it when the question is fuzzy ("something darker", "less vocals"). Everything else — genres, keys, tempo, years, counts — is parsed by the built-in rules, without a network call.</p>
+        <p class="set-note">Without an endpoint both fall back to those rules, which cover the explicit requests and miss the conversational ones. Covers, metadata, search inside your library, downloads and playback never use it.</p>
         <p class="set-note llm-status" id="set-llm-status"><span class="llm-dot" data-state="idle"></span> <span>Checking...</span></p>
         <button class="btn btn-ghost" id="set-llm-test" type="button">Test connection</button>
         <label>Base URL<input id="set-llm-url" value="${esc(s.llm_base_url || l.base_url || '')}" placeholder="https://host/v1"></label>
@@ -2788,7 +2798,7 @@ async function renderSettings() {
             <option value="mp3"${s.preferred_format === 'mp3' ? ' selected' : ''}>mp3 (universal)</option>
           </select>
         </label>
-        <p class="set-note">Applies to downloads from streaming sources only. Files you upload are stored byte for byte, and lossless files are never converted.</p>
+        <p class="set-note">Applies to downloads from streaming sources only. "Keep the original" stores what the source serves without re-encoding; m4a and mp3 convert once, which loses a little quality and takes time. Files you upload are stored byte for byte, and lossless files are never converted.</p>
       </section>
       <section class="set-card">
         <h2>Playback</h2>
@@ -2809,6 +2819,7 @@ async function renderSettings() {
           </select>
         </label>
         <label class="set-check"><input type="checkbox" id="set-autoplay"${s.autoplay_next !== false ? ' checked' : ''}> Continue with similar tracks when a playlist ends</label>
+        <p class="set-note">Target level is the loudness every track is turned down to while Normalize is on. -14 dB matches the streaming services; -18 dB leaves more headroom for a DJ set.</p>
         <label>Buffer ahead
           <select id="set-buffer">
             <option value="0"${String(s.prefetch_ahead) === '0' ? ' selected' : ''}>off</option>
@@ -2816,11 +2827,13 @@ async function renderSettings() {
             <option value="2"${String(s.prefetch_ahead) === '2' ? ' selected' : ''}>2 tracks</option>
           </select>
         </label>
+        <p class="set-note">Buffer ahead keeps the next track preloaded. More buffer means no wait between tracks and more data held in memory; off frees the memory on a small device.</p>
         <div class="lib-actions"><button class="btn btn-ghost" id="set-clearbuf" type="button">Clear buffer</button><span class="set-note">Frees preloaded audio and cached pages</span></div>
         <p class="set-note" id="set-playlog"></p>
       </section>
       <section class="set-card">
         <h2>Library</h2>
+        <p class="set-note">Read-only counts: tracks, disk use, plays recorded and how many tracks have cue points.</p>
         <div class="set-facts" id="set-facts">Reading...</div>
       </section>
     </div>
@@ -2945,7 +2958,6 @@ async function renderSettings() {
   const readForm = () => {
     const body = {
       display_name: document.getElementById('set-name').value.trim(),
-      email: document.getElementById('set-email').value.trim(),
       timezone: document.getElementById('set-tz').value.trim(),
       city: document.getElementById('set-city').value.trim(),
       llm_base_url: document.getElementById('set-llm-url').value.trim(),
@@ -2974,7 +2986,7 @@ async function renderSettings() {
   };
   const changedKeys = () => Object.keys(readForm()).filter((k) => !same(readForm()[k], baseline[k]));
   const LABELS = {
-    display_name: 'name', email: 'email', timezone: 'time zone', city: 'city',
+    display_name: 'name', timezone: 'time zone', city: 'city',
     llm_base_url: 'model endpoint', llm_model: 'model', llm_api_key: 'API key',
     preferred_format: 'format',
     normalize_loudness: 'loudness switch', target_loudness: 'target level',

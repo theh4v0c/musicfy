@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.31 — 2026-11-25
+
+- The Downloads drawer is translated: summary, running/queued counts, missing list, every
+  button and every state label, including the singular "1 de 1 faixa tem áudio".
+- Settings explains itself: what the name, time zone and language drive; one line per
+  maintenance action; what the model endpoint does, what it never does and what happens
+  without it; what target level and buffer mean. The Email field is gone: nothing read it.
+- `musicfy netcheck [--apply]` probes YouTube and SoundCloud from this address, checks
+  whether IPv4 is faster and writes the settings that fit.
+- `musicfy setup` writes 2 downloads at once on a virtual machine and 4 on a home machine.
+- `DOMAIN.md` rewritten as a full guide: DNS (including Hostinger and the AAAA trap),
+  Cloudflare mode, firewall, Caddy, the shared password, verification, updates, an SSH
+  tunnel alternative and a troubleshooting table. `INSTALL.md` documents netcheck and the
+  source limits; `README.md` points at both.
+
 ## 0.1.30 — 2026-11-25
 
 - A `files` row whose file no longer exists is dropped before the "better copy" comparison.

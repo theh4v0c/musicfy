@@ -108,12 +108,17 @@ fails.
 | **Linux** 64-bit, Debian/Ubuntu and similar | `install.sh`, systemd or the `musicfy` command | supported and tested on Debian/Ubuntu |
 | **Windows 10/11** | Docker Desktop, or WSL2 with Ubuntu and then the Linux steps | supported through Linux; native Windows is not supported |
 | **NAS / home server** | Docker, 64-bit amd64 or arm64 | supported when the NAS can run Linux containers |
-| **VPS / cloud server** | the Linux steps on the server; keep the bind on `127.0.0.1` and use an SSH tunnel or VPN | supported; do not expose 8710 directly |
+| **VPS / cloud server** | the Linux steps on the server; keep the bind on `127.0.0.1`, run `musicfy netcheck`, then use a domain ([DOMAIN.md](DOMAIN.md)) or an SSH tunnel | supported; do not expose 8710 directly |
 | **Phone or tablet** | no; it is a browser client for the computer above | use the browser |
 
 You need Node 22.13 or newer, Python 3.10 or newer, `ffmpeg`, `ffprobe` and `yt-dlp`.
 `install.sh` and `musicfy setup` install and check what they can; `musicfy doctor` tells
 you what is still missing. A 64-bit machine is required.
+
+After installing, run `musicfy netcheck` once. It checks whether YouTube accepts this
+address, whether SoundCloud answers, and whether IPv4 is the faster route, then sets the
+download settings that fit (`musicfy netcheck --apply`). On a rented server this is the
+difference between a working download queue and a wall of `429` and bot-check failures.
 
 ## A look
 
@@ -203,8 +208,9 @@ directory and are never committed.
 ## Put it on a domain
 
 For a shop, studio or family install that should be reachable over HTTPS with a login, see
-[DOMAIN.md](DOMAIN.md). It uses Caddy as the only public service and keeps MUSICFY on
-`127.0.0.1`.
+[DOMAIN.md](DOMAIN.md): DNS record, firewall, Caddy certificate, the shared password, the
+Listener mode and what to check when it does not load. It uses Caddy as the only public
+service and keeps MUSICFY on `127.0.0.1`.
 
 ## Deploy notes
 
