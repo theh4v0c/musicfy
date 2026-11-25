@@ -603,7 +603,7 @@ Library: `GET/POST /api/playlists`, `GET/PATCH/DELETE /api/playlists/:id`, `POST
 
 Discovery: `GET /api/search/ladder?q=`, `GET /api/ladder/stream/{youtube,soundcloud,generic}`, `GET /api/prewarm/:id`, `POST /api/ladder/download`, `GET /api/jobs/:id`, `GET /api/downloads`, `POST /api/downloads/:id/retry`, `POST /api/downloads/:id/cancel`, `POST /api/downloads/retry-failed`, `POST /api/downloads/cancel-all`, `POST /api/downloads/clear-failed`, `GET /api/health/rungs`.
 
-Maintenance: `POST /api/mirror/spotify`, `POST /api/mirror/track`, `POST /api/history/scan`, `POST /api/history/materialize`, `POST /api/maintenance/repair`, `GET /api/maintenance/duplicates`, `POST /api/maintenance/dedupe`, `POST /api/maintenance/dedupe-files`, `POST /api/tracks/:id/unlock`, `POST /api/covers/fill`, `GET/POST /api/settings`, `GET /api/llm/status`,  `GET/POST /api/soundcloud/token`, `GET /api/docs` (generated list), `GET /api/stats`.
+Maintenance: `POST /api/mirror/spotify`, `POST /api/mirror/track`, `POST /api/history/scan`, `POST /api/history/materialize`, `POST /api/maintenance/repair`, `GET /api/maintenance/duplicates`, `POST /api/maintenance/dedupe`, `POST /api/maintenance/dedupe-files`, `POST /api/tracks/:id/unlock`, `POST /api/covers/fill`, `GET/POST /api/settings`, `GET /api/llm/status`, `GET /api/update/status`, `POST /api/update`,  `GET/POST /api/soundcloud/token`, `GET /api/docs` (generated list), `GET /api/stats`.
 
 ## Web app notes
 

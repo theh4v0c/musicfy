@@ -440,6 +440,10 @@ configure a read-only GitHub deploy key on that machine first, or the pull will 
 MUSICFY runs as a systemd service, the command prints the restart line:
 `sudo systemctl restart musicfy`.
 
+Settings also shows the installed version and **Check for updates**. **Update now** pulls
+the code, but the running process keeps the old version until MUSICFY is restarted. The
+footer prints the restart command for the way it is running.
+
 If you installed with npm:
 
 ```sh

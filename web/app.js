@@ -2707,15 +2707,15 @@ async function renderSettings() {
   const s = d.settings || {};
   const l = d.llm || {};
   v.innerHTML = `<h1 class="sr-only">Settings</h1>
+    <section class="set-card set-mode" data-tone="acc">
+      <h2>Mode</h2>
+      <p class="set-note">Listener hides Prep, harmonic tools and DJ exports. DJ shows everything.</p>
+      <div class="kind-switch" id="set-tier" role="group" aria-label="Interface mode">
+        <button class="mode-tab${state.tier === 'listener' ? ' on' : ''}" data-tier="listener">Listener</button>
+        <button class="mode-tab${state.tier === 'dj' ? ' on' : ''}" data-tier="dj">DJ</button>
+      </div>
+    </section>
     <div class="set-grid">
-      <section class="set-card" data-tone="acc">
-        <h2>Mode</h2>
-        <p class="set-note">Listener hides Prep, harmonic tools and DJ exports. DJ shows everything.</p>
-        <div class="kind-switch" id="set-tier" role="group" aria-label="Interface mode">
-          <button class="mode-tab${state.tier === 'listener' ? ' on' : ''}" data-tier="listener">Listener</button>
-          <button class="mode-tab${state.tier === 'dj' ? ' on' : ''}" data-tier="dj">DJ</button>
-        </div>
-      </section>
       <section class="set-card" data-tone="acc">
         <h2>You</h2>
         <label>Display name<input id="set-name" value="${esc(s.display_name || '')}" placeholder="Your name"></label>
@@ -2819,7 +2819,13 @@ async function renderSettings() {
         <div class="set-facts" id="set-facts">Reading...</div>
       </section>
     </div>
-    <div class="set-actions"><button class="btn btn-primary" id="set-save">Save settings</button><span id="set-msg" class="set-note"></span></div>`;
+    <div class="set-actions"><button class="btn btn-primary" id="set-save">Save settings</button><span id="set-msg" class="set-note"></span></div>
+    <div class="set-about">
+      <span>MUSICFY <b id="set-version">v${esc(d.version || '')}</b></span>
+      <span id="set-update-msg" class="set-note">Checking for updates...</span>
+      <button class="btn btn-ghost" id="set-check-update" type="button">Check for updates</button>
+      <button class="btn btn-ghost" id="set-update" type="button" hidden>Update now</button>
+    </div>`;
   // what the player did last, including while the screen was locked
   try {
     const logEl = document.getElementById('set-playlog');
@@ -2888,6 +2894,42 @@ async function renderSettings() {
       } catch { b.disabled = false; toast('Could not change the mode', 4000); }
     };
   });
+  const versionEl = document.getElementById('set-version');
+  const updateMsg = document.getElementById('set-update-msg');
+  const updateBtn = document.getElementById('set-update');
+  const checkBtn = document.getElementById('set-check-update');
+  const checkUpdate = async () => {
+    if (!updateMsg) return;
+    updateMsg.textContent = 'Checking for updates...';
+    try {
+      const r = await api('/api/update/status?check=1', { nocache: true });
+      if (versionEl && r.version) versionEl.textContent = `v${r.version}`;
+      if (!r.git) { updateMsg.textContent = 'This install is not a git checkout; update from a release bundle.'; if (updateBtn) updateBtn.hidden = true; return; }
+      if (r.error) { updateMsg.textContent = `Could not check: ${r.error}`; if (updateBtn) updateBtn.hidden = true; return; }
+      if (r.behind > 0) {
+        updateMsg.textContent = `Update available (${r.behind} new commit${r.behind === 1 ? '' : 's'}).`;
+        if (updateBtn) updateBtn.hidden = false;
+      } else {
+        updateMsg.textContent = 'Up to date.';
+        if (updateBtn) updateBtn.hidden = true;
+      }
+    } catch (e) { updateMsg.textContent = `Could not check: ${e.message || 'unknown error'}`; }
+  };
+  if (checkBtn) checkBtn.onclick = checkUpdate;
+  if (updateBtn) updateBtn.onclick = async () => {
+    if (!confirm('Update MUSICFY now? The code is pulled first; a restart is needed before the new version is active.')) return;
+    updateBtn.disabled = true;
+    try {
+      const res = await fetch('/api/update', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'update failed');
+      updateMsg.textContent = `Updated. Restart with: ${data.restart || 'musicfy restart'}`;
+      updateBtn.hidden = true;
+      toast('Update pulled; restart MUSICFY to apply it', 8000);
+    } catch (e) { updateMsg.textContent = `Update failed: ${e.message || 'unknown error'}`; updateBtn.disabled = false; }
+  };
+  checkUpdate();
+
   const saveBtn = document.getElementById('set-save');
   const saveMsg = document.getElementById('set-msg');
 

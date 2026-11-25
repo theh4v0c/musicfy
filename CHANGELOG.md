@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.9 — 2026-11-25
+
+- Settings puts the Listener/DJ mode in a full-width band, so the three columns below start
+  on one line instead of a tiny card staggering the first column.
+- Settings shows the MUSICFY version, checks for updates, and can pull a new version with
+  **Update now**. A restart is still required and the exact command is shown.
+- Updates report whether the install is a git checkout, how many commits behind it is, and
+  the on/off systemd restart command.
+- `GET /api/update/status`, `POST /api/update`.
+
 ## 0.1.8 — 2026-11-25
 
 - Settings → Mode: **Listener** and **DJ**.

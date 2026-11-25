@@ -45,6 +45,38 @@ const BIND = paths.BIND;
 const SETTINGS_FILE = path.join(paths.DATA, 'settings.json');
 const WNL = process.env.WNL_URL || '';
 const WEB = path.join(__dirname, '..', 'web');
+const APP_ROOT = path.join(__dirname, '..');
+let APP_VERSION = '0.0.0';
+try { APP_VERSION = JSON.parse(fs.readFileSync(path.join(APP_ROOT, 'package.json'), 'utf8')).version || APP_VERSION; } catch {}
+let updateCache = { at: 0, data: null };
+function execFileP(cmd, args, opts) {
+  return new Promise((resolve, reject) => execFile(cmd, args, opts, (err, stdout) => err ? reject(err) : resolve(String(stdout || ''))));
+}
+async function updateInfo(check = false) {
+  const out = { version: APP_VERSION, git: false, behind: 0, branch: '', error: null, restart: 'musicfy restart' };
+  try {
+    out.git = execFileSync('git', ['-C', APP_ROOT, 'rev-parse', '--is-inside-work-tree'], { timeout: 5000 }).toString().trim() === 'true';
+  } catch {}
+  if (!out.git) return out;
+  try {
+    out.branch = execFileSync('git', ['-C', APP_ROOT, 'rev-parse', '--abbrev-ref', 'HEAD'], { timeout: 5000 }).toString().trim();
+    const svc = process.platform === 'linux' && (() => { try { execFileSync('systemctl', ['is-active', '--quiet', 'musicfy'], { timeout: 3000 }); return true; } catch { return false; } })();
+    if (svc) out.restart = 'sudo systemctl restart musicfy';
+  } catch {}
+  if (!check) return out;
+  if (updateCache.data && Date.now() - updateCache.at < 5 * 60 * 1000) return { ...updateCache.data, version: APP_VERSION };
+  try {
+    await execFileP('git', ['-C', APP_ROOT, 'fetch', '--quiet', '--depth', '1', 'origin'], { timeout: 15000 });
+    const n = Number((await execFileP('git', ['-C', APP_ROOT, 'rev-list', '--count', 'HEAD..@{u}'], { timeout: 5000 })).trim());
+    out.behind = Number.isFinite(n) ? n : 0;
+  } catch (e) {
+    out.error = String(e.message || e).split('\n')[0].slice(0, 160);
+  }
+  out.at = Date.now();
+  updateCache = { at: out.at, data: out };
+  return out;
+}
+
 const COVER_DIR = path.join(paths.DATA, 'covers');
 fs.mkdirSync(COVER_DIR, { recursive: true });
 fs.mkdirSync(paths.DATA, { recursive: true });
@@ -3094,6 +3126,22 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, await llm.probe());
     }
 
+    if (u.pathname === '/api/update/status' && req.method === 'GET') {
+      return json(res, 200, await updateInfo(u.searchParams.get('check') === '1'));
+    }
+    if (u.pathname === '/api/update' && req.method === 'POST') {
+      const info = await updateInfo(true);
+      if (!info.git) return json(res, 409, { error: 'this install is not a git checkout' });
+      if (info.error) return json(res, 502, { error: info.error });
+      try {
+        const out = await execFileP('git', ['-C', APP_ROOT, 'pull', '--ff-only'], { timeout: 60000 });
+        updateCache = { at: 0, data: null };
+        return json(res, 200, { ok: true, output: String(out || '').slice(-1200), restart: (await updateInfo(false)).restart, version: APP_VERSION });
+      } catch (e) {
+        return json(res, 500, { error: String(e.message || e).split('\n')[0].slice(0, 160) });
+      }
+    }
+
     if (u.pathname === '/api/settings') {
       const file = SETTINGS_FILE;
       if (req.method === 'GET') {
@@ -3102,6 +3150,7 @@ const server = http.createServer(async (req, res) => {
         const cfg = llm.config() || {};
         return json(res, 200, {
           settings: { ...s, ui_tier: s.ui_tier === 'listener' ? 'listener' : 'dj', auto_download_plays: Number(setting('auto_download_plays', '2')) },
+          version: APP_VERSION,
           llm: { configured: !!llm.config(), base_url: cfg.base_url || '', model: cfg.model || '', has_key: !!cfg.api_key },
         });
       }
