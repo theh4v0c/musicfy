@@ -2105,7 +2105,7 @@ async function renderDjExport() {
   const prepMeta = (p) => {
     const bits = [`${p.n_tracks || 0} tracks`, `${p.prepped || 0}/${p.owned || 0} up to date`];
     if (p.outdated) bits.push(`${p.outdated} without cue points`);
-    if (p.never) bits.push(`${p.never} never`);
+    if (p.never) bits.push(`${p.never} never analysed`);
     return bits.join(' · ');
   };
   const prepState = (p) => {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.23 — 2026-11-25
+
+- Home pick reason "your artist of the week, unheard lately" and the "Show all 2289"
+  button, large TRACKS counts, the model-test "No answer: empty response" line and the
+  "not a git checkout" note are translated.
+- The Prep row no longer ends in a bare "never": it reads "22 never analysed".
+
 ## 0.1.22 — 2026-11-25
 
 - Portuguese covers the pop-up messages: toasts now translate where they are created, so
