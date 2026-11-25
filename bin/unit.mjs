@@ -127,6 +127,7 @@ test('children’s music is recognised without a genre', () => {
   assert.equal(G.looksChildren({ title: 'Kids', artist: 'MGMT', album: 'Oracular Spectacular' }), false);
   assert.equal(G.looksChildren({ genre: "Children's Music" }), true);
   assert.equal(G.looksChildren({ genre: 'Techno' }), false);
+  assert.equal(G.looksChildren({ album: 'Nursery Rhymes', artist: 'Meshuggah', title: 'War' }), false);
 });
 
 test('a plain request is not answered with a remaster', () => {

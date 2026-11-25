@@ -15,15 +15,16 @@ check() {
 }
 check "/" 500
 check "/api/stats" 20
-check "/api/tracks" 1000
-check "/api/playlists" 5
+check "/api/tracks" 2
+check "/api/playlists" 2
 check "/api/downloads" 20
 check "/api/health/rungs" 20 60
 check "/api/analyze/status" 20
 check "/api/genre/status" 20
 check "/api/recommend?days=30&limit=3" 20 40
 check "/api/listens/recent?days=30" 5
-check "/api/cover-playlist/$(curl -s -m 10 $BASE/api/playlists | head -c 400 | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')" 100
+pid=$(curl -s -m 10 "$BASE/api/playlists" | head -c 400 | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+[ -n "$pid" ] && check "/api/cover-playlist/$pid" 100
 rm -f /tmp/smoke_body
 [ "$fail" = "0" ] && echo "ALL GREEN" || echo "FAILURES PRESENT"
 exit $fail

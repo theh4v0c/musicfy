@@ -6,6 +6,32 @@ work; this file records what changed and why.
 
 ## Delivered
 
+### 2026-11-25 · Fresh install works; one metadata rule (`v493`)
+
+A clean clone with one uploaded track answered 500 on radio, recommendations, Flow and
+history. The history tables (`play_edges`, `taste_tracks`, `taste_artists`, `spotify_plays`,
+`history_files`) were created only by the Spotify importer, so nothing existed until an
+export was imported; `/api/radio` failed on its first `FROM play_edges` even with zero plays.
+
+- migration 7 creates the five history tables and their indexes; they are also in
+  `schema.sql`. A fresh library now answers radio, recommend, flow and history with 200.
+- the catch-all route logs the path it actually served; every 500 was previously labelled
+  `/api/ingest-wnl-all`, which sent the last investigation to the downloader.
+- single and bulk edits share `metaValidation()`: non-empty title, year 1900…next year,
+  known genre family — 400 with a sentence instead of SQLite text.
+- `meta_locked` records only fields whose value changed, and **Let catalogue fix metadata**
+  (`POST /api/tracks/:id/unlock`) releases the lock. Locks are no longer permanent.
+- `yt-dlp` falls back to PATH when no venv exists, so a fresh install with a system
+  yt-dlp resolves instead of reporting it missing.
+- children's detection ignores the album field; a "Nursery Rhymes" album by a metal band is
+  no longer reclassified as children's music.
+- migration 4's playlist default now matches `schema.sql` (`listen`).
+- smoke.sh checks that endpoints answer, not that the Pi's library is large; it is green on
+  an empty instance.
+
+Tests 57/57, unit 13/13, design-check and smoke green — verified on a brand-new
+`MUSICFY_HOME` as well as the Pi.
+
 ### 2026-11-25 · Manual metadata is authoritative (`v492`)
 
 Clicking **Fix metadata** after correcting the Meshuggah albums moved three *None* tracks
@@ -15,7 +41,7 @@ overwriting the person's edit. The catalogue was treated as truth; it is only a 
 - migration 6 adds `tracks.meta_locked`.
 - **Edit metadata** and **Edit album** record the fields they write. `repair.propose()`
   skips those fields; **Fix metadata** can still fill gaps but cannot revert a hand edit.
-- album/year bulk writes lock album/year; single edits lock every field submitted.
+- album/year bulk writes lock album/year; single edits lock only fields whose value changed.
 - the three *None* tracks (Aztec Two-Step, Sickening, Humiliative) were restored to
   *None* (1994); Rare Trax, Alive and I were re-applied and locked. A repair on *None*
   now reports 0 fixed for the locked fields and leaves the album at 5 tracks.

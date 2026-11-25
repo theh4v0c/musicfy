@@ -93,3 +93,39 @@ CREATE INDEX IF NOT EXISTS ix_files_track_tier ON files(track_id, tier);
 CREATE INDEX IF NOT EXISTS ix_pt_playlist_pos ON playlist_tracks(playlist_id, position);
 CREATE INDEX IF NOT EXISTS ix_jobs_state ON jobs(state);
 CREATE INDEX IF NOT EXISTS ix_jobs_kind_state ON jobs(kind, state);
+
+-- history tables are part of the schema, not an import side effect: radio, recommendations
+-- and Flow read play_edges/taste_* on a fresh install too
+CREATE TABLE IF NOT EXISTS spotify_plays (
+  id INTEGER PRIMARY KEY,
+  ts TEXT NOT NULL,
+  ms_played INTEGER DEFAULT 0,
+  track_name TEXT,
+  artist_name TEXT,
+  album_name TEXT,
+  track_uri TEXT,
+  platform TEXT,
+  reason_start TEXT,
+  reason_end TEXT,
+  skipped INTEGER DEFAULT 0,
+  shuffle INTEGER DEFAULT 0,
+  offline INTEGER DEFAULT 0,
+  conn_country TEXT
+);
+CREATE TABLE IF NOT EXISTS history_files (
+  name TEXT PRIMARY KEY, bytes INTEGER, rows INTEGER, music_plays INTEGER, imported_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sp_ts ON spotify_plays(ts);
+CREATE INDEX IF NOT EXISTS idx_sp_uri ON spotify_plays(track_uri);
+CREATE INDEX IF NOT EXISTS idx_sp_artist ON spotify_plays(artist_name);
+CREATE TABLE IF NOT EXISTS taste_tracks (
+  uri TEXT PRIMARY KEY, title TEXT, artist TEXT, album TEXT,
+  plays INTEGER DEFAULT 0, ms INTEGER DEFAULT 0, skips INTEGER DEFAULT 0, last_ts TEXT
+);
+CREATE TABLE IF NOT EXISTS taste_artists (
+  artist TEXT PRIMARY KEY, plays INTEGER DEFAULT 0, ms INTEGER DEFAULT 0, last_ts TEXT
+);
+CREATE TABLE IF NOT EXISTS play_edges (
+  a TEXT NOT NULL, b TEXT NOT NULL, w INTEGER DEFAULT 0, PRIMARY KEY (a, b)
+);
+CREATE INDEX IF NOT EXISTS idx_edges_a ON play_edges(a);

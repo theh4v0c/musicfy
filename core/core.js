@@ -256,6 +256,22 @@ function lockMeta(db, id, keys) {
   db.prepare('UPDATE tracks SET meta_locked=? WHERE id=?').run([...set].join(','), id);
 }
 
+/* One rule for both edit paths. The old single PATCH accepted year "nope" and an empty
+   title reached SQLite as a NOT NULL error. */
+function metaValidation(b) {
+  if (b.title !== undefined && !String(b.title || '').trim()) return 'a track needs a title';
+  if (b.year !== undefined && b.year !== '' && b.year !== null) {
+    const y = Number(b.year);
+    const max = new Date().getFullYear() + 1;
+    if (!Number.isInteger(y) || y < 1900 || y > max) return `year must be between 1900 and ${max}`;
+  }
+  if (b.genre_family !== undefined && b.genre_family) {
+    const known = genre.FAMILIES.map(([n]) => n).concat(['pop', 'rock', 'metal', 'electronic', 'hip hop', 'latin', 'jazz', 'classical', 'folk', 'soul', 'reggae', 'blues', 'country', 'children', 'soundtrack', 'gospel']);
+    if (!known.includes(String(b.genre_family).toLowerCase())) return 'unknown genre family';
+  }
+  return null;
+}
+
 function upsertFile({ track_id, path: p, tier, bitrate, size, mtime }) {
   const row = db.prepare('SELECT id, track_id FROM files WHERE path=?').get(p);
   if (row) {
@@ -864,7 +880,7 @@ const LADDER_TTL = Number(process.env.MUSICFY_LADDER_TTL || 5 * 60 * 1000);
 const ladderCache = new Map();
 
 // 4. schema version, so column changes stop being invisible
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 function currentVersion() {
   try {
     const row = db.prepare('SELECT value FROM meta WHERE key=?').get('schema_version');
@@ -928,7 +944,7 @@ function migrate() {
       // analysis has a version now, because "analysed" stopped meaning "has cue data".
       // Playlists have a role too: a listening set does not need to be prepped.
       try { db.exec('ALTER TABLE tracks ADD COLUMN analysis_version INTEGER DEFAULT 0'); } catch {}
-      try { db.exec("ALTER TABLE playlists ADD COLUMN kind TEXT NOT NULL DEFAULT 'dj'"); } catch {}
+      try { db.exec("ALTER TABLE playlists ADD COLUMN kind TEXT NOT NULL DEFAULT 'listen'"); } catch {}
       // label what the old analyser produced so "outdated" is a fact, not a guess
       db.exec("UPDATE tracks SET analysis_version=2 WHERE analysis_version=0 AND sections IS NOT NULL AND sections != ''");
       db.exec("UPDATE tracks SET analysis_version=1 WHERE analysis_version=0 AND analyzed_at IS NOT NULL");
@@ -942,6 +958,30 @@ function migrate() {
     [6, () => {
       // hand-edited metadata is authoritative; catalogue repair must not overwrite it
       try { db.exec('ALTER TABLE tracks ADD COLUMN meta_locked TEXT'); } catch {}
+    }],
+    [7, () => {
+      // these were created only by import-history.js, so a clone with no Spotify export
+      // had no play_edges: radio, recommendations and Flow answered 500
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS spotify_plays (
+          id INTEGER PRIMARY KEY, ts TEXT NOT NULL, ms_played INTEGER DEFAULT 0,
+          track_name TEXT, artist_name TEXT, album_name TEXT, track_uri TEXT, platform TEXT,
+          reason_start TEXT, reason_end TEXT, skipped INTEGER DEFAULT 0, shuffle INTEGER DEFAULT 0,
+          offline INTEGER DEFAULT 0, conn_country TEXT);
+        CREATE TABLE IF NOT EXISTS history_files (
+          name TEXT PRIMARY KEY, bytes INTEGER, rows INTEGER, music_plays INTEGER, imported_at TEXT);
+        CREATE INDEX IF NOT EXISTS idx_sp_ts ON spotify_plays(ts);
+        CREATE INDEX IF NOT EXISTS idx_sp_uri ON spotify_plays(track_uri);
+        CREATE INDEX IF NOT EXISTS idx_sp_artist ON spotify_plays(artist_name);
+        CREATE TABLE IF NOT EXISTS taste_tracks (
+          uri TEXT PRIMARY KEY, title TEXT, artist TEXT, album TEXT,
+          plays INTEGER DEFAULT 0, ms INTEGER DEFAULT 0, skips INTEGER DEFAULT 0, last_ts TEXT);
+        CREATE TABLE IF NOT EXISTS taste_artists (
+          artist TEXT PRIMARY KEY, plays INTEGER DEFAULT 0, ms INTEGER DEFAULT 0, last_ts TEXT);
+        CREATE TABLE IF NOT EXISTS play_edges (
+          a TEXT NOT NULL, b TEXT NOT NULL, w INTEGER DEFAULT 0, PRIMARY KEY (a, b));
+        CREATE INDEX IF NOT EXISTS idx_edges_a ON play_edges(a);
+      `);
     }],
   ];
   for (const [version, run] of steps) {
@@ -2281,8 +2321,10 @@ const server = http.createServer(async (req, res) => {
         JOIN tracks t ON t.id=f.track_id WHERE f.tier='owned' AND f.sha256=? LIMIT 1`).get(digest);
       if (sameBytes) {
         try { fs.rmSync(dest, { force: true }); } catch {}
+        // no `track` field: a 409 is not a created track, and callers that treat
+        // `track` as "the new row" ended up deleting the one that already existed
         return json(res, 409, {
-          duplicate: true, reason: 'identical file', track: sameBytes.id,
+          duplicate: true, reason: 'identical file', existing_id: sameBytes.id,
           title: sameBytes.title, artist: sameBytes.artist || '', existing: path.basename(sameBytes.path),
         });
       }
@@ -2788,8 +2830,10 @@ const server = http.createServer(async (req, res) => {
         let b = {};
         try { b = JSON.parse(body || '{}'); } catch {}
         const id = Number(mEdit[1]);
-        const cur = db.prepare('SELECT title, artist FROM tracks WHERE id=?').get(id);
+        const cur = db.prepare('SELECT title, artist, album, year, genre, genre_family FROM tracks WHERE id=?').get(id);
         if (!cur) return json(res, 404, { error: 'no such track' });
+        const bad = metaValidation(b);
+        if (bad) return json(res, 400, { error: bad });
         const fields = {};
         for (const k of ['title', 'artist', 'album', 'year', 'genre', 'genre_family']) {
           if (b[k] !== undefined) fields[k] = String(b[k] || '').trim() || null;
@@ -2797,10 +2841,18 @@ const server = http.createServer(async (req, res) => {
         if (!Object.keys(fields).length) return json(res, 400, { error: 'nothing to change' });
         const r = repair.apply(db, id, fields);
         if (r.error) return json(res, 409, r);
-        lockMeta(db, id, Object.keys(fields));
+        const changed = Object.keys(fields).filter((k) => String(cur[k] ?? '') !== String(fields[k] ?? ''));
+        lockMeta(db, id, changed);
         return json(res, 200, { ok: true, ...r });
       });
       return;
+    }
+
+    // release a hand lock so catalogue repair may correct the track again
+    const mUnlock = u.pathname.match(/^\/api\/tracks\/(\d+)\/unlock$/);
+    if (mUnlock && req.method === 'POST') {
+      db.prepare('UPDATE tracks SET meta_locked=NULL WHERE id=?').run(Number(mUnlock[1]));
+      return json(res, 200, { ok: true });
     }
 
     // bulk metadata edit: move many tracks to the right album (or set year/genre)
@@ -2811,6 +2863,8 @@ const server = http.createServer(async (req, res) => {
         try { b = JSON.parse(body || '{}'); } catch { return json(res, 400, { error: 'bad request body' }); }
         const ids = Array.isArray(b.ids) ? b.ids.map(Number).filter(Number.isFinite).slice(0, 1000) : [];
         if (!ids.length) return json(res, 400, { error: 'ids required' });
+        const bad = metaValidation(b);
+        if (bad) return json(res, 400, { error: bad });
         const sets = [];
         const params = [];
         if (b.album !== undefined) { sets.push('album=?'); params.push(String(b.album || '').trim().slice(0, 200) || null); }
@@ -2823,13 +2877,21 @@ const server = http.createServer(async (req, res) => {
         if (!sets.length) return json(res, 400, { error: 'nothing to change' });
         const upd = db.prepare(`UPDATE tracks SET ${sets.join(', ')}, updated_at=? WHERE id=?`);
         let updated = 0;
-        const locked = [];
-        if (b.album !== undefined) locked.push('album');
-        if (b.year !== undefined) locked.push('year');
-        if (b.genre !== undefined) locked.push('genre');
-        if (b.genre_family !== undefined) locked.push('genre_family');
+        const candidates = [];
+        if (b.album !== undefined) candidates.push('album');
+        if (b.year !== undefined) candidates.push('year');
+        if (b.genre !== undefined) candidates.push('genre');
+        if (b.genre_family !== undefined) candidates.push('genre_family');
+        const cur = db.prepare(`SELECT album, year, genre, genre_family FROM tracks WHERE id=?`);
         for (const id of ids) {
-          try { const r = upd.run(...params, now(), id); if (r.changes) { updated += 1; lockMeta(db, id, locked); } } catch {}
+          try {
+            const before = cur.get(id);
+            const r = upd.run(...params, now(), id);
+            if (!r.changes) continue;
+            updated += 1;
+            const changed = candidates.filter((k) => String((before && before[k]) ?? '') !== String((b[k] ?? '') || ''));
+            lockMeta(db, id, changed);
+          } catch {}
         }
         return json(res, 200, { ok: true, updated, checked: ids.length });
       });
@@ -4221,7 +4283,7 @@ const server = http.createServer(async (req, res) => {
       // it, and the client reads none of them. This is the payload every phone loads.
       const rows = db.prepare(`SELECT t.id, t.title, t.artist, t.album, t.year, t.genre, t.genre_family,
           t.duration, t.bpm, t.key, t.key_scale, t.loudness, t.has_art, t.format, t.track_no,
-          t.added_at, t.updated_at,
+          t.added_at, t.updated_at, t.meta_locked,
           (f.id IS NOT NULL) AS owned, (t.src_id IS NOT NULL AND t.src_id != '') AS streamable,
           f.bitrate, r.rung, r.quality
         FROM tracks t
@@ -4989,7 +5051,7 @@ const server = http.createServer(async (req, res) => {
     return json(res, 404, { error: 'not found' });
   } catch (e) {
     log('error', `${u.pathname}: ${e.message}`);
-    return serverError(res, e, '/api/ingest-wnl-all');
+    return serverError(res, e, u.pathname);
   }
 });
 

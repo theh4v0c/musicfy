@@ -226,6 +226,7 @@ function openCtx(t, x, y) {
     ${state.view === 'playlist' && state.playlistId ? '<button data-act="rmpl">Remove from this playlist</button>' : ''}
     ${(!t.ladder && t.id) ? '<button data-act="rename">Edit metadata</button>' : ''}
     ${(!t.ladder && t.id) ? '<button data-act="repair">Fix metadata</button>' : ''}
+    ${(!t.ladder && t.id && t.meta_locked) ? '<button data-act="unlock">Let catalogue fix metadata</button>' : ''}
     ${(!t.ladder && t.id) ? `<button data-act="deltrack">${state.selectedIds.size > 1 && state.selectedIds.has(t.id) ? `Delete ${state.selectedIds.size} selected` : 'Delete from library'}</button>` : ''}
     <button data-act="radiostart">Start track radio</button>`;
   m.classList.add('open');
@@ -393,6 +394,14 @@ $('ctx').addEventListener('click', async (e) => {
       patchTrackEverywhere(t.id, p.after);
       toast(`Fixed ${r.changed} fields`, 5000);
     } catch { toast('Repair failed', 4000); }
+    return;
+  }
+  if (act === 'unlock') {
+    try {
+      await api(`/api/tracks/${t.id}/unlock`, { method: 'POST' });
+      t.meta_locked = null;
+      toast('Catalogue can correct this track now', 4000);
+    } catch { toast('Could not release the lock', 4000); }
     return;
   }
   if (act === 'tofile') { window.location.href = `/api/tracks/${t.id}/file`; return; }

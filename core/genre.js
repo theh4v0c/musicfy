@@ -87,7 +87,9 @@ function looksChildren(t) {
   if (!t) return false;
   if (String(t.genre_family || '').toLowerCase() === 'children') return true;
   if (CHILD_GENRE.test(String(t.genre || ''))) return true;
-  return CHILD_BRANDS.test(`${t.title || ''} ${t.artist || ''} ${t.album || ''}`);
+  // album titles are too broad a net: "Nursery Rhymes" by a metal band is not a
+  // children's record. The brand must be in the artist or the title.
+  return CHILD_BRANDS.test(`${t.title || ''} ${t.artist || ''}`);
 }
 
 function reclassify(db) {

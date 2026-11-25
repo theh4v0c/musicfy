@@ -24,7 +24,9 @@ function which(name, override) {
 const ROOT = process.env.MUSICFY_HOME || '/opt/musicfy';
 const DATA = process.env.MUSICFY_DATA || path.join(ROOT, 'data');
 const BIN = process.env.MUSICFY_BIN || path.join(ROOT, 'ytdlp-venv', 'bin');
-const YTDLP = process.env.MUSICFY_YTDLP || path.join(BIN, 'yt-dlp');
+const exists = (p) => { try { fs.accessSync(p, fs.constants.X_OK); return true; } catch { return false; } };
+const YTDLP = process.env.MUSICFY_YTDLP
+  || (exists(path.join(BIN, 'yt-dlp')) ? path.join(BIN, 'yt-dlp') : which('yt-dlp'));
 const ESSENTIA_PY = process.env.MUSICFY_PYTHON || path.join(ROOT, 'essentia-venv', 'bin', 'python');
 const OWNED = process.env.MUSICFY_OWNED || path.join(ROOT, 'owned');
 const DB = process.env.MUSICFY_DB || path.join(DATA, 'musicfy.db');

@@ -92,6 +92,21 @@ artist+title duplicate key when the title or artist actually changed, so a row w
 duplicate elsewhere can still be moved to the correct album (previously any edit on such
 a row failed with "another track already has that title and artist").
 
+Both edit paths share one validator. A title may not be empty; a year must be between 1900
+and next year; `genre_family` must be a family the classifier knows. A rejected write
+answers 400 with a sentence ("a track needs a title"), never SQLite's constraint text.
+
+### Hand edits win over the catalogue
+
+Every field whose value actually changed through **Edit metadata** or **Edit album** is
+recorded in `tracks.meta_locked`; a save that changes nothing locks nothing. `repair.propose()`
+skips locked fields, so **Fix metadata** can fill what is missing but cannot revert a field a
+person set. The catalogue is a suggestion, not an override.
+
+The lock is not permanent: a track whose menu offers **Fix metadata** also offers **Let
+catalogue fix metadata** when fields are locked. It calls `POST /api/tracks/:id/unlock`,
+clears the lock, and returns the track to automatic repair.
+
 ## Versions: original vs remaster
 
 `ladder.titleForVersion()` keeps the version the person asked for. A request without
