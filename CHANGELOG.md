@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.56 — 2026-11-26
+
+- The home page answers again. It was written with `writeHead` followed by `setHeader`;
+  the second call threw inside the route, the error path could not send anything, and `/`
+  hung while every API answered. One `writeHead` with the final headers.
+
 ## 0.1.55 — 2026-11-26
 
 - The shell's asset URLs carry the running version (`/app.js?v=0.1.55`) and the service

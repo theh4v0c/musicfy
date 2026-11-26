@@ -2197,11 +2197,11 @@ const server = http.createServer(async (req, res) => {
     // the shell's asset URLs carry the running version, so a new release is a new cache
     // key: a service worker cannot keep serving the previous bundle after an update
     if (u.pathname === '/' || u.pathname === '/index.html') {
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      // one writeHead: setting a header after writeHead threw inside the route and the
+      // error path could not answer, so the home page hung while every API answered
       const html = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8')
         .replace(/\?v=[\w.]+/g, `?v=${encodeURIComponent(APP_VERSION)}`);
-      res.setHeader('content-type', 'text/html; charset=utf-8');
-      res.setHeader('cache-control', 'no-cache');
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-cache' });
       return res.end(html);
     }
     if (u.pathname === '/app.css') {
