@@ -584,6 +584,7 @@ async function update() {
       const { gitUpdate } = requireCore('../core/git-update.js');
       const r = await gitUpdate(APP, head && head !== 'HEAD' ? head : 'main');
       console.log(`Updated: ${r.output}`);
+      if (r.backup) console.log(`The previous commit is still reachable at ${r.backup}.`);
     } catch (e) {
       console.log('Update failed:', String(e.message || e).slice(0, 240));
       return 1;

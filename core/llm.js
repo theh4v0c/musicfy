@@ -133,7 +133,7 @@ async function probe(timeoutMs = 8000) {
   try {
     const started = Date.now();
     const parsed = await post(JSON.stringify({
-      model: c.model || 'Auto', temperature: 0, max_tokens: 8,
+      model: c.model || 'Auto', temperature: 0, max_tokens: 64,
       messages: [{ role: 'user', content: 'Reply with OK.' }],
     }), timeoutMs);
     const text = String((((parsed.choices || [])[0] || {}).message || {}).content || '').trim();

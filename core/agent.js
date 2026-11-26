@@ -10,6 +10,33 @@ const fs = require('node:fs');
 const nodePath = require('node:path');
 const paths = require('./paths');
 
+/* The plan comes from two places: our rules, and a language model. A model can answer
+   {"artists":"Aphex Twin"} or {"download":"false"}, which is valid JSON and a broken plan.
+   Normalise at the boundary, once, so no consumer has to defend itself. */
+const toList = (v) => {
+  if (Array.isArray(v)) return v.map((x) => String(x).trim()).filter(Boolean);
+  if (typeof v === 'string' && v.trim()) return v.split(/\s*[,;]\s*/).map((x) => x.trim()).filter(Boolean);
+  return [];
+};
+const toBool = (v) => v === true || v === 1 || /^(1|true|yes|on)$/i.test(String(v == null ? '' : v).trim());
+const toNum = (v, fallback) => { const n = Number(v); return Number.isFinite(n) ? n : fallback; };
+
+function normalizeArgs(args) {
+  const out = { ...(args && typeof args === 'object' ? args : {}) };
+  for (const k of ['artists', 'themes', 'genres', 'keys', 'families', 'ids', 'tracks']) {
+    if (k in out) out[k] = toList(out[k]);
+  }
+  for (const k of ['query', 'name', 'artist', 'album', 'title', 'since']) {
+    if (k in out && typeof out[k] !== 'string') out[k] = String(out[k] == null ? '' : out[k]);
+  }
+  if ('count' in out) out.count = Math.max(1, Math.min(toNum(out.count, 20), 100));
+  if ('limit' in out) out.limit = Math.max(1, Math.min(toNum(out.limit, 40), 100));
+  for (const k of ['download', 'allowExternal', 'brief', 'outsideOnly', 'onlyLocal', 'latest']) {
+    if (k in out) out[k] = toBool(out[k]);
+  }
+  return out;
+}
+
 /* What "never play X" means here too: mood filters the library for the request, but the
    catalogue fill was never filtered, so a taught exclusion could come back as a new
    download. A term named in the request still overrides the ban for that request. */
@@ -44,7 +71,7 @@ function isFollowUp(text) {
    and scope; anything about mood goes through the model, which is given the old plan. */
 function mergePlan(prev, text) {
   const plan = JSON.parse(JSON.stringify(prev && prev.plan ? prev.plan : {}));
-  plan.args = plan.args || {};
+  plan.args = normalizeArgs(plan.args || {});
   const t = cleanQuery(text).toLowerCase();
   const num = t.match(/\b(\d{1,3})\b/);
   const explicit = num && /\b(tracks?|songs?|items?|make it|give me|of them)\b/.test(t);
@@ -89,7 +116,10 @@ function planLocally(text) {
   // fall through to report_library, which answered a request for music with a count.
   const reportish = /\b(how many|how much|what do i have|what'?s in|what is in|do i have any)\b/.test(t);
   const countedRequest = countMatch && !reportish;
-  const styledTempo = /\b\d{2,3}\s*bpm\b|\bat\s+1[0-9]{2}\b/.test(t);
+  // a bare filter ("tracks in Dm between 120 and 130 bpm") is a search, not a request to
+  // build something; a count or a playlist word is what makes a tempo a set
+  const tempoFilter = /\b\d{2,3}\s*bpm\b|\bat\s+1[0-9]{2}\b/.test(t);
+  const styledTempo = tempoFilter && (countedRequest || bareCount || /\b(playlist|set|mix|selection)\b/.test(t));
   const wantsPlaylist = /\b(playlist|set|mix|selection|lineup)\b/.test(t)
     || /\b(create|build|make|curate|put together|throw together|assemble)\b/.test(t)
     || /\b(give me|i need|i want|can you get|can i get)\b/.test(t)
@@ -125,7 +155,7 @@ function planLocally(text) {
   if (/\b(how many|how much|what do i have|what'?s in|what is in|do i have any)\b/.test(t)) {
     return { intent: 'report_library', args: { query: text } };
   }
-  if (/\b(find|search|show|which|list|what)\b/.test(t) && !/\bplaylist\b/.test(t)) {
+  if ((/\b(find|search|show|which|list|what)\b/.test(t) || tempoFilter) && !/\bplaylist\b/.test(t)) {
     return { intent: 'search_tracks', args: { query: text, limit: count } };
   }
   if (wantsDownload) return { intent: 'download_missing', args: { query: text } };
@@ -245,15 +275,20 @@ ${PLAN_SCHEMA}
 Request: ${text}`;
 }
 
-async function planWithModel(llm, text, previous, lang = 'en') {
+async function planWithModel(llm, text, previous, lang = 'en', timeoutMs = 45000) {
   const context = previous && previous.plan
     ? `\nThis is a follow-up. The previous request was: ${previous.question}\nIts plan was: ${JSON.stringify(previous.plan)}\nReturn the updated plan: keep what still applies, change only what the new instruction changes, and keep the same intent unless it says otherwise.\n`
     : '';
   const prompt = planPrompt(lang, context, text);
+  const deadline = Date.now() + Math.max(5000, Number(timeoutMs) || 45000);
   let parsed = null;
   for (let attempt = 0; attempt < 3 && !parsed; attempt += 1) {
+    // one budget for the whole plan, not 20s per attempt: a provider that takes 25s used
+    // to fail every attempt, and the retries outlived the request that was waiting
+    const left = deadline - Date.now();
+    if (left < 3000) break;
     let raw = '';
-    try { raw = String(await llm.askRaw(prompt, 20000, { json: true }) || ''); } catch (e) { if (attempt === 1) throw e; continue; }
+    try { raw = String(await llm.askRaw(prompt, left, { json: true }) || ''); } catch (e) { continue; }
     const cleaned = raw.replace(/^```(json)?/i, '').replace(/```$/, '').trim();
     const start = cleaned.indexOf('{');
     const end = cleaned.lastIndexOf('}');
@@ -263,7 +298,7 @@ async function planWithModel(llm, text, previous, lang = 'en') {
   }
   if (!parsed) throw new Error('model returned nothing usable');
   if (!INTENTS.includes(parsed.intent)) throw new Error('unknown intent');
-  if (!parsed.args || typeof parsed.args !== 'object') parsed.args = {};
+  parsed.args = normalizeArgs(parsed.args);
   return parsed;
 }
 
@@ -449,7 +484,7 @@ async function execute(db, plan, deps, lang = 'en') {
   }
   for (const t of local) { if (added < count) addTrack(t.id); }
 
-  if (plan.args.download) {
+  if (toBool(plan.args.download)) {
     const rows = db.prepare(`SELECT t.id, t.title, t.artist FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id
       WHERE pt.playlist_id=? AND NOT EXISTS (SELECT 1 FROM files f WHERE f.track_id=t.id AND f.tier='owned')`).all(pid);
     for (const t of rows) { if (enqueueTrackDownload(t)) queued += 1; }
@@ -778,11 +813,17 @@ async function propose(db, plan, lang = 'en') {
   if (plan.intent === 'build_playlist') {
     const q = String(plan.args.query || '').trim();
     const count = Math.max(1, Math.min(Number(plan.args.count) || 20, 100));
-    const artists = (plan.args.artists || []).map((a) => String(a).trim()).filter(Boolean).slice(0, 4);
-    const themes = (plan.args.themes || []).map((t) => String(t).trim()).filter(Boolean).slice(0, 4);
-    const genres = (plan.args.genres || []).map((g) => String(g).trim()).filter(Boolean).slice(0, 4);
+    const artists = toList(plan.args.artists).slice(0, 4);
+    const themes = toList(plan.args.themes).slice(0, 4);
+    const genres = toList(plan.args.genres).slice(0, 4);
     let normQ0 = q;
     try { normQ0 = require('./query').normalizePortuguese(q); } catch {}
+    // the rules planner keeps the whole sentence; the genre it names is still a genre
+    // ("10 faixas de samba para uma festa" searched the sentence and found nothing)
+    if (!genres.length) {
+      const hit = String(q).match(PT_GENRES);
+      if (hit) genres.push(hit[1]);
+    }
     const onlyLocalEarly = /\b(only|just|from)\s+(my|the)\s+library\b|\bno new\b/i.test(normQ0);
     const BRIEF_RE = /\b(for my|she likes|he likes|they like|who likes|shes into|hes into|don'?t limit|birthday|wedding|kids?|children|toddler|for (?:my|our|the) baby|story time|year old|\d+\s*yo|about (unicorns?|robots?|dinosaurs?|space|animals?))\b/i;
     // the same occasions in Portuguese; without these a Portuguese brief fell through to
@@ -794,7 +835,8 @@ async function propose(db, plan, lang = 'en') {
     if (brief && !themes.length && !artists.length) {
       // the model called it a brief but gave us nothing to look for: use the sentence,
       // minus the instructions, as the search phrase
-      const fallback = q.replace(/\b(create|make|build|playlist|for|my|a|an|the|please|some|of|with|songs?|tracks?|uma|um|lista|para|minha|meu|nossa|nosso|criar|montar|fazer|com|das?|dos?)\b/gi, ' ')
+      const fallback = q.replace(/\b\d+\b/g, ' ')
+        .replace(/\b(create|make|build|playlist|for|my|a|an|the|please|some|of|with|songs?|tracks?|uma|um|lista|para|minha|meu|nossa|nosso|criar|montar|fazer|com|das?|dos?|faixas?|m[úu]sicas?|pra|pro|que)\b/gi, ' ')
         .replace(/\s+/g, ' ').trim();
       if (fallback) themes.push(fallback.slice(0, 60));
     }
@@ -893,7 +935,10 @@ async function propose(db, plan, lang = 'en') {
     // no explicit flag exists for library files, so a child's set is catalogue-only
     if (childSafe && brief && !onlyLocalEarly) local = [];
     // a brief goes outside unless the request says to stay in the library
-    const allowExternal = !onlyLocal && (brief || plan.args.allowExternal !== false);
+    // an explicit "false" wins even for a brief: it is the one instruction that says
+    // "do not leave my library", and a boolean read as a string used to ignore it
+    const explicitExternal = plan.args.allowExternal === undefined ? null : toBool(plan.args.allowExternal);
+    const allowExternal = !onlyLocal && (explicitExternal === null ? brief : explicitExternal);
     // a brief that says "don't limit yourself" must leave room outside: 20 local tracks
     // and nothing new is the same failure in a different coat
     if (brief && allowExternal && local.length >= count) local = local.slice(0, Math.max(1, Math.round(count * 0.6)));
@@ -1005,7 +1050,7 @@ async function propose(db, plan, lang = 'en') {
     if (!tracks.length && wantedArtist) name = say(lang, `Nothing by ${wantedArtist}`, `Nada de ${wantedArtist}`);
     return {
       kind: 'playlist', name, trackIds: local.map((t) => t.id), online, tracks,
-      download: !!plan.args.download,
+      download: toBool(plan.args.download),
       title: name,
       // fragments are sentences: every one of them starts with a capital
       reason: localizeReason(reasonBits.join(' ')
@@ -1153,5 +1198,5 @@ function commit(db, proposal, deps, lang = 'en') {
   return { spoken: 'Nothing to do.', data: {} };
 }
 
-module.exports = { planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan, relevanceGate, childAudience, artistAlbums, briefWords, briefMatches, cleanQuery, seedArtist, planPrompt, localizeReason };
+module.exports = { normalizeArgs, toList, toBool, planLocally, planWithModel, execute, propose, commit, isFollowUp, mergePlan, relevanceGate, childAudience, artistAlbums, briefWords, briefMatches, cleanQuery, seedArtist, planPrompt, localizeReason };
 

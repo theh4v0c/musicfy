@@ -212,8 +212,9 @@ function run(db, filters) {
   }
 
   const order = filters.order === 'random' ? 'RANDOM()'
-    : filters.order === 'newest' ? 't.added_at DESC'
-    : filters.order === 'oldest' ? 't.added_at ASC'
+    // a batch shares one second; without the id tiebreak the "newest" list is arbitrary
+    : filters.order === 'newest' ? 't.added_at DESC, t.id DESC'
+    : filters.order === 'oldest' ? 't.added_at ASC, t.id ASC'
     : filters.order === 'plays' ? 'plays DESC'
     : 't.title ASC';
 

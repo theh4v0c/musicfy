@@ -23,6 +23,8 @@ function decode(s) {
 
 function entity(s) {
   return String(s || '')
+    .replace(/&#x([0-9a-f]+);/gi, (m, h) => { try { return String.fromCodePoint(parseInt(h, 16)); } catch { return m; } })
+    .replace(/&#(\d+);/g, (m, n) => { try { return String.fromCodePoint(Number(n)); } catch { return m; } })
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
     .replace(/&amp;/g, '&');
@@ -145,11 +147,12 @@ function walk(root, { maxDepth = 8, maxFiles = 20000 } = {}) {
 function parseTraktorNml(xml, sourceName) {
   const files = new Map();
   const playlists = [];
+  const collection = [];          // LOCATION order, for PRIMARYKEY index references
   let inCollection = false;
   const stack = [];
 
   const finishNode = (node) => {
-    if (!node || node.type !== 'PLAYLIST' || !node.entries.length) return;
+    if (!node || (node.type !== 'PLAYLIST' && node.type !== '1') || !node.entries.length) return;
     playlists.push({ name: node.name || sourceName || 'Traktor playlist', entries: node.entries, kind: 'dj' });
   };
 
@@ -165,20 +168,35 @@ function parseTraktorNml(xml, sourceName) {
     }
     if (t.name === 'COLLECTION') { inCollection = true; continue; }
     if (t.name === 'NODE') {
-      const node = { type: t.attrs.TYPE, name: t.attrs.NAME, entries: [] };
+      // Traktor writes numeric types: 0 is a folder, 1 is a playlist. The string forms are
+      // accepted too, for hand-written files and for our own older exports.
+      const raw = String(t.attrs.TYPE || '').toUpperCase();
+      const type = raw === '1' ? 'PLAYLIST' : raw === '0' ? 'FOLDER' : raw;
+      const node = { type, name: t.attrs.NAME, entries: [] };
       stack.push({ name: 'NODE', node });
       if (t.self) { stack.pop(); finishNode(node); }
       continue;
     }
-    if (t.name === 'PRIMARYKEY' && t.attrs.TYPE === 'TRACK') {
+    if (t.name === 'PRIMARYKEY') {
       const frame = [...stack].reverse().find((x) => x.node);
-      const p = uriToPath(t.attrs.KEY);
-      if (frame && p) frame.node.entries.push(p);
+      if (!frame) continue;
+      const kind = String(t.attrs.TYPE || '').toUpperCase();
+      const key = String(t.attrs.KEY || '');
+      let p = null;
+      if (kind === 'TRACK' || /^file:/i.test(key) || key.startsWith('/')) {
+        p = uriToPath(key);
+      } else if (/^\d+$/.test(key)) {
+        // an index into the collection; our exports write 1-based, Traktor's older files
+        const n = Number(key);
+        p = collection[n - 1] || collection[n] || null;
+      }
+      if (p) frame.node.entries.push(p);
     }
     if (inCollection && t.name === 'LOCATION') {
       const p = traktorPath(t.attrs.DIR, t.attrs.FILE);
       if (!p) continue;
       const entry = [...stack].reverse().find((x) => x.entry)?.entry;
+      collection.push(path.normalize(p));
       const meta = {
         title: entry && entry.TITLE ? entry.TITLE : path.basename(p).replace(/\.[^.]+$/, ''),
         artist: (entry && entry.ARTIST) || '',
@@ -299,15 +317,20 @@ function parsePls(text, file) {
 
 /* One entry point: what does this file contain, if anything we understand. */
 function readPlaylist(file) {
+  // a music folder can hold a 500MB XML and readFileSync would take the process with it
+  try { if (fs.statSync(file).size > 64 * 1024 * 1024) return null; } catch { return null; }
   let text;
   try { text = fs.readFileSync(file, 'utf8'); } catch { return null; }
   const ext = path.extname(file).toLowerCase();
   const base = path.basename(file);
-  if (ext === '.nml') return parseTraktorNml(text, path.basename(file, ext));
-  if (ext === '.m3u' || ext === '.m3u8') return parseM3u(text, file);
-  if (ext === '.pls') return parsePls(text, file);
-  if (ext === '.xml' && /<DJ_PLAYLISTS/i.test(text)) return parseRekordboxXml(text, base);
-  return null;
+  let parsed = null;
+  if (ext === '.nml') parsed = parseTraktorNml(text, path.basename(file, ext));
+  else if (ext === '.m3u' || ext === '.m3u8') parsed = parseM3u(text, file);
+  else if (ext === '.pls') parsed = parsePls(text, file);
+  else if (ext === '.xml' && /<DJ_PLAYLISTS/i.test(text)) parsed = parseRekordboxXml(text, base);
+  // two files called playlist.m3u in two folders are two playlists: keep the source
+  if (parsed) for (const p of parsed.playlists) p.file = file;
+  return parsed;
 }
 
 module.exports = {

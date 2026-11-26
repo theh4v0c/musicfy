@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.1.78 — 2026-11-26
+
+- **A body handler cannot hang the request any more.** Twelve `req.on('end', async …)`
+  callbacks were promises the HTTP layer never awaited; one exception left the client
+  waiting until its timeout. They all go through one wrapper that answers 500 JSON.
+- **The model plan is normalised at the boundary.** `artists: "Aphex Twin"` no longer
+  throws, and `download: "false"` no longer downloads. Lists, booleans and counts are
+  converted once, for every consumer.
+- The model gets one 45 second budget instead of a 20 second attempt inside a 45 second
+  race; retries no longer leave orphan requests, and the probe asks for enough tokens to
+  survive a reasoning model.
+- **Adopted files are never edited.** Verify-files no longer prunes or requeues an external
+  file when its drive is away, and transcode and tag writing skip them. The card's promise
+  is now true.
+- **The NML importer reads Traktor files and our own exports**: numeric node types and
+  index primary keys. A round-trip test covers the exporter and importer together.
+- Two `playlist.m3u` files with the same name are two playlists; the source path is part of
+  the id, and the scan counts distinct playlists. BPM and key from a playlist now reach a
+  track that was already in the library.
+- Playlist parsing is capped at 64 MB, numeric XML entities decode, and a playlist file
+  outside the allowed roots is not read.
+- **"Fresh in your library" is actually newest first.** A batch shares one `added_at`
+  second, and the old order fell back to rowid; the id now breaks the tie on the rail and in
+  the songs table.
+- The updater keeps the previous HEAD as `refs/musicfy/update-*`, so a local commit is never
+  discarded by `checkout -B`, and a bundle update verifies the published sha256 instead of
+  trusting the archive blindly.
+- Portuguese: the "Saved · field" status, its field names, and the common server errors;
+  the translation gate now also checks text written straight into the DOM.
+- A bare tempo filter ("tracks in Dm between 120 and 130 bpm") is a search, not a playlist;
+  a Portuguese genre in a prose brief ("10 faixas de samba para uma festa") reaches the
+  catalogue search (rules-only A&R check: 5/5).
+
 ## 0.1.77 — 2026-11-26
 
 - Portuguese in the discovery headings: "Because you play X" and "NOT IN YOUR LIBRARY" were

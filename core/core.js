@@ -880,6 +880,7 @@ async function pumpTranscode() {
   while (transcodeQueue.length) {
     const row = transcodeQueue.shift();
     try {
+      if (row.external) continue;
       if (!fs.existsSync(row.path)) continue;
       if (row.kind === 'faststart') {
         const ok = await transcode.toFaststart(row.path);
@@ -939,13 +940,26 @@ function rememberPath(map, file, trackId) {
   map.set(folderLib.realish(file), trackId);
 }
 
+function applyAdoptHint(tid, hint) {
+  if (!tid || !hint) return;
+  const bpm = Number(hint.bpm);
+  if (bpm > 0) db.prepare('UPDATE tracks SET bpm=COALESCE(bpm,?) WHERE id=?').run(bpm, tid);
+  if (hint.key) db.prepare('UPDATE tracks SET key=COALESCE(key,?), key_scale=COALESCE(key_scale,?) WHERE id=?')
+    .run(hint.key, hint.scale || 'major', tid);
+}
+
 async function adoptOneFile(file, hint) {
   const abs = folderLib.realish(file);
   if (!fs.existsSync(abs)) return { status: 'missing' };
   const known = db.prepare('SELECT track_id FROM files WHERE path=?').get(abs)
     || db.prepare('SELECT track_id FROM files WHERE path=?').get(path.normalize(file))
     || db.prepare('SELECT track_id FROM files WHERE path=?').get(path.resolve(file));
-  if (known) return { track: known.track_id, status: 'skipped' };
+  if (known) {
+    // the file may already be here from a download; its playlist still knows the BPM and
+    // key, and throwing that away made an analysed collection look unanalysed
+    applyAdoptHint(known.track_id, hint);
+    return { track: known.track_id, status: 'skipped' };
+  }
 
   let st;
   try { st = fs.statSync(abs); } catch { return { status: 'missing' }; }
@@ -982,8 +996,7 @@ async function adoptOneFile(file, hint) {
   const owned = db.prepare(`SELECT f.path, f.bitrate FROM files f JOIN tracks t ON t.id=f.track_id
     WHERE t.dup_key=? AND f.tier='owned'`).all(dupKeyOf(artist, title))
     .sort((a, b) => fileQuality(path.extname(b.path), b.bitrate) - fileQuality(path.extname(a.path), a.bitrate));
-  if (bpm) db.prepare('UPDATE tracks SET bpm=COALESCE(bpm,?) WHERE id=?').run(bpm, tid);
-  if (key) db.prepare('UPDATE tracks SET key=COALESCE(key,?), key_scale=COALESCE(key_scale,?) WHERE id=?').run(key, scale || 'major', tid);
+  applyAdoptHint(tid, { bpm, key, scale });
 
   // a better or equal copy already here: the playlist points at that track, and the
   // owner's file is not registered a second time
@@ -1032,6 +1045,7 @@ async function runFolderAdopt(target, { local }) {
       adoptState.truncated = found.truncated;
       audio = found.audio.slice();
       for (const file of found.playlists) {
+        if (!allowed(file)) continue;
         const parsed = folderLib.readPlaylist(file);
         if (!parsed) continue;
         defs.push(...parsed.playlists);
@@ -1064,6 +1078,7 @@ async function runFolderAdopt(target, { local }) {
     };
     await Promise.all([worker(), worker(), worker(), worker()]);
 
+    const created = new Set();
     for (const def of defs) {
       const ids = [];
       for (const p of def.entries) {
@@ -1071,7 +1086,9 @@ async function runFolderAdopt(target, { local }) {
         if (tid && !ids.includes(tid)) ids.push(tid);
       }
       if (!ids.length) continue;
-      const id = 'fold-' + createHash('sha1').update(`${target}|${def.name}`).digest('hex').slice(0, 12);
+      // the source file is part of the identity: A/playlist.m3u and B/playlist.m3u are
+      // two playlists with one name, not one playlist written twice
+      const id = 'fold-' + createHash('sha1').update(`${target}|${def.file || ''}|${def.name}`).digest('hex').slice(0, 12);
       const t = now();
       db.prepare(`INSERT INTO playlists (id,name,source,kind,created_at,updated_at) VALUES (?,?,?,?,?,?)
         ON CONFLICT(id) DO UPDATE SET name=excluded.name, kind=excluded.kind, updated_at=excluded.updated_at`)
@@ -1079,7 +1096,8 @@ async function runFolderAdopt(target, { local }) {
       db.prepare('DELETE FROM playlist_tracks WHERE playlist_id=?').run(id);
       ids.forEach((tid, i) => db.prepare('INSERT OR IGNORE INTO playlist_tracks (playlist_id,track_id,position,added_at) VALUES (?,?,?,?)')
         .run(id, tid, i, t));
-      adoptState.playlists += 1;
+      created.add(id);
+      adoptState.playlists = created.size;
       adoptState.playlist_tracks += ids.length;
     }
   } catch (e) {
@@ -1501,7 +1519,11 @@ function enqueueTrackDownload(t) {
 
 // ---------- file consistency ----------
 function verifyFiles({ requeue = true } = {}) {
-  const rows = db.prepare("SELECT id, track_id, path FROM files WHERE tier='owned'").all();
+  const all = db.prepare("SELECT id, track_id, path, COALESCE(external,0) external FROM files WHERE tier='owned'").all();
+  // an adopted file belongs to the owner's folder: a USB drive that is not mounted is
+  // not a lost file, and it must never be pruned or downloaded over
+  const rows = all.filter((f) => !f.external);
+  const external = all.length - rows.length;
   const missing = [];
   for (const f of rows) {
     if (!fs.existsSync(f.path)) missing.push(f);
@@ -1510,7 +1532,7 @@ function verifyFiles({ requeue = true } = {}) {
   // code deleted the whole library. Refuse to act when the loss looks like a mount, not files.
   if (rows.length >= 10 && missing.length > rows.length * 0.2) {
     console.error('[files] refusing to prune: mount looks offline', `${missing.length}/${rows.length} missing`);
-    return { checked: rows.length, missing: missing.length, queued: 0, tracks: [], aborted: 'mount offline' };
+    return { checked: rows.length, missing: missing.length, queued: 0, tracks: [], external_skipped: external, aborted: 'mount offline' };
   }
   for (const f of missing) db.prepare('DELETE FROM files WHERE id=?').run(f.id);
   let queued = 0;
@@ -1521,7 +1543,7 @@ function verifyFiles({ requeue = true } = {}) {
     }
   }
   if (missing.length) console.error('[files] cleared', missing.length, 'missing file rows, requeued', queued);
-  return { checked: rows.length, missing: missing.length, queued, tracks: missing.map((f) => f.track_id) };
+  return { checked: rows.length, missing: missing.length, queued, external_skipped: external, tracks: missing.map((f) => f.track_id) };
 }
 
 // ---------- download queue ----------
@@ -2093,14 +2115,27 @@ function compressJson(body) {
 // SQLite message or a full node path in a response is an information leak, not a service.
 const serverError = (res, e, where) => {
   console.error(`[error] ${where}:`, (e && e.message) || e);
+  if (res.headersSent || res.writableEnded) { try { res.destroy(); } catch {} return res; }
   return json(res, 500, { error: 'the server could not complete that request' });
 };
+
+/* A body handler is a promise the HTTP layer never awaits. An exception inside one used
+   to reject silently: the process logged it and the request hung until the client gave up.
+   Every handler now goes through this, so a failure is an answer. */
+function onEnd(req, res, fn) {
+  req.on('end', () => {
+    Promise.resolve().then(fn).catch((err) => {
+      try { serverError(res, err, req.url); } catch {}
+    });
+  });
+}
 const upstreamError = (res, e, where) => {
   console.error(`[upstream] ${where}:`, (e && e.message) || e);
   return json(res, 502, { error: 'the external service did not answer' });
 };
 
 const json = (res, code, obj) => {
+  if (res.headersSent || res.writableEnded) return res;
   const body = Buffer.from(JSON.stringify(obj));
   const ae = String((res.req && res.req.headers['accept-encoding']) || '');
   const wantGzip = body.length > 1024 && /\bgzip\b/.test(ae);
@@ -2836,7 +2871,7 @@ const server = http.createServer(async (req, res) => {
     // download a ladder result into the owned tier (async job)
     if (u.pathname === '/api/ladder/download' && req.method === 'POST') {
       let body = ''; req.on('data', (c) => body += c);
-      req.on('end', async () => {
+      onEnd(req, res, async () => {
         try {
           const b = JSON.parse(body);
           const rawUrl = b.url || b.file || '';
@@ -2869,7 +2904,7 @@ const server = http.createServer(async (req, res) => {
     // mirror a spotify playlist: metadata only, nothing downloaded
     if (u.pathname === '/api/mirror/spotify' && req.method === 'POST') {
       let body = ''; req.on('data', c => body += c);
-      req.on('end', async () => {
+      onEnd(req, res, async () => {
         try {
           const b = JSON.parse(body || '{}');
           let target = String(b.url || b.id || '').trim();
@@ -3132,7 +3167,7 @@ const server = http.createServer(async (req, res) => {
     // import one spotify track as a metadata row, no audio yet
     if (u.pathname === '/api/mirror/track' && req.method === 'POST') {
       let body = ''; req.on('data', c => body += c);
-      req.on('end', async () => {
+      onEnd(req, res, async () => {
         try {
           const b = JSON.parse(body || '{}');
           let target = String(b.url || b.id || '').trim();
@@ -3159,7 +3194,7 @@ const server = http.createServer(async (req, res) => {
     // build a playlist from your listening history (import path that is not the ladder)
     if (u.pathname === '/api/history/materialize' && req.method === 'POST') {
       let body = ''; req.on('data', c => body += c);
-      req.on('end', async () => {
+      onEnd(req, res, async () => {
         try {
           const b = JSON.parse(body || '{}');
           const name = String(b.name || 'From your history').slice(0, 80);
@@ -3211,7 +3246,7 @@ const server = http.createServer(async (req, res) => {
     // ---------- format compatibility (rekordbox / Traktor) ----------
     // files neither app can open are converted in place: same track, playable container
     if (u.pathname === '/api/maintenance/transcode' && req.method === 'GET') {
-      const rows = db.prepare("SELECT id, track_id, path FROM files WHERE tier='owned'").all()
+      const rows = db.prepare("SELECT id, track_id, path FROM files WHERE tier='owned' AND COALESCE(external,0)=0").all()
         .filter((r) => transcode.needsConvert(r.path));
       return json(res, 200, { count: rows.length, files: rows.slice(0, 40).map((r) => ({ id: r.id, track_id: r.track_id, name: path.basename(r.path) })) });
     }
@@ -3227,7 +3262,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 202, { started: rows.length > 0, count: rows.length });
     }
     if (u.pathname === '/api/maintenance/transcode' && req.method === 'POST') {
-      const rows = db.prepare("SELECT id, track_id, path FROM files WHERE tier='owned'").all()
+      const rows = db.prepare("SELECT id, track_id, path FROM files WHERE tier='owned' AND COALESCE(external,0)=0").all()
         .filter((r) => transcode.needsConvert(r.path));
       for (const r of rows) transcodeQueue.push(r);
       pumpTranscode();
@@ -3308,7 +3343,7 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/api/maintenance/write-tags' && req.method === 'POST') {
       const limit = Math.min(Number(u.searchParams.get('limit') || 300), 2000);
       const rows = db.prepare(`SELECT t.id FROM tracks t JOIN files f ON f.track_id=t.id AND f.tier='owned'
-        WHERE lower(f.path) LIKE '%.mp3' ORDER BY t.id LIMIT ?`).all(limit);
+        WHERE lower(f.path) LIKE '%.mp3' AND COALESCE(f.external,0)=0 ORDER BY t.id LIMIT ?`).all(limit);
       let written = 0, skipped = 0;
       for (const { id } of rows) {
         const plan = trackTagMeta(db, id);
@@ -3557,7 +3592,7 @@ const server = http.createServer(async (req, res) => {
           const r = await release.apply(APP_ROOT);
           updateCache = { at: 0, data: null };
           const systemd = fs.existsSync('/run/systemd/system');
-          json(res, 200, { ok: true, from: r.from, to: r.to, upToDate: !!r.upToDate,
+          json(res, 200, { ok: true, from: r.from, to: r.to, upToDate: !!r.upToDate, verified: !!r.verified,
             restart: systemd ? 'sudo systemctl restart musicfy' : 'musicfy restart', restarting: !systemd && !r.upToDate });
           if (!systemd && !r.upToDate) {
             // answer first: the restart replaces this process
@@ -3579,7 +3614,7 @@ const server = http.createServer(async (req, res) => {
         const updated = await gitUpdate(APP_ROOT, info.branch || 'main');
         updateCache = { at: 0, data: null };
         return json(res, 200, {
-          ok: true, from: APP_VERSION, to: diskVersion(), mode: updated.mode, head: updated.head,
+          ok: true, from: APP_VERSION, to: diskVersion(), mode: updated.mode, head: updated.head, backup: updated.backup,
           output: updated.output.slice(-1200), restart: (await updateInfo(false)).restart,
         });
       } catch (e) {
@@ -3603,7 +3638,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (req.method === 'POST') {
         let body = ''; req.on('data', c => body += c);
-        req.on('end', async () => {
+        onEnd(req, res, async () => {
           let b = {};
           try { b = JSON.parse(body || '{}'); } catch {}
           // the endpoint is a URL a person typed: refuse one we cannot call, now, instead
@@ -3991,7 +4026,7 @@ const server = http.createServer(async (req, res) => {
     // agent: one sentence, up to three intents, executed deterministically
     if (u.pathname === '/api/agent' && req.method === 'POST') {
       let body = ''; req.on('data', c => body += c);
-      req.on('end', async () => {
+      onEnd(req, res, async () => {
         let b = {};
         try { b = JSON.parse(body || '{}'); } catch {}
         // the interface language travels with the request; the agent answers in it rather
@@ -4024,7 +4059,9 @@ const server = http.createServer(async (req, res) => {
         const richBrief = /\b(for my|for a|for the|she likes|he likes|they like|who likes|likes|don'?t limit|birthday|wedding|party for|kids?|children|story time|year old|\d+\s*yo|about (unicorns?|robots?|dinosaurs?|space|animals?))\b/i.test(q);
         if (llm.available()) {
           try {
-            const modelPlan = await Promise.race([agent.planWithModel(llm, q, previous, lang), new Promise((r) => setTimeout(() => r(null), 45000))]);
+            // the plan has one 45s budget and owns it: a race left the losing request
+            // running after the answer, and the model kept billing for nothing
+            const modelPlan = await agent.planWithModel(llm, q, previous, lang, 45000);
             if (modelPlan && modelPlan.intent) {
               // the model's plan wins what it answered; the rules fill only what is missing
               modelPlan.args = { ...(plan.args || {}), ...(modelPlan.args || {}) };
@@ -4142,7 +4179,7 @@ const server = http.createServer(async (req, res) => {
     // one playlist per week, excluding anything already in a playlist
     if (u.pathname === '/api/recommend/weekly' && req.method === 'POST') {
       let body = ''; req.on('data', c => body += c);
-      req.on('end', async () => {
+      onEnd(req, res, async () => {
         let b = {};
         try { b = JSON.parse(body || '{}'); } catch {}
         const now2 = new Date();
@@ -4170,7 +4207,7 @@ const server = http.createServer(async (req, res) => {
 
     if (u.pathname === '/api/recommend/create' && req.method === 'POST') {
       let body = ''; req.on('data', c => body += c);
-      req.on('end', async () => {
+      onEnd(req, res, async () => {
         let b = {};
         try { b = JSON.parse(body || '{}'); } catch {}
         const days = Math.min(Number(b.days || 30), 365);
@@ -4261,7 +4298,7 @@ const server = http.createServer(async (req, res) => {
 
     if (u.pathname === '/api/ask' && req.method === 'POST') {
       let body = ''; req.on('data', c => body += c);
-      req.on('end', async () => {
+      onEnd(req, res, async () => {
         let b = {};
         try { b = JSON.parse(body || '{}'); } catch {}
         const question = agent.cleanQuery(String(b.q || '')).trim();
@@ -4473,7 +4510,7 @@ const server = http.createServer(async (req, res) => {
     if (mAlCover && req.method === 'POST') {
       const album = decodeURIComponent(mAlCover[1]);
       let body = ''; req.on('data', c => body += c);
-      req.on('end', async () => {
+      onEnd(req, res, async () => {
         let url = '';
         try { url = String(JSON.parse(body || '{}').url || ''); } catch { return json(res, 400, { error: 'bad request body' }); }
         if (!/^https:\/\/(cdn-images\.dzcdn\.net|is\d-ssl\.mzstatic\.com)\//.test(url)) {
@@ -4779,7 +4816,7 @@ const server = http.createServer(async (req, res) => {
     // import a playlist from a pasted list, or a link we can name tracks from
     if (u.pathname === '/api/import/list' && req.method === 'POST') {
       let body = ''; req.on('data', c => body += c);
-      req.on('end', async () => {
+      onEnd(req, res, async () => {
         let b = {};
         try { b = JSON.parse(body || '{}'); } catch {}
         const name = String(b.name || 'Imported playlist').slice(0, 80);
@@ -4840,7 +4877,7 @@ const server = http.createServer(async (req, res) => {
     // queue a whole album, or only the tracks that are missing audio
     if (u.pathname === '/api/albums/download' && req.method === 'POST') {
       let body = ''; req.on('data', c => body += c);
-      req.on('end', async () => {
+      onEnd(req, res, async () => {
         let b = {};
         try { b = JSON.parse(body || '{}'); } catch {}
         const name = String(b.name || '').trim();
@@ -5075,18 +5112,18 @@ const server = http.createServer(async (req, res) => {
         FROM tracks t
         LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
         LEFT JOIN resolutions r ON r.track_id=t.id`;
-      const recent = db.prepare(`${sel} WHERE ${owned} ORDER BY t.added_at DESC LIMIT 12`).all();
+      const recent = db.prepare(`${sel} WHERE ${owned} ORDER BY t.added_at DESC, t.id DESC LIMIT 12`).all();
       // more from artists you actually play: their owned tracks you have not heard yet
       const deeper = db.prepare(`${sel} WHERE ${owned}
         AND t.artist IN (SELECT t2.artist FROM listens l JOIN tracks t2 ON t2.id=l.track_id
                          WHERE t2.artist IS NOT NULL AND t2.artist != ''
                            ${tasteIncludeChildren() ? '' : "AND COALESCE(t2.genre_family,'') != 'children'"} GROUP BY t2.artist)
         AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id)
-        ORDER BY (SELECT COUNT(*) FROM listens l WHERE l.track_id=t.id) ASC, t.added_at DESC LIMIT 40`).all();
+        ORDER BY (SELECT COUNT(*) FROM listens l WHERE l.track_id=t.id) ASC, t.added_at DESC, t.id DESC LIMIT 40`).all();
       // owned but in no playlist: the part of the library you have not filed anywhere
       const unplaylisted = db.prepare(`${sel} WHERE ${owned}
         AND t.id NOT IN (SELECT track_id FROM playlist_tracks)
-        ORDER BY t.added_at DESC LIMIT 40`).all();
+        ORDER BY t.added_at DESC, t.id DESC LIMIT 40`).all();
       return json(res, 200, { recent, deeper, unplaylisted });
     }
 

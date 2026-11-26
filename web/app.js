@@ -1762,10 +1762,15 @@ async function openPlaylist(pid, push = true) {
       // the stored order is the ascending one; clicking "#" asks for it reversed
       if (state.sort.dir === -1) sorted.reverse();
     } else {
+      const sortKey = state.sort.key;
       sorted.sort((a, b) => {
-        const va = a[state.sort.key] ?? '', vb = b[state.sort.key] ?? '';
-        if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * state.sort.dir;
-        return String(va).localeCompare(String(vb), LOC()) * state.sort.dir;
+        const va = a[sortKey] ?? '', vb = b[sortKey] ?? '';
+        const diff = typeof va === 'number' && typeof vb === 'number'
+          ? (va - vb) * state.sort.dir
+          : String(va).localeCompare(String(vb), LOC()) * state.sort.dir;
+        // a batch shares one timestamp; the id decides inside it, so "date added" really
+        // shows the newest file first instead of an arbitrary row of the batch
+        return diff || (a.id - b.id) * state.sort.dir;
       });
     }
     const tl = $('tlist'); tl.innerHTML = '';

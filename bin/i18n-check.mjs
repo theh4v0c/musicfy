@@ -60,6 +60,20 @@ for (const s of toasts) {
   if (t(s) === s) problems.push(`toast not translated: ${JSON.stringify(s)}`);
 }
 
+// --- text written straight into the DOM must be translated too ------------------------
+// The whole-string dictionary misses a sentence the client builds at runtime; that was
+// how "Because you play X" and "NOT IN YOUR LIBRARY" stayed English. This is the cheap
+// half of the guard: literals assigned to textContent or setStatus.
+const ALLOW = new Set(['A&R', 'MUSICFY', 'OK', 'DJ']);
+const written = new Set();
+for (const m of app.matchAll(/textContent\s*=\s*'([^']+)'/g)) written.add(m[1]);
+for (const m of app.matchAll(/textContent\s*=\s*`([^`$]+)`/g)) written.add(m[1].trim());
+for (const m of app.matchAll(/setStatus\(\s*'([^']+)'/g)) written.add(m[1]);
+for (const s of written) {
+  if (!s.trim() || !/[A-Za-z]/.test(s) || ALLOW.has(s)) continue;
+  if (t(s) === s) problems.push(`interface text not translated: ${JSON.stringify(s)}`);
+}
+
 // --- patterns that exist only to repair a previous half-translation --------------------
 for (const [re] of [...i18n.matchAll(/\[\s*\/\^?([^/\n]+)\/\w*,\s*\(?m?\)?\s*=>/g)]) {
   if (/nunca |faixas? by /.test(re)) problems.push(`patch-style pattern: /${re}/`);

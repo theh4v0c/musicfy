@@ -45,7 +45,12 @@ async function latest() {
   const body = await res.json();
   const version = String(body.tag_name || '').replace(/^v/i, '');
   if (!version || !body.tarball_url) throw new Error('the release has no tag or tarball');
-  return { version, tarball: body.tarball_url, page: body.html_url || '', published: body.published_at || null };
+  // the release job publishes the archive and its sha256; the auto-generated tarball is a
+  // different artifact and carries no checksum
+  const assets = (body.assets || []).map((a) => ({
+    name: String(a.name || ''), url: String(a.browser_download_url || ''), size: Number(a.size) || 0,
+  })).filter((a) => a.name && a.url);
+  return { version, tarball: body.tarball_url, assets, page: body.html_url || '', published: body.published_at || null };
 }
 
 function readVersion(dir) {
@@ -55,8 +60,12 @@ function readVersion(dir) {
 async function download(url, dest) {
   const res = await fetch(url, { headers: { 'user-agent': 'musicfy-updater' }, redirect: 'follow' });
   if (!res.ok) throw new Error(`download ${res.status}`);
-  fs.writeFileSync(dest, Buffer.from(await res.arrayBuffer()));
+  const buf = Buffer.from(await res.arrayBuffer());
+  fs.writeFileSync(dest, buf);
+  return buf;
 }
+
+const sha256 = (buf) => require('node:crypto').createHash('sha256').update(buf).digest('hex');
 
 async function apply(appRoot) {
   const rel = await latest();
@@ -66,7 +75,26 @@ async function apply(appRoot) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'musicfy-rel-'));
   try {
     const tgz = path.join(tmp, 'release.tgz');
-    await download(rel.tarball, tgz);
+    // Prefer the archive the release job built: it has a published sha256 next to it.
+    const wanted = [`musicfy-v${rel.version}.tar.gz`, `musicfy-${rel.version}.tar.gz`];
+    const asset = (rel.assets || []).find((a) => wanted.includes(a.name));
+    let verified = false;
+    if (asset) {
+      const buf = await download(asset.url, tgz);
+      const sumAsset = (rel.assets || []).find((a) => a.name === `${asset.name}.sha256`);
+      if (!sumAsset) throw new Error('the release archive has no checksum');
+      const sumRes = await fetch(sumAsset.url, { headers: { 'user-agent': 'musicfy-updater' }, redirect: 'follow' });
+      if (!sumRes.ok) throw new Error(`checksum download ${sumRes.status}`);
+      const want = String(await sumRes.text()).trim().split(/\s+/)[0].toLowerCase();
+      const got = sha256(buf);
+      if (!/^[0-9a-f]{64}$/.test(want) || want !== got) {
+        throw new Error(`checksum mismatch: the release says ${want.slice(0, 12)}, the download is ${got.slice(0, 12)}`);
+      }
+      verified = true;
+    } else {
+      // an older release without the built archive: the generated tarball has no checksum
+      await download(rel.tarball, tgz);
+    }
     execFileSync('tar', ['-xzf', tgz, '-C', tmp], { timeout: 120000 });
 
     // the archive holds one directory; find it by its package.json rather than by name
@@ -94,7 +122,7 @@ async function apply(appRoot) {
       if (!fs.existsSync(src)) continue;
       fs.cpSync(src, path.join(appRoot, entry), { recursive: true, force: true });
     }
-    return { from, to: rel.version, upToDate: false, backup: backupRoot };
+    return { from, to: rel.version, upToDate: false, backup: backupRoot, verified };
   } finally {
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
   }

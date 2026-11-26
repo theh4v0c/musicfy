@@ -344,15 +344,16 @@ test('a rescue match must name the artist', () => {
   assert.equal(L.artistInCandidate('', { title: 'anything' }), true);
 });
 
-test('a Traktor NML gives its collection, its playlist order and its BPM and key', () => {
+test('a real Traktor NML uses numeric node types and file keys', () => {
+  // Traktor writes TYPE="0" for a folder and TYPE="1" for a playlist, not the words
   const xml = `<NML><COLLECTION ENTRIES="2">
     <ENTRY TITLE="Mas Que Nada" ARTIST="Jorge Ben" BPM="92.5" MUSICAL_KEY="8A" PLAYTIME="180">
       <LOCATION DIR="/:Users/:me/:Music/Samba/:" FILE="Mas%20Que%20Nada.mp3"></LOCATION></ENTRY>
-    <ENTRY TITLE="Fanfarra" ARTIST="Sergio Mendes">
+    <ENTRY TITLE="Caf&#233; da Manh&#227;" ARTIST="Sergio Mendes">
       <LOCATION DIR="/:Users/:me/:Music/:" FILE="Fanfarra.flac"></LOCATION></ENTRY>
     </COLLECTION>
-    <PLAYLISTS><NODE TYPE="FOLDER" NAME="$ROOT"><SUBNODES>
-      <NODE TYPE="PLAYLIST" NAME="Sabado"><PLAYLIST ENTRIES="2">
+    <PLAYLISTS><NODE TYPE="0" NAME="$ROOT"><SUBNODES>
+      <NODE TYPE="1" NAME="Sabado"><PLAYLIST ENTRIES="2">
         <ENTRY><PRIMARYKEY TYPE="TRACK" KEY="file://localhost/Users/me/Music/Samba/Mas%20Que%20Nada.mp3"></PRIMARYKEY></ENTRY>
         <ENTRY><PRIMARYKEY TYPE="TRACK" KEY="file://localhost/Users/me/Music/Fanfarra.flac"></PRIMARYKEY></ENTRY>
       </PLAYLIST></NODE>
@@ -366,6 +367,35 @@ test('a Traktor NML gives its collection, its playlist order and its BPM and key
   assert.equal(first.key, 'A');
   assert.equal(first.scale, 'minor');
   assert.equal(first.duration, 180);
+  assert.equal(r.files.get('/Users/me/Music/Fanfarra.flac').title, 'Café da Manhã');
+});
+
+test('the NML this app exports can be imported back', () => {
+  // export.js writes TYPE="1" nodes and 1-based collection indices, not file URIs
+  const xml = `<NML><COLLECTION ENTRIES="2">
+    <ENTRY TITLE="One" ARTIST="A"><LOCATION DIR="/:music/:" FILE="One.mp3"></LOCATION></ENTRY>
+    <ENTRY TITLE="Two" ARTIST="B"><LOCATION DIR="/:music/:" FILE="Two.mp3"></LOCATION></ENTRY>
+    </COLLECTION><PLAYLISTS>
+    <NODE TYPE="0" NAME="ROOT" COUNT="1"><SUBNODES COUNT="1">
+    <NODE TYPE="1" NAME="Set" COUNT="1"><PLAYLIST ENTRIES="2" TYPE="LIST" UUID="X">
+      <ENTRY><PRIMARYKEY TYPE="0" KEY="1"/></ENTRY>
+      <ENTRY><PRIMARYKEY TYPE="0" KEY="2"/></ENTRY>
+    </PLAYLIST></NODE></SUBNODES></NODE></PLAYLISTS></NML>`;
+  const r = F.parseTraktorNml(xml);
+  assert.equal(r.playlists.length, 1);
+  assert.deepEqual(r.playlists[0].entries, ['/music/One.mp3', '/music/Two.mp3']);
+});
+
+test('readPlaylist remembers the source file of each definition', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mf-m3u-'));
+  const a = path.join(dir, 'a.m3u');
+  fs.writeFileSync(a, '#EXTM3U\nOne.mp3\n');
+  const r = F.readPlaylist(a);
+  assert.equal(r.playlists[0].file, a);
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test('a rekordbox XML links playlist keys to collection locations', () => {
@@ -392,4 +422,37 @@ test('keys come in as Camelot or names', () => {
   assert.deepEqual(F.keyParts('F#m'), { key: 'F#', scale: 'minor' });
   assert.deepEqual(F.keyParts('Bb'), { key: 'A#', scale: 'major' });
   assert.equal(F.keyParts('nonsense'), null);
+});
+
+test('a model plan with the wrong types is normalised at the boundary', () => {
+  const n = A.normalizeArgs({ artists: 'Aphex Twin', genres: 'techno, house', count: '5', download: 'false', allowExternal: 'true' });
+  assert.deepEqual(n.artists, ['Aphex Twin']);
+  assert.deepEqual(n.genres, ['techno', 'house']);
+  assert.equal(n.count, 5);
+  assert.equal(A.toBool(n.download), false);
+  assert.equal(A.toBool(n.allowExternal), true);
+  assert.equal(A.toBool('no'), false);
+});
+
+test('the NML this app writes can be read by its own importer', async () => {
+  const { DatabaseSync } = await import('node:sqlite');
+  const exporter = require('../core/export.js');
+  const db = new DatabaseSync(':memory:');
+  db.exec(`CREATE TABLE playlists (id TEXT PRIMARY KEY, name TEXT);
+    CREATE TABLE tracks (id INTEGER PRIMARY KEY, title TEXT, artist TEXT, album TEXT, genre TEXT,
+      bpm REAL, key TEXT, key_scale TEXT, duration REAL, beat_grid TEXT, sections TEXT,
+      year TEXT, track_no INTEGER, disc_no INTEGER);
+    CREATE TABLE files (id INTEGER PRIMARY KEY, track_id INTEGER, tier TEXT, path TEXT, size INTEGER, bitrate INTEGER);
+    CREATE TABLE playlist_tracks (playlist_id TEXT, track_id INTEGER, position INTEGER);`);
+  db.prepare('INSERT INTO playlists VALUES (?,?)').run('p1', 'Set');
+  db.prepare('INSERT INTO tracks VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?,?)').run('One', 'A', 'Alb', 'House', 124, 'A', 'minor', 180, '[]', '[]', '2020', 1, 1);
+  db.prepare('INSERT INTO tracks VALUES (2,?,?,?,?,?,?,?,?,?,?,?,?,?)').run('Two', 'B', 'Alb', 'House', 122, 'C', 'major', 200, '[]', '[]', '2020', 2, 1);
+  db.prepare("INSERT INTO files VALUES (1,1,'owned','/music/One.mp3',1000,320000)").run();
+  db.prepare("INSERT INTO files VALUES (2,2,'owned','/music/Two.mp3',1000,320000)").run();
+  db.prepare('INSERT INTO playlist_tracks VALUES (?,?,?)').run('p1', 1, 0);
+  db.prepare('INSERT INTO playlist_tracks VALUES (?,?,?)').run('p1', 2, 1);
+  const r = F.parseTraktorNml(exporter.traktorNml(db, 'p1'));
+  assert.equal(r.playlists.length, 1);
+  assert.deepEqual(r.playlists[0].entries, ['/music/One.mp3', '/music/Two.mp3']);
+  assert.equal(r.files.get('/music/One.mp3').title, 'One');
 });

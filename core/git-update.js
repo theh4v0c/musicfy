@@ -34,11 +34,21 @@ async function gitUpdate(appRoot, branch = 'main') {
     throw new Error(`the app folder has local changes (${files}); commit or discard them, then update again`);
   }
   await git(appRoot, ['fetch', '--depth', '1', '--tags', 'origin', target], 60000);
+  // Keep the pre-update HEAD reachable. checkout -B moves the pointer, and a commit the
+  // owner made in this folder would otherwise become unreachable and get garbage collected.
+  const before = (await git(appRoot, ['rev-parse', 'HEAD'], 5000)).trim();
+  const targetHead = (await git(appRoot, ['rev-parse', 'FETCH_HEAD'], 5000)).trim();
+  let backup = null;
+  if (before && targetHead && before !== targetHead) {
+    backup = `refs/musicfy/update-${new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14)}`;
+    try { await git(appRoot, ['update-ref', backup, before], 5000); } catch { backup = null; }
+  }
   // -B is the same from a branch, a detached HEAD, a shallow root or a rewritten history
   await git(appRoot, ['checkout', '-q', '-B', target, 'FETCH_HEAD'], 20000);
   try { await git(appRoot, ['branch', '--set-upstream-to', `origin/${target}`, target], 5000); } catch {}
   const head = (await git(appRoot, ['rev-parse', '--short', 'HEAD'], 5000)).trim();
-  return { mode: 'fetch and move the branch', branch: target, head, output: `fetched origin/${target}, now on ${target} at ${head}` };
+  return { mode: 'fetch and move the branch', branch: target, head, backup,
+    output: `fetched origin/${target}, now on ${target} at ${head}${backup ? `; previous HEAD kept at ${backup}` : ''}` };
 }
 
 module.exports = { gitUpdate };
