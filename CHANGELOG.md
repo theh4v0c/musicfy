@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.64 — 2026-11-26
+
+- The service worker answered `/api/playlists` (and tracks/likes) from its cache first.
+  After creating or deleting a playlist the app re-read the old list, so the change looked
+  like it had not happened. Those reads are network-first now, cache only when offline, and
+  only for GET. Shell cache moved to `mf-shell-v7`.
+
 ## 0.1.63 — 2026-11-26
 
 - Deleting a playlist asks inside the sheet ("Delete playlist" / "Keep it") instead of a
