@@ -27,6 +27,14 @@
     'Your rotation': 'Sua rotação', 'ON DECK': 'NA FILA', 'SHUFFLE': 'ALEATÓRIO',
     'Recently played': 'Tocadas recentemente', 'Your playlists': 'Suas listas',
     'Fresh in your library': 'Novidades na sua biblioteca',
+    'More from artists you play': 'Mais de artistas que você toca',
+    'Not in any playlist': 'Fora de qualquer lista',
+    'NOT YET HEARD': 'AINDA NÃO OUVIDAS', 'UNFILED': 'SEM LISTA',
+    'NOT IN YOUR LIBRARY': 'NÃO ESTÁ NA SUA BIBLIOTECA',
+    'Preview before downloading': 'Ouvir antes de baixar',
+    'Nothing to surface yet. Add tracks or play a few, and this fills in.':
+      'Nada para mostrar ainda. Adicione faixas ou toque algumas, e isto se preenche.',
+
     'Recently downloaded': 'Baixadas recentemente',
     'artist of the week, unheard lately': 'artista da semana, pouco ouvido',
     'your artist of the week, unheard lately': 'seu artista da semana, pouco ouvido',
@@ -163,6 +171,44 @@
     'Saved': 'Salvo', 'Metadata saved': 'Metadados salvos', 'Renamed': 'Renomeado',
     'Removed from playlist': 'Removida da lista', 'Deleted': 'Excluída',
     'Could not save those changes': 'Não foi possível salvar as alterações',
+    'IN CATALOGUE': 'NO CATÁLOGO', 'In the catalogue': 'No catálogo',
+    'NEXT IN QUEUE': 'A SEGUIR NA FILA', 'NO MATCHES': 'SEM RESULTADOS',
+    'NOW PLAYING': 'TOCANDO AGORA', 'Open web matches': 'Resultados da web',
+    'SEARCHING SOURCES...': 'BUSCANDO FONTES...', 'Top result': 'Melhor resultado',
+    'Finding a preview…': 'Buscando uma prévia…',
+    'No owned tracks for this artist yet. Search the web and download some.':
+      'Nenhuma faixa deste artista na biblioteca ainda. Busque na web e baixe algumas.',
+    'No web sources available right now.': 'Nenhuma fonte web disponível agora.',
+    'Nothing from this album is here yet. Use Download album to fetch the full tracklist.':
+      'Nada deste álbum está aqui ainda. Use Baixar álbum para trazer a lista completa.',
+    'Nothing liked yet. Heart something from any playlist.': 'Nada curtido ainda. Curta alguma faixa de qualquer lista.',
+    'Nothing matches that filter.': 'Nada corresponde a esse filtro.',
+    'Queue is empty. Right click any track to add.': 'A fila está vazia. Clique com o botão direito em qualquer faixa para adicionar.',
+    'A Spotify link imports the playlist. Any other service needs its tracks pasted.':
+      'Um link do Spotify importa a lista. Qualquer outro serviço precisa das faixas coladas.',
+    'Download album': 'Baixar álbum', 'Back to songs': 'Voltar para as faixas',
+    'Copy playback log': 'Copiar registro de reprodução', 'Playlist name': 'Nome da lista',
+    'Spotify playlist link, or one track per line': 'Link da lista do Spotify, ou uma faixa por linha',
+    'Excluded from picks, Flow, the rotation and the harmonic queue from now on.':
+      'Fora das escolhas, do Flow, da rotação e da fila harmônica a partir de agora.',
+    'tracks in your library': 'faixas na sua biblioteca', 'sources -': 'fontes -',
+    'core unreachable:': 'servidor inacessível:',
+    'Morning': 'Manhã', 'Afternoon': 'Tarde', 'Evening': 'Noite',
+    'Late one': 'Da madrugada', 'Deep in it': 'Na sessão há horas',
+    'Good morning.': 'Bom dia.', 'Good afternoon.': 'Boa tarde.',
+    'Good evening.': 'Boa noite.', 'Good night.': 'Boa madrugada.',
+
+    'Could not save': 'Não foi possível salvar', 'Nothing changed': 'Nada mudou',
+    'Checking for updates...': 'Procurando atualizações...',
+    'Checking the tracklist…': 'Conferindo a lista de faixas…',
+    'Downloading…': 'Baixando…', 'Queueing…': 'Enfileirando…', 'Still downloading': 'Ainda baixando',
+    'Retry download': 'Tentar o download de novo', 'No preview available.': 'Prévia indisponível.',
+    'Saved, but that city was not found': 'Salvo, mas essa cidade não foi encontrada',
+    'No open source has this audio yet. Use the download arrow on a catalogue row to fetch it.':
+      'Nenhuma fonte aberta tem este áudio ainda. Use a seta de download numa linha do catálogo para buscar.',
+    'That did not go through - try a plain phrase like “tracks between 120 and 130 BPM”.':
+      'Isso não passou - tente uma frase simples como “faixas entre 120 e 130 BPM”.',
+
     'Could not update those tracks': 'Não foi possível atualizar essas faixas',
     // toast messages
     'Added to queue': 'Adicionada à fila', 'Playing next': 'Tocando em seguida',
@@ -448,6 +494,14 @@
     [/^All (\d+) playlists$/, (m) => `Todas as ${m[1]} listas`],
     [/^You left off on /, () => 'Você parou em '],
     [/^more from (.+)$/, (m) => `mais de ${m[1]}`],
+    [/^Show all (\d+) albums$/, (m) => `Ver todos os ${m[1]} álbuns`],
+    [/^No usable matches for "(.+)"$/, (m) => `Nenhum resultado utilizável para “${m[1]}”`],
+    [/^resolving "(.+)" across youtube, soundcloud and archive$/i, (m) => `resolvendo “${m[1]}” no youtube, soundcloud e archive`],
+    [/^(\d+) families · (\d+) of (\d+) tracks$/, (m) => `${m[1]} famílias · ${m[2]} de ${m[3]} faixas`],
+    [/^Add (\d+) to playlist$/, (m) => `Adicionar ${m[1]} à lista`],
+
+    [/^Because you play (.+)$/, (m) => `Porque você toca ${m[1]}`],
+
     [/^same key as (.+)$/, (m) => `mesma tonalidade de ${m[1]}`],
     [/^(\d+) BPM, never played$/, (m) => `${m[1]} BPM, nunca tocada`],
     [/^(.+) on disk$/, (m) => `${m[1]} no disco`],

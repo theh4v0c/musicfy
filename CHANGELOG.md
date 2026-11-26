@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.77 — 2026-11-26
+
+- Portuguese in the discovery headings: "Because you play X" and "NOT IN YOUR LIBRARY" were
+  composed at runtime, so the exact-match dictionary never saw them. They have a rule now,
+  along with the rail tags.
+- Swept the same class of miss: the greeting (Morning / Afternoon / Evening / Late one),
+  empty states in liked songs, queue, album and search, the source-loading line, "Show all N
+  albums", genre counts, "Download album", "Back to songs", "Copy playback log" and the
+  remaining Settings status lines. About 35 strings that stayed English.
+
 ## 0.1.76 — 2026-11-26
 
 - **Lock-screen controls act on iOS again.** Play, pause, previous and next used the queue's
