@@ -844,11 +844,10 @@ function setNav(v) {
     b.classList.toggle('on', on);
     if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
-  // A&R lives under Studio and is reached from Search on a phone: the Search tab stays
-  // active there, so a mobile user is never left with no selected destination
-  const bottomKey = v === 'askai' ? 'search' : v;
+  // the bottom bar is the phone's destination list: A&R is one of them, Prep is desktop
+  // Studio only. Every view has exactly one active tab.
   document.querySelectorAll('.bn-btn').forEach(b => {
-    const on = b.dataset.nav === bottomKey;
+    const on = b.dataset.nav === v;
     b.classList.toggle('on', on);
     if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
@@ -3971,7 +3970,6 @@ async function renderSearch() {
         <button class="ask-ex" data-ar data-ask="create a playlist of 20 tracks">create a playlist of 20 tracks</button>
         <button class="ask-ex" data-ar data-ask="tracks between 120 and 130 BPM">tracks between 120 and 130 BPM</button>
         <button class="ask-ex" data-ar data-ask="how much of my library has audio">how much of my library has audio</button>
-        <button class="ask-ex" data-ar-nav="1">A&amp;R · describe a set</button>
       </div>
       <div class="mode-tabs" id="mode-tabs">
         <span class="filters-label">Scope</span>
@@ -4013,8 +4011,6 @@ async function renderSearch() {
     };
   });
   paintScope();
-  const arNav = document.querySelector('[data-ar-nav]');
-  if (arNav) arNav.onclick = () => nav('askai');
   if (state.searchPending) {
     const pending = state.searchPending;
     state.searchPending = null;
@@ -4048,7 +4044,7 @@ async function renderSearch() {
   };
   // every example is a question, so it opens the place that answers them
   // the examples are questions; A&R is where a question is answered
-  document.querySelectorAll('#search-hints .ask-ex:not([data-ar-nav])').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('#search-hints .ask-ex').forEach((b) => b.onclick = () => {
     q.value = b.textContent;
     state.arPending = b.dataset.ask || b.textContent;
     nav('askai');

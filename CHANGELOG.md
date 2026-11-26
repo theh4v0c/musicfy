@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.6 — 2026-11-26
+
+- A&R is back in the phone's bottom navigation, between Search and Library. Prep leaves the
+  phone bar and remains in the desktop Studio group with A&R; on a phone, A&R is the more
+  important destination. The Search A&R chip is removed because the destination is in the bar
+  again, and the active tab is exact again (no Search fallback).
+
 ## 0.2.5 — 2026-11-26
 
 - Hover and selected pills use a 2px **outer ring** instead of a border. The 2px border grew

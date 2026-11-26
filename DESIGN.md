@@ -204,10 +204,10 @@ one Tools menu for import, upload, recent downloads and the BPM sort. Ten equal 
 five phone rows were chrome before content. The player bar stays hidden until the first
 track starts; an empty player is a broken widget, not a state.
 
-Navigation follows the mode. Listener has Home, Search, Library, Playlists and Settings;
-DJ adds Prep. A&R sits under a **Studio** group in the sidebar and is reached from Search on
-a phone; while A&R is open, the sidebar A&R item and the bottom Search tab are both active.
-Prep disappears entirely in Listener.
+Navigation follows the device and the mode. The phone bottom bar is Home, Search, A&R,
+Library, Playlists and Settings; Prep is desktop-only, inside the **Studio** group with A&R.
+On desktop, A&R and Prep sit under Studio; Prep disappears entirely in Listener. A&R is not
+hidden on a phone: it is a destination, not a Search sub-page.
 
 Search is the one global search. Its Scope control is Both, This library or Web; playlist
 hits appear above the track results, so sets are found in the same field. The Library field
