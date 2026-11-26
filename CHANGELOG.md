@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.81 — 2026-11-26
+
+- **A model base URL keeps its path.** OpenRouter serves at `/api/v1`; the endpoint builder
+  replaced the path with `/v1` and every request answered 404. Gateways that mount OpenAI
+  under a prefix had the same failure. The path the owner typed is now kept and
+  `/chat/completions` is appended to it.
+- A failed model response says what the provider said (status plus the message body), not
+  only `llm 404`.
+- A reasoning model is usable. The connection probe accepts a 200 that answered with
+  reasoning instead of content, and its budget is 256 tokens; the planner's 2500 tokens is
+  enough for a reasoning model (verified with OpenRouter `z-ai/glm-5.3-flash`).
+
 ## 0.1.80 — 2026-11-26
 
 - Saving one setting reports one setting. The form was compared against the stored

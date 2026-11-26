@@ -49,12 +49,25 @@ function isMetadataHost(host) {
 function endpoint(baseUrl) {
   const raw = String(baseUrl || '').trim();
   if (!/^https?:\/\//i.test(raw)) throw new Error('the model endpoint must start with http:// or https://');
-  const base = new URL(raw.endsWith('/v1') ? raw.replace(/\/$/, '') : raw);
+  const base = new URL(raw);
   if (isMetadataHost(base.hostname)) throw new Error('that address is not a model endpoint');
   if (base.protocol === 'http:' && !isLocalHost(base.hostname)) {
     throw new Error('http is only allowed for a model on this machine; use https for a remote endpoint');
   }
-  return { url: new URL('/v1/chat/completions', base), mod: base.protocol === 'http:' ? http : https };
+  // A base URL can carry a path: OpenRouter is /api/v1, a gateway can mount OpenAI under
+  // /openai/v1. An absolute path here used to replace it with /v1 and the provider
+  // answered 404. Append to what the owner typed instead.
+  const path = base.pathname.replace(/\/+$/, '');
+  if (/\/chat\/completions$/i.test(path)) {
+    // already the full endpoint: use it as typed
+  } else if (/\/v\d+[a-z0-9.-]*$/i.test(path)) {
+    base.pathname = `${path}/chat/completions`;
+  } else {
+    base.pathname = `${path}/v1/chat/completions`;
+  }
+  base.search = '';
+  base.hash = '';
+  return { url: base, mod: base.protocol === 'http:' ? http : https };
 }
 
 function post(body, timeoutMs) {
@@ -81,8 +94,18 @@ function post(body, timeoutMs) {
         if (data.length > MAX) { req.destroy(new Error('llm response too large')); }
       });
       res.on('end', () => {
-        if (res.statusCode >= 400) return reject(new Error(`llm ${res.statusCode}`));
-        try { resolve(JSON.parse(data)); } catch { reject(new Error('llm returned unparsable json')); }
+        if (res.statusCode >= 400) {
+          // "llm 404" alone is not a diagnosis. Say what the provider said: a wrong path,
+          // a model the account does not have, or a key without access.
+          let detail = '';
+          try {
+            const j = JSON.parse(data);
+            detail = String((j.error && (j.error.message || j.error.code)) || j.message || '').trim();
+          } catch {}
+          if (!detail) detail = data.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+          return reject(new Error(`model endpoint ${res.statusCode}${detail ? `: ${detail}` : ''}`));
+        }
+        try { resolve(JSON.parse(data)); } catch { reject(new Error('model endpoint returned unparsable json')); }
       });
     });
     req.on('timeout', () => req.destroy(new Error('llm timeout')));
@@ -96,7 +119,7 @@ async function ask(question, timeoutMs = 12000) {
   const body = JSON.stringify({
     model: (config() || {}).model || 'Auto',
     temperature: 0,
-    max_tokens: 300,
+    max_tokens: 1500,
     messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: question }],
   });
   const parsed = await post(body, timeoutMs);
@@ -117,7 +140,7 @@ async function askRaw(prompt, timeoutMs = 10000, opts = {}) {
   let parsed;
   try { parsed = await post(body, timeoutMs); }
   catch (e) {
-    if (opts.json && /llm 400/.test(String(e.message))) parsed = await post(JSON.stringify(base), timeoutMs);
+    if (opts.json && /model endpoint 400/.test(String(e.message))) parsed = await post(JSON.stringify(base), timeoutMs);
     else throw e;
   }
   const choice = (parsed.choices || [])[0] || {};
@@ -133,12 +156,19 @@ async function probe(timeoutMs = 8000) {
   try {
     const started = Date.now();
     const parsed = await post(JSON.stringify({
-      model: c.model || 'Auto', temperature: 0, max_tokens: 64,
+      model: c.model || 'Auto', temperature: 0, max_tokens: 256,
       messages: [{ role: 'user', content: 'Reply with OK.' }],
     }), timeoutMs);
-    const text = String((((parsed.choices || [])[0] || {}).message || {}).content || '').trim();
-    if (!text) throw new Error('empty response');
-    return { configured: true, ok: true, error: null, model: c.model || 'Auto', ms: Date.now() - started };
+    const message = ((parsed.choices || [])[0] || {}).message || {};
+    const text = String(message.content || '').trim();
+    const reasoning = String(message.reasoning || message.reasoning_content || '').trim();
+    // a reasoning model can spend the whole probe budget thinking and still answer the
+    // request: the 200 is the answer to "is this endpoint and model usable?"
+    if (!text && !reasoning) throw new Error('empty response');
+    return {
+      configured: true, ok: true, error: null, model: c.model || 'Auto', ms: Date.now() - started,
+      note: !text && reasoning ? 'reasoning model answered' : null,
+    };
   } catch (e) {
     return { configured: true, ok: false, error: String(e.message || e).slice(0, 160), model: c.model || 'Auto', ms: 0 };
   }
@@ -159,4 +189,4 @@ function saveConfig(patch) {
   return c;
 }
 
-module.exports = { ask, askRaw, probe, available, config, saveConfig, endpoint, CONFIG };
+module.exports = { endpoint, ask, askRaw, probe, available, config, saveConfig, endpoint, CONFIG };

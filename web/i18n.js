@@ -622,7 +622,7 @@
 
 
 
-    [/^No answer: (.+)$/, (m) => `Sem resposta: ${m[1] === 'empty response' ? 'resposta vazia' : m[1]}`],
+    [/^No answer: (.+)$/, (m) => `Sem resposta: ${String(m[1]).replace(/^model endpoint\b/, 'endpoint do modelo').replace('empty response', 'resposta vazia')}`],
     [/^(\d+) tracks$/, (m) => `${m[1]} ${m[1] === '1' ? 'faixa' : 'faixas'}`],
     [/^(\d+) track$/, (m) => `${m[1]} faixa`],
     [/^Downloading: (.+)$/, (m) => `Baixando: ${m[1]}`],

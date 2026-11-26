@@ -10,6 +10,7 @@ const A = require('../core/agent.js');
 const G = require('../core/genre.js');
 const L = require('../core/ladder.js');
 const F = require('../core/folder.js');
+const LLM = require('../core/llm.js');
 
 const MINOR = { 1: 'G#', 2: 'D#', 3: 'A#', 4: 'F', 5: 'C', 6: 'G', 7: 'D', 8: 'A', 9: 'E', 10: 'B', 11: 'F#', 12: 'C#' };
 const MAJOR = { 1: 'B', 2: 'F#', 3: 'C#', 4: 'G#', 5: 'D#', 6: 'A#', 7: 'F', 8: 'C', 9: 'G', 10: 'D', 11: 'A', 12: 'E' };
@@ -455,4 +456,12 @@ test('the NML this app writes can be read by its own importer', async () => {
   assert.equal(r.playlists.length, 1);
   assert.deepEqual(r.playlists[0].entries, ['/music/One.mp3', '/music/Two.mp3']);
   assert.equal(r.files.get('/music/One.mp3').title, 'One');
+});
+
+test('a model base URL keeps its path', () => {
+  // OpenRouter mounts the API at /api/v1; an absolute /v1 path answered 404
+  assert.equal(LLM.endpoint('https://openrouter.ai/api/v1').url.href, 'https://openrouter.ai/api/v1/chat/completions');
+  assert.equal(LLM.endpoint('https://host/openai/v1').url.href, 'https://host/openai/v1/chat/completions');
+  assert.equal(LLM.endpoint('https://host').url.href, 'https://host/v1/chat/completions');
+  assert.equal(LLM.endpoint('https://host/v1/chat/completions').url.href, 'https://host/v1/chat/completions');
 });
