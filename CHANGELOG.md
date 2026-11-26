@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.74 — 2026-11-26
+
+- Settings prefills are generic. The city, genre, artist, listening context and avoid-list
+  fields no longer suggest one person's library ("Brasília", "Burial, Overmono, Floating
+  Points"), the catalogue-country field starts empty, and the library folder reads
+  `/path/to/music` instead of a macOS home. The placeholders are translated as well.
+
 ## 0.1.73 — 2026-11-26
 
 - **Settings > Library folder**: point at a folder you already have, or at one playlist

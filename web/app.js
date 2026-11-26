@@ -2690,7 +2690,7 @@ async function renderImport() {
         <input id="imp-name" placeholder="Driving, Sunday morning...">
       </label>
       <label class="ip-label">Spotify playlist link, or one track per line
-        <textarea id="imp-text" rows="8" placeholder="https://open.spotify.com/playlist/...&#10;&#10;or&#10;Burial - Archangel"></textarea>
+        <textarea id="imp-text" rows="8" placeholder="https://open.spotify.com/playlist/...&#10;&#10;or&#10;Artist - Title"></textarea>
       </label>
       <div class="ip-actions">
         <button class="btn btn-primary" id="imp-go">Import</button>
@@ -2755,7 +2755,7 @@ async function renderSettings() {
         <h2>You</h2>
         <label>Display name<input id="set-name" value="${esc(s.display_name || '')}" placeholder="Your name"></label>
         <p class="set-note">The first word is used by the greeting on Home. Nothing else reads it.</p>
-        <label>Timezone<input id="set-tz" value="${esc(s.timezone || '')}" placeholder="America/Sao_Paulo"></label>
+        <label>Timezone<input id="set-tz" value="${esc(s.timezone || '')}" placeholder="Continent/City"></label>
         <p class="set-note">IANA name, e.g. America/Sao_Paulo. Drives the greeting hour, the "at this hour you usually listen" line and the weather. Setting a city below fills it in automatically.</p>
         <label>Language
           <select id="set-lang">
@@ -2768,7 +2768,7 @@ async function renderSettings() {
       <section class="set-card" data-tone="acc">
         <h2>Location</h2>
         <p class="set-note">Used by the greeting and its weather line. Type a city and the coordinates and time zone are looked up for you.</p>
-        <label>City<input id="set-city" value="${esc(s.city || '')}" placeholder="Brasília"></label>
+        <label>City<input id="set-city" value="${esc(s.city || '')}" placeholder="Your city"></label>
         <div class="set-facts" id="set-geo">${s.latitude && s.longitude
           ? `<div><b>${esc(s.city || '')}</b>${s.country ? ` · ${esc(s.country)}` : ''}</div><div>${Number(s.latitude).toFixed(3)}, ${Number(s.longitude).toFixed(3)}</div><div>${esc(s.timezone || '')}</div>`
           : '<div>No city set</div>'}</div>
@@ -2776,10 +2776,10 @@ async function renderSettings() {
       <section class="set-card" data-tone="ok">
         <h2>Taste</h2>
         <p class="set-note">Optional. Used to shape recommendations; the app learns from what you play anyway.</p>
-        <label>Genres you love<input id="set-taste-genres" value="${esc(s.taste_genres || '')}" placeholder="techno, dub techno, ambient, jazz"></label>
-        <label>Artists you love<input id="set-taste-artists" value="${esc(s.taste_artists || '')}" placeholder="Burial, Overmono, Floating Points"></label>
-        <label>Usually listening<input id="set-taste-context" value="${esc(s.taste_context || '')}" placeholder="long drives, focus work, evening sets"></label>
-        <label>Keep out of picks<input id="set-taste-avoid" value="${esc(s.taste_avoid || '')}" placeholder="non pop, reggaeton, latin, emo, edm"></label>
+        <label>Genres you love<input id="set-taste-genres" value="${esc(s.taste_genres || '')}" placeholder="Genres, comma separated"></label>
+        <label>Artists you love<input id="set-taste-artists" value="${esc(s.taste_artists || '')}" placeholder="Artists, comma separated"></label>
+        <label>Usually listening<input id="set-taste-context" value="${esc(s.taste_context || '')}" placeholder="When you listen"></label>
+        <label>Keep out of picks<input id="set-taste-avoid" value="${esc(s.taste_avoid || '')}" placeholder="Genres to keep out"></label>
         <div class="avoid-terms" id="set-avoid-terms" aria-live="polite"></div>
         <p class="set-note">Commas. "no" and "non" are ignored, so "non pop" means pop. Matched against genre, family, artist, album and title.</p>
         <label class="set-check"><input type="checkbox" id="set-taste-children"${s.taste_include_children ? ' checked' : ''}> Let children's music shape recommendations</label>
@@ -2829,7 +2829,7 @@ async function renderSettings() {
           </select>
         </label>
         <p class="set-note">Applies to downloads from streaming sources only. "Keep the original" stores what the source serves without re-encoding. m4a and mp3 convert only when the source uses a different codec; when the source already serves AAC, m4a is a container fix with no re-encode. Files you upload are stored byte for byte, and lossless files are never converted.</p>
-        <label>Catalogue country<input id="set-storefront" value="${esc(s.storefront_country || '')}" placeholder="BR" maxlength="2"></label>
+        <label>Catalogue country<input id="set-storefront" value="${esc(s.storefront_country || '')}" placeholder="" maxlength="2"></label>
         <p class="set-note">Two letters. The catalogue differs by country: a release in Brazil can be missing from the US store. Empty follows the country of the city above. Set it while travelling when you want another storefront; Deezer is queried too, so the answer does not depend on one store.</p>
       </section>
       <section class="set-card">
@@ -2872,7 +2872,7 @@ async function renderSettings() {
       <section class="set-card" data-tone="ok">
         <h2>Library folder</h2>
         <p class="set-note">Point at a folder you already have. The files stay where they are: nothing is copied, moved or renamed. Playlists written by Traktor, rekordbox, M3U or PLS are imported with their order, and the BPM and key they already carry are kept.</p>
-        <label>Folder or playlist file<input id="set-folder" placeholder="/Users/you/Music"></label>
+        <label>Folder or playlist file<input id="set-folder" placeholder="/path/to/music"></label>
         <div class="lib-actions">
           <button class="btn btn-primary" id="set-folder-scan" type="button">Scan folder</button>
           <span class="set-note" id="set-folder-out">Not scanned yet.</span>

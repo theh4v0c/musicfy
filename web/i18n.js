@@ -320,6 +320,12 @@
     'playlist one': 'lista', 'playlist many': 'listas',
     'Scan stopped:': 'Escaneamento parou:', 'files read': 'arquivos lidos', 'nothing new': 'nada novo',
     'Could not scan:': 'Não foi possível escanear:',
+    'Continent/City': 'Continente/Cidade', 'Your city': 'Sua cidade',
+    'Genres, comma separated': 'Gêneros separados por vírgula',
+    'Artists, comma separated': 'Artistas separados por vírgula',
+    'When you listen': 'Quando você ouve', 'Genres to keep out': 'Gêneros a evitar',
+    'Artist - Title': 'Artista - Título',
+
     'A scan from another machine needs MUSICFY_MUSIC_ROOTS set on the server.':
       'Um escaneamento a partir de outra máquina precisa de MUSICFY_MUSIC_ROOTS definido no servidor.',
 
