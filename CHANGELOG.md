@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.76 — 2026-11-26
+
+- **Lock-screen controls act on iOS again.** Play, pause, previous and next used the queue's
+  asynchronous path, which reads Cache Storage for a saved track; iOS suspends that read
+  while the screen is off, so the press arrived and nothing started. The remote handlers are
+  synchronous now: they hand the element the source warmed in memory (or the stream path)
+  and start it in the same task. Play rebuilds a source that died during a long lock and
+  resumes at the same position. Every remote press is written to the playback log.
+
 ## 0.1.75 — 2026-11-26
 
 - **Update now works on an install that cannot fast-forward.** The installer clones with

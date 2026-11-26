@@ -5528,21 +5528,93 @@ function syncPositionState() {
   // rewind / forward buttons instead of previous and next track on car displays
 }
 
+/* The lock screen can only run what is already in memory.
+ *
+ * nextTrack() and prevTrack() await a Cache Storage read for a saved track, and iOS
+ * suspends that read while the screen is off: pressing skip then did nothing at all.
+ * The remote handlers below are synchronous. They hand the element a source that was
+ * warmed while the last track was playing, or the stream path, and start it in the same
+ * task the system gave us. The queue's own buttons keep the async path, where there is
+ * time to read the device.
+ */
+function sourceNow(t) {
+  if (!t || !t.id) return '';
+  return prefetchBlobs.get(t.id) || warmSrc.get(t.id) || streamUrl(t);
+}
+
+function remotePlay() {
+  state._userPaused = false;
+  state._wantPlaying = true;
+  const t = state.current;
+  logPlay('remote-play', { hidden: document.hidden, paused: audio.paused, src: !!audio.getAttribute('src') });
+  if (!t) return;
+  if (!audio.getAttribute('src')) return startAudio(state.qi, sourceNow(t));
+  const p = audio.play();
+  if (p && p.catch) p.catch((e) => {
+    // a source that died during a long lock is rebuilt from the queue, not ignored, and
+    // it resumes where the listener was instead of starting the track again
+    logPlay('remote-play-blocked', { why: (e && e.name) || 'error' });
+    state._resumeAt = audio.currentTime || 0;
+    startAudio(state.qi, sourceNow(t), { resume: true });
+  });
+}
+
+function remotePause() {
+  state._userPaused = true;
+  logPlay('remote-pause', { hidden: document.hidden });
+  audio.pause();
+}
+
+function remoteNext() {
+  logPlay('remote-next', { from: state.current && state.current.id, qi: state.qi });
+  if (!state.queue.length) return;
+  if (state.repeat && state.qi >= state.queue.length - 1) {
+    const first = state.queue[0];
+    if (first) startAudio(0, sourceNow(first));
+    return;
+  }
+  const next = state.qi + 1;
+  if (next < state.queue.length) {
+    startAudio(next, sourceNow(state.queue[next]));
+    return;
+  }
+  // end of the queue: this is the one case that needs the radio endpoint. It is only
+  // reached when the queue was not extended ahead, which the engine does while playing.
+  nextTrack();
+}
+
+function remotePrev() {
+  logPlay('remote-prev', { at: Math.round(audio.currentTime || 0), qi: state.qi });
+  if (audio.currentTime > 3) { try { audio.currentTime = 0; } catch {} return; }
+  const prev = Math.max(0, state.qi - 1);
+  const t = state.queue[prev];
+  if (t) startAudio(prev, sourceNow(t));
+  else { try { audio.currentTime = 0; } catch {} }
+}
+
+function remoteStop() {
+  state._userPaused = true;
+  logPlay('remote-stop', {});
+  audio.pause();
+  try { audio.currentTime = 0; } catch {}
+}
+
+const mediaActions = {
+  play: remotePlay, pause: remotePause, stop: remoteStop,
+  previoustrack: remotePrev, nexttrack: remoteNext,
+};
+
 function bindMediaSession() {
   if (!('mediaSession' in navigator)) return;
   const set = (action, fn) => { try { navigator.mediaSession.setActionHandler(action, fn); } catch {} };
   const clear = (action) => { try { navigator.mediaSession.setActionHandler(action, null); } catch {} };
   // every seek affordance is cleared first, otherwise iOS keeps drawing rewind / forward
   ['seekbackward', 'seekforward', 'seekto', 'skipad', 'nextslide', 'previousslide', 'seekto'].forEach(clear);
-  set('play', () => { state._userPaused = false; audio.play().catch(() => {}); });
-  // a pause pressed in the car is a real wish; a pause the system makes on lock is not
-  set('pause', () => { state._userPaused = true; audio.pause(); });
-  // the button in the car is "back", not "previous track": restart the song you are in
-  set('previoustrack', () => prevTrack());
-  set('nexttrack', () => nextTrack());
-  set('stop', () => { state._userPaused = true; audio.pause(); audio.currentTime = 0; });
+  for (const [action, fn] of Object.entries(mediaActions)) set(action, fn);
 }
 bindMediaSession();
+window.MF_MEDIA = mediaActions;   // a phone has no console: the lock-screen handlers can be exercised
+window.addEventListener('pageshow', (e) => { if (e.persisted) bindMediaSession(); });
 document.addEventListener('visibilitychange', () => {
   logPlay(document.hidden ? 'lock' : 'unlock', {
     id: state.current && state.current.id, paused: audio.paused, at: Math.round(audio.currentTime || 0),
