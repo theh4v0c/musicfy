@@ -171,7 +171,7 @@
     'Saved': 'Salvo', 'Metadata saved': 'Metadados salvos', 'Renamed': 'Renomeado',
     'Removed from playlist': 'Removida da lista', 'Deleted': 'Excluída',
     'Could not save those changes': 'Não foi possível salvar as alterações',
-    'name': 'nome', 'time zone': 'fuso horário', 'city': 'cidade',
+    'settings': 'ajustes', 'name': 'nome', 'time zone': 'fuso horário', 'city': 'cidade',
     'model endpoint': 'endpoint do modelo', 'model': 'modelo',
     'format': 'formato', 'loudness switch': 'normalização', 'target level': 'nível alvo',
     'autoplay': 'continuação', 'buffer': 'buffer', 'genres': 'gêneros', 'artists': 'artistas',

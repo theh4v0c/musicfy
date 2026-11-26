@@ -177,7 +177,8 @@ MUSICFY_MUSIC_ROOTS=/home/me/Music:/mnt/drive/Sets
 ```
 
 The scan is an import, not a sync: a file deleted from the folder stays in the library until
-you remove it there.
+you remove it there. Scanning a playlist that was imported before replaces its tracks and
+order with the file's current contents, so edits made inside MUSICFY are not kept.
 
 ### 3.8 Make it start automatically (optional)
 

@@ -3147,11 +3147,15 @@ async function renderSettings() {
         }, 2800);
       }
       if (saveMsg) {
+        // build the sentence from translated parts: the dictionary matches whole strings,
+        // so "Saved · time zone" never reached the label "time zone"
+        const tr = (x) => (window.I18N ? window.I18N.t(x) : x);
+        const labelOf = (k) => tr(LABELS[k] || k);
         if (notFound) saveMsg.textContent = 'Saved, but that city was not found';
         else if (!changed.length) saveMsg.textContent = 'Nothing changed';
-        else if (changed.length === 1) saveMsg.textContent = `Saved · ${LABELS[changed[0]] || changed[0]}`;
-        else if (changed.length <= 3) saveMsg.textContent = `Saved · ${changed.map((k) => LABELS[k] || k).join(', ')}`;
-        else saveMsg.textContent = `Saved · ${changed.length} settings`;
+        else if (changed.length === 1) saveMsg.textContent = `${tr('Saved')} · ${labelOf(changed[0])}`;
+        else if (changed.length <= 3) saveMsg.textContent = `${tr('Saved')} · ${changed.map(labelOf).join(', ')}`;
+        else saveMsg.textContent = `${tr('Saved')} · ${changed.length} ${tr('settings')}`;
         saveMsg.dataset.tone = 'ok';
       }
       baseline = { ...baseline, ...body };

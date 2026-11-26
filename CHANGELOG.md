@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.79 — 2026-11-26
+
+- The "Saved · field" line is built from translated parts, so "Saved · time zone" is
+  "Salvo · fuso horário" rather than an English tail.
+- INSTALL says that re-scanning an imported playlist replaces its tracks and order with the
+  file's current contents.
+
 ## 0.1.78 — 2026-11-26
 
 - **A body handler cannot hang the request any more.** Twelve `req.on('end', async …)`
