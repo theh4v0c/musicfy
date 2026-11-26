@@ -2,7 +2,7 @@
 // MUSICFY offline layer. Caches the app shell, library JSON and explicitly saved
 // audio so the app opens and plays from the device with no network.
 // Service workers require HTTPS or localhost.
-const SHELL = 'mf-shell-v5';
+const SHELL = 'mf-shell-v6';
 const AUDIO = 'mf-audio-v2';
 const API = 'mf-api-v2';
 const AUDIO_KEYS = () => caches.open(AUDIO);

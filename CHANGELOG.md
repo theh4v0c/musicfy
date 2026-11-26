@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.55 — 2026-11-26
+
+- The shell's asset URLs carry the running version (`/app.js?v=0.1.55`) and the service
+  worker cache name moved to `mf-shell-v6`. After an update the browser fetches the new
+  bundle on the next load instead of running the previous one from cache; that stale
+  client was still using the old A&R gate on the VPS.
+- `index.html` is served with `cache-control: no-cache`, so the versioned URLs are seen.
+
 ## 0.1.54 — 2026-11-26
 
 - The A&R view sends every sentence to the agent. Its client-side gate was an English verb

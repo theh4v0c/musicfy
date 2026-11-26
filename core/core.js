@@ -2194,9 +2194,15 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/health') return json(res, 200, { ok: true, uptime: process.uptime() });
 
     // static player (never cached: single-user dev flow, bust by content)
+    // the shell's asset URLs carry the running version, so a new release is a new cache
+    // key: a service worker cannot keep serving the previous bundle after an update
     if (u.pathname === '/' || u.pathname === '/index.html') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      return res.end(fs.readFileSync(path.join(WEB, 'index.html')));
+      const html = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8')
+        .replace(/\?v=[\w.]+/g, `?v=${encodeURIComponent(APP_VERSION)}`);
+      res.setHeader('content-type', 'text/html; charset=utf-8');
+      res.setHeader('cache-control', 'no-cache');
+      return res.end(html);
     }
     if (u.pathname === '/app.css') {
       const body = fs.readFileSync(path.join(WEB, 'app.css'));
