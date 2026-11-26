@@ -215,7 +215,9 @@ is a local filter, labelled as one, and when nothing matches it hands the query 
 ("Search everywhere").
 
 The command palette (`⌘K` / `Ctrl-K`, and the top-bar button) jumps to a view, track or
-playlist, or runs Play library shuffled and Scan a folder. Every confirmation and prompt is
+playlist, or runs Play library shuffled and Scan a folder. A&R opens with **For you now**, a preloaded set of local picks from the
+recommender, refreshed in the background every five minutes and by the refresh button; a
+search replaces it. With no picks, the three-step explainer is the starter instead. Every confirmation and prompt is
 the in-app `.ask-dialog` (message, optional field, Cancel, accent action); no native
 `confirm` or `prompt`. Playlist upload lives in the playlist `…` menu with the other
 secondary actions.

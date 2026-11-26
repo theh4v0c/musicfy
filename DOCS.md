@@ -786,7 +786,9 @@ Settings), DJ adds Prep. A&R lives in the sidebar's Studio group and is one tap 
 a phone; the bottom Search tab stays active while A&R is open. Search is the single global
 field, with Scope (Both / This library / Web) and playlist hits; the Library field is labelled
 as a local filter and offers "Search everywhere" when nothing matches. The command palette
-(`⌘K` or the top-bar button) jumps to views, tracks and playlists. All confirmations and
+(`⌘K` or the top-bar button) jumps to views, tracks and playlists. A&R opens with a preloaded "For you now" row from the local
+recommender; it refreshes in the background every five minutes, has a refresh button, and is
+replaced by the results when a request is run. All confirmations and
 one-line prompts use the in-app dialog, so they follow the interface language. The playlist
 `…` menu holds Upload and Download; the header keeps Play, Shuffle, Harmonic, kind and view.
 The top bar names the page. Library and Search start with their toolbar; Playlists, Settings

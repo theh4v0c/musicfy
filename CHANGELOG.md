@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 — 2026-11-26
+
+- The selected Mode and a focused search field use a 2px accent ring instead of a 1px
+  hairline, which rendered rough on the rounded pills.
+- A&R opens with **For you now**: eight local picks from `/api/recommend`, cached for five
+  minutes, refreshed in the background while the page is open, and replaceable with the
+  refresh button. A request hides the row and shows the draft. With no picks, the three-step
+  explainer remains the starter. The safety line stays under the row.
+
 ## 0.2.0 — 2026-11-26
 
 - **Mode-driven navigation.** Listener has five destinations (Home, Search, Library,

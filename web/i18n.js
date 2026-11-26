@@ -171,7 +171,10 @@
     'Saved': 'Salvo', 'Metadata saved': 'Metadados salvos', 'Renamed': 'Renomeado',
     'Removed from playlist': 'Removida da lista', 'Deleted': 'Excluída',
     'Could not save those changes': 'Não foi possível salvar as alterações',
-    'Command palette': 'Paleta de comandos', 'Command palette (⌘K)': 'Paleta de comandos (⌘K)',
+    'Command palette': 'Paleta de comandos',
+    'For you now': 'Para você agora', 'UPDATED IN THE BACKGROUND': 'ATUALIZADO EM SEGUNDO PLANO',
+    'New picks': 'Novas sugestões', 'Choosing picks…': 'Escolhendo sugestões…',
+ 'Command palette (⌘K)': 'Paleta de comandos (⌘K)',
     'move': 'mover', 'run': 'executar', 'close': 'fechar', 'open': 'abrir',
 
     'Confirm': 'Confirmar', 'Could not copy the playback log': 'Não foi possível copiar o registro de reprodução',

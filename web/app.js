@@ -1686,7 +1686,11 @@ async function loadMastPicks(fresh) {
     });
     const sh = host.querySelector('.mpick-shuffle');
     if (sh) sh.onclick = () => { sh.disabled = true; loadMastPicks(true); };
-  } catch { host.hidden = true; }
+  } catch {
+    host.hidden = true;
+    const start = document.getElementById('ai-start');
+    if (start) start.hidden = false;
+  }
 }
 
 async function drawRecents(rec) {
@@ -3847,6 +3851,48 @@ async function runAssistant(text, out, stateEl, box) {
     }
   }
 
+let arRecoTimer = null;
+
+function paintArReco(host, picks) {
+  if (!host) return;
+  if (!picks || !picks.length) {
+    host.hidden = true;
+    const start = document.getElementById('ai-start');
+    if (start) start.hidden = false;
+    return;
+  }
+  host.hidden = false;
+  // the three-step explainer is for an empty library; once there are picks, the picks
+  // are the point and the tutorial would push them below the fold
+  const start = document.getElementById('ai-start');
+  if (start) start.hidden = true;
+  host.innerHTML = `<div class="sec-title">${tr('For you now')}<button class="icon-btn" id="ai-reco-new" type="button" title="${tr('New picks')}" aria-label="${tr('New picks')}">↻</button></div>
+    <p class="set-note ai-reco-note">${tr('Nothing is saved or downloaded until you confirm.')}</p>`;
+  const row = document.createElement('div');
+  row.className = 'row-scroller';
+  picks.forEach((t) => row.appendChild(trackCard(t, picks, 'For you now')));
+  host.appendChild(row);
+  const again = host.querySelector('#ai-reco-new');
+  if (again) again.onclick = () => loadArReco(true);
+}
+
+async function loadArReco(force = false) {
+  const host = document.getElementById('ai-reco');
+  if (!host) return;
+  if (!force && state.arReco && Date.now() - state.arReco.at < 5 * 60 * 1000) {
+    paintArReco(host, state.arReco.picks);
+    return;
+  }
+  host.hidden = false;
+  host.innerHTML = `<div class="sec-title">${tr('For you now')}</div><div class="ladder-state">${tr('Choosing picks…')}</div>`;
+  try {
+    const d = await api('/api/recommend?limit=8&days=30', { nocache: true });
+    state.arReco = { at: Date.now(), picks: d.picks || [] };
+    if (!document.body.contains(host)) return;
+    paintArReco(host, state.arReco.picks);
+  } catch { host.hidden = true; }
+}
+
 async function renderAskAi() {
   closeInlinePreview();
   setNav('askai');
@@ -3872,14 +3918,24 @@ async function renderAskAi() {
       <div class="ask-start-step"><b>2</b><span>You see the plan and the tracks as a draft.</span></div>
       <div class="ask-start-step"><b>3</b><span>Nothing is saved or downloaded until you confirm.</span></div>
     </div>
+    <div class="ai-reco" id="ai-reco" hidden></div>
     <div id="ai-res"></div><div id="ask-discover"></div>`;
   const box = $('ai-q');
   const out = $('ai-res');
   const stateEl = $('ai-state');
 
+  if (arRecoTimer) { clearInterval(arRecoTimer); arRecoTimer = null; }
+  loadArReco();
+  arRecoTimer = setInterval(() => {
+    if (state.view !== 'askai') { clearInterval(arRecoTimer); arRecoTimer = null; return; }
+    loadArReco(true);
+  }, 5 * 60 * 1000);
+
   const run = (text) => {
     const start = document.getElementById('ai-start');
     if (start) start.hidden = true;
+    const reco = document.getElementById('ai-reco');
+    if (reco) reco.hidden = true;
     const teach = String(text || '').trim().match(TEACH_RE);
     if (teach) return teachExclusion(teach[1], out, stateEl, box);
     return runAssistant(text, out, stateEl, box);
