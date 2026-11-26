@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.75 — 2026-11-26
+
+- **Update now works on an install that cannot fast-forward.** The installer clones with
+  `--depth 1`, an older install may sit on a detached HEAD, and a rewritten upstream history
+  has no common ancestor; all three made `git pull --ff-only` fail with no explanation. The
+  update now fetches the branch and moves to it, which is what `install.sh` always did, and
+  it refuses to discard tracked local edits (listing them instead).
+- A failed git command reports the reason. The interface used to show only
+  `Command failed: git -C ... pull --ff-only`; it now appends the last lines of stderr.
+- `musicfy update` uses the same code as the button, so the terminal and the interface
+  cannot disagree again.
+
 ## 0.1.74 — 2026-11-26
 
 - Settings prefills are generic. The city, genre, artist, listening context and avoid-list

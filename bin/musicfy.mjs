@@ -577,14 +577,15 @@ async function update() {
   const before = hashOf();
   let bundleUpdated = false;
   if (fs.existsSync(path.join(APP, '.git'))) {
+    // the same update the button runs: fetch the branch and move to it, because a shallow
+    // clone or a rewritten history cannot fast-forward
     const head = capture('git', ['-C', APP, 'rev-parse', '--abbrev-ref', 'HEAD']);
-    const ok = head === 'HEAD'
-      ? (run('git', ['-C', APP, 'fetch', '--depth', '1', 'origin', 'main'])
-        && run('git', ['-C', APP, 'checkout', '-q', '-B', 'main', 'FETCH_HEAD'])
-        && (run('git', ['-C', APP, 'branch', '--set-upstream-to=origin/main', 'main']) || true))
-      : run('git', ['-C', APP, 'pull', '--ff-only']);
-    if (!ok) {
-      console.log('git update failed. If the repository is private, configure a read-only deploy key first.');
+    try {
+      const { gitUpdate } = requireCore('../core/git-update.js');
+      const r = await gitUpdate(APP, head && head !== 'HEAD' ? head : 'main');
+      console.log(`Updated: ${r.output}`);
+    } catch (e) {
+      console.log('Update failed:', String(e.message || e).slice(0, 240));
       return 1;
     }
   } else {

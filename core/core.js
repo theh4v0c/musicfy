@@ -37,6 +37,7 @@ const exclude = require('./exclude');
 const tagwrite = require('./tagwrite');
 const transcode = require('./transcode');
 const folderLib = require('./folder');
+const { gitUpdate } = require('./git-update');
 const { DatabaseSync } = require('node:sqlite');
 
 // every path comes from ./paths, which reads what the installation set
@@ -55,7 +56,15 @@ let APP_VERSION = '0.0.0';
 try { APP_VERSION = JSON.parse(fs.readFileSync(path.join(APP_ROOT, 'package.json'), 'utf8')).version || APP_VERSION; } catch {}
 let updateCache = { at: 0, data: null };
 function execFileP(cmd, args, opts) {
-  return new Promise((resolve, reject) => execFile(cmd, args, opts, (err, stdout) => err ? reject(err) : resolve(String(stdout || ''))));
+  return new Promise((resolve, reject) => execFile(cmd, args, opts, (err, stdout, stderr) => {
+    if (!err) return resolve(String(stdout || ''));
+    // the reason a git command failed is on stderr, and the message alone is just
+    // "Command failed": carry the last lines so the interface can say what happened
+    const detail = String(stderr || err.stderr || '').trim().split('\n').filter(Boolean).slice(-3).join(' ');
+    if (detail && !String(err.message || '').includes(detail)) err.message = `${err.message}: ${detail}`;
+    err.stderr = err.stderr || stderr;
+    reject(err);
+  }));
 }
 function diskVersion() {
   try { return JSON.parse(fs.readFileSync(path.join(APP_ROOT, 'package.json'), 'utf8')).version || APP_VERSION; } catch { return APP_VERSION; }
@@ -3567,21 +3576,14 @@ const server = http.createServer(async (req, res) => {
       }
       if (info.error) return json(res, 502, { error: info.error });
       try {
-        const head = execFileSync('git', ['-C', APP_ROOT, 'rev-parse', '--abbrev-ref', 'HEAD'], { timeout: 5000 }).toString().trim();
-        let out;
-        if (head === 'HEAD') {
-          const branch = info.branch || 'main';
-          await execFileP('git', ['-C', APP_ROOT, 'fetch', '--depth', '1', 'origin', branch], { timeout: 60000 });
-          await execFileP('git', ['-C', APP_ROOT, 'checkout', '-q', '-B', branch, 'FETCH_HEAD'], { timeout: 10000 });
-          try { await execFileP('git', ['-C', APP_ROOT, 'branch', '--set-upstream-to', `origin/${branch}`, branch], { timeout: 5000 }); } catch {}
-          out = 'detached checkout repaired to ' + branch;
-        } else {
-          out = await execFileP('git', ['-C', APP_ROOT, 'pull', '--ff-only'], { timeout: 60000 });
-        }
+        const updated = await gitUpdate(APP_ROOT, info.branch || 'main');
         updateCache = { at: 0, data: null };
-        return json(res, 200, { ok: true, output: String(out || '').slice(-1200), restart: (await updateInfo(false)).restart, version: APP_VERSION });
+        return json(res, 200, {
+          ok: true, from: APP_VERSION, to: diskVersion(), mode: updated.mode, head: updated.head,
+          output: updated.output.slice(-1200), restart: (await updateInfo(false)).restart,
+        });
       } catch (e) {
-        return json(res, 500, { error: String(e.message || e).split('\n')[0].slice(0, 160) });
+        return json(res, 500, { error: String(e.message || e).split('\n')[0].slice(0, 240) });
       }
     }
 
