@@ -35,7 +35,7 @@ check() {
   ver=$(ssh "$host" "curl -s -m 6 http://127.0.0.1:8710/api/settings" 2>/dev/null \
     | node -e "let b='';process.stdin.on('data',c=>b+=c).on('end',()=>{try{process.stdout.write(String(JSON.parse(b).version||''))}catch{}})" 2>/dev/null || true)
   code=$(ssh "$host" "curl -s -m 6 -o /dev/null -w '%{http_code}' http://127.0.0.1:8710/" 2>/dev/null || true)
-  asset=$(ssh "$host" "curl -s -m 6 http://127.0.0.1:8710/ | grep -oE '/app\\\\?v=[^\"]+'" 2>/dev/null | head -1 || true)
+  asset=$(ssh "$host" "curl -s -m 6 http://127.0.0.1:8710/ | grep -oE 'app[.]js[?]v=[0-9.]+'" 2>/dev/null | head -1 || true)
   if [ "$ver" = "$WANT" ] && [ "$code" = "200" ]; then
     say "   $host: $ver, / 200, asset ${asset:-?}"
   else

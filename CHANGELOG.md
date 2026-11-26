@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.58 — 2026-11-26
+
+- `deploy:all` prints the asset URL each host serves (`app.js?v=…`); the check's grep was
+  escaped wrongly and printed `?`.
+
 ## 0.1.57 — 2026-11-26
 
 - `FLEET.md` is the host source of truth: which machine, which ssh name, where the code and
