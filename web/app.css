@@ -16,9 +16,6 @@
   --liked: #ff4d6d;
   /* one native typeface everywhere: no web font to cache, block or fail to render */
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  /* a native display stack, not a web font: rounded where the OS has it, the system sans
-     everywhere else. Only the mast, playlist header and crate names use it. */
-  --display: ui-rounded, "SF Pro Rounded", "Avenir Next", var(--sans);
   --mono: var(--sans); /* kept for the label rules; the interface has no monospace stack */
   /* radius scale: 2 bar · 6 thumb · 8 small · 10 medium · 14 card · 99 pill · 50% circle */
   --r-bar: 2px;
@@ -132,7 +129,7 @@ main.main { grid-area: main; display: flex; flex-direction: column; overflow: hi
   border: 1px solid var(--line); background: rgba(255,255,255,.035); white-space: nowrap; }
 .mast-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 26px; margin: 14px 0 14px; }
 .mast-copy { min-width: 0; }
-.mast-greet { font-family: var(--display); margin: 0; font-size: clamp(28px, 3.4vw, 42px); line-height: 1; letter-spacing: -.03em; font-weight: 600; }
+.mast-greet { margin: 0; font-size: clamp(28px, 3.4vw, 42px); line-height: 1; letter-spacing: -.03em; font-weight: 600; }
 .mast-greet .mast-name { color: var(--fg); margin-left: .22em; }
 .mast-note { margin: 10px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 62ch; }
 .mast-side { flex: none; width: 292px; display: flex; flex-direction: column; gap: 8px; }
@@ -263,7 +260,7 @@ main.main { grid-area: main; display: flex; flex-direction: column; overflow: hi
 .plhead { display: flex; gap: 24px; align-items: flex-end; margin-bottom: 26px; }
 .plhead-art { width: 192px; height: 192px; border-radius: var(--r-lg); object-fit: cover; box-shadow: 0 18px 50px rgba(0,0,0,.5); background: var(--bg-elev2); }
 .plhead-kicker { font-family: var(--mono); font-size: 10px; letter-spacing: .18em; color: var(--fg-mute); }
-.plhead-name { font-family: var(--display); font-size: clamp(28px, 4vw, 52px); font-weight: 600; letter-spacing: -.02em; line-height: 1.02; margin: 8px 0 10px; }
+.plhead-name { font-size: clamp(28px, 4vw, 52px); font-weight: 600; letter-spacing: -.02em; line-height: 1.02; margin: 8px 0 10px; }
 .plhead-meta { color: var(--fg-soft); font-size: 13px; }
 .plhead-meta b { color: var(--fg); }
 /* six actions in a row is already a lot: they carry less weight than the title */
@@ -814,7 +811,7 @@ main.main { transition: margin-right .18s ease; }
 .prep-hero::after, .page-hero::after { content: ""; position: absolute; right: -30px; top: 50%; transform: translateY(-50%); width: 220px; height: 90px; opacity: .25; pointer-events: none;
   background: repeating-linear-gradient(90deg, var(--acc) 0 3px, transparent 3px 9px); mask-image: linear-gradient(90deg, transparent, #000); }
 .prep-kicker { font-family: var(--mono); font-size: 9.5px; letter-spacing: .22em; color: var(--fg-mute); }
-.prep-title { font-family: var(--display); font-size: 30px; font-weight: 600; margin: 4px 0 2px; }
+.prep-title { font-size: 30px; font-weight: 600; margin: 4px 0 2px; }
 .prep-sub { color: var(--fg-soft); font-size: 13px; max-width: 460px; text-wrap: pretty; }
 .prep-meter { display: flex; align-items: center; gap: 12px; margin: 14px 0 12px; }
 .prep-meter-bar { flex: 1; max-width: 320px; height: 6px; border-radius: var(--r-pill); background: var(--bg-elev2); overflow: hidden; }
@@ -824,7 +821,7 @@ main.main { transition: margin-right .18s ease; }
 .crate-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
 .crate-grid.compact { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .crate-grid.compact .crate { padding: 8px; }
-.crate-grid.compact .crate-name { font-family: var(--display); font-size: 12.5px; margin: 7px 0 5px; }
+.crate-grid.compact .crate-name { font-size: 12.5px; margin: 7px 0 5px; }
 .crate-grid.compact .crate-acts { display: none; }
 .crate-grid.compact .crate-meta { font-size: 10px; }
 .crate-no { font-size: 10px; margin-right: 6px; }

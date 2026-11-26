@@ -99,11 +99,10 @@ header (`.plhead-name`, 52px; `.plhead` art 192px). A page hero is `.prep-title`
 30px. These are different containers, not the same element at a different size — do not
 copy their numbers anywhere else.
 
-The interface is one native sans (`system-ui`), plus a native display stack for the three
-containers built for it: the mast greeting, the playlist header, crate names and the Prep
-title (`--display: ui-rounded, "SF Pro Rounded", "Avenir Next", system-ui`). No web fonts,
-no monospace stack (`--mono` maps to `--sans`). Letter-spacing is negative only on display
-type (`-.03em`) and positive only on kickers.
+The interface is one native sans (`system-ui`). No web fonts, no display face, no monospace
+stack (`--mono` maps to `--sans`). A rounded variant was tried and rejected: it read as a
+different product. Letter-spacing is negative only on display type (`-.03em`) and positive
+only on kickers.
 
 ## 5. Controls
 

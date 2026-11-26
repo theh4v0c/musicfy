@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3 — 2026-11-26
+
+- The rounded display stack is removed. The mast greeting, playlist header, crate names and
+  Prep title use the same native system sans as the rest of the interface; the rounded face
+  read as a different product. DESIGN.md records the decision.
+
 ## 0.2.2 — 2026-11-26
 
 - Hover and selected pills use a 2px border at the edge; a 1px bright hairline on a rounded
