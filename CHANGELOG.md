@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2 — 2026-11-26
+
+- Hover and selected pills use a 2px border at the edge; a 1px bright hairline on a rounded
+  pill was rendering jagged at phone scale. The selected Mode, action chips, sort and filter
+  tabs, ghost buttons and suggestion chips all follow it.
+- The command palette has its own **⌘** control in the top bar; it no longer shares the
+  queue/list icon.
+- The Flow beam is gone. It ran once and left a frozen highlight at the end; the mast glow is
+  static and the thinking orb exists only while a request is running.
+- A collapsed sidebar hides the Studio group label instead of mangling it in the 68px rail.
+
 ## 0.2.1 — 2026-11-26
 
 - The selected Mode and a focused search field use a 2px accent ring instead of a 1px

@@ -142,6 +142,7 @@ States:
 | hover (pointer) | `--bg-elev2` for ghosts and icons; accent brightens for filled; border to `--fg-mute` |
 | active | `transform: translateY(1px)` (see `.pressed`) |
 | focus-visible | 2px accent outline, never removed |
+| hover / selected pill | 2px border, not a 1px hairline |
 | focus-within | a reveal or hover state also appears when a child has keyboard focus |
 | disabled | `opacity: .45`, `cursor: default`, no hover change |
 | playing | accent text + `--acc-soft` row wash |
@@ -214,7 +215,7 @@ hits appear above the track results, so sets are found in the same field. The Li
 is a local filter, labelled as one, and when nothing matches it hands the query to Search
 ("Search everywhere").
 
-The command palette (`⌘K` / `Ctrl-K`, and the top-bar button) jumps to a view, track or
+The command palette (`⌘K` / `Ctrl-K`, and the top-bar `⌘` button) jumps to a view, track or
 playlist, or runs Play library shuffled and Scan a folder. A&R opens with **For you now**, a preloaded set of local picks from the
 recommender, refreshed in the background every five minutes and by the refresh button; a
 search replaces it. With no picks, the three-step explainer is the starter instead. Every confirmation and prompt is
@@ -240,7 +241,7 @@ its label, not a full-width input.
 └──────────────────────────────────────┘
 ```
 
-- Sidebar 272px, collapses to 68px; on a phone it is gone and the bottom bar replaces it.
+- Sidebar 272px, collapses to 68px; on a phone it is gone and the bottom bar replaces it. The collapsed rail hides every label, including the Studio group.
 - Top bar: 64px desktop, 56px phone, one 30px icon control per side.
 - The view is the only scroller. Page padding 26/28/48 desktop, 18/16/130 phone — the
   130 clears the mini player and the bottom bar.
@@ -261,9 +262,9 @@ Gaps between sections: 22–30px. Anything larger is a deliberate hero.
 
 Fast 120ms, base 160ms, slow 240ms; `ease` unless a transform needs
 `cubic-bezier(.2,.8,.2,1)`. Hover lifts 1px, press pushes 1px, card hover lifts 2px.
-Nothing animates on load. The mast glow is static; the Flow beam runs once on hover, not
-forever; the thinking orb exists only while a request is in flight. `prefers-reduced-motion`
-turns the remaining motion off.
+Nothing animates on load. The mast glow is static and there is no beam animation; the
+thinking orb exists only while a request is in flight. `prefers-reduced-motion` turns the
+remaining motion off.
 
 ## 10. Content
 
