@@ -776,8 +776,10 @@ the filter is cleared when leaving Songs so it cannot leak into Search.
 
 ## Interface hierarchy
 
-One accent fill per view: the primary action. Filters, sort controls and segmented tabs are an
-elevated neutral surface (`--bg-elev2` with `--fg`), and card play discs are neutral on touch.
+One accent fill per view: the primary action. Filters and sort controls are an elevated neutral
+surface (`--bg-elev2` with `--fg`); a mode switch (Listener/DJ, DJ set/Listening) marks its
+selection with `--acc-soft` and an accent border, never a solid fill. Card play discs are
+neutral on touch.
 The top bar names the page. Library and Search start with their toolbar; Playlists, Settings
 and A&R open with a one-line `.page-hero`, never a kicker or a second title. Library is four ways in (Artists, Albums, Genres, For you) plus a Tools menu for import,
 upload, recent downloads and the BPM sort; the first track row is at 247px on a 1440x900
