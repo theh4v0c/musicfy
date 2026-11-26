@@ -36,6 +36,7 @@ const pioneer = require('./pioneer');
 const exclude = require('./exclude');
 const tagwrite = require('./tagwrite');
 const transcode = require('./transcode');
+const folderLib = require('./folder');
 const { DatabaseSync } = require('node:sqlite');
 
 // every path comes from ./paths, which reads what the installation set
@@ -369,18 +370,18 @@ function metaValidation(b) {
   return null;
 }
 
-function upsertFile({ track_id, path: p, tier, bitrate, size, mtime }) {
+function upsertFile({ track_id, path: p, tier, bitrate, size, mtime, external }) {
   const row = db.prepare('SELECT id, track_id FROM files WHERE path=?').get(p);
   if (row) {
     // the same path can only describe one file; if a different track is registered for
     // it now, point the row at that track instead of leaving the old one attached
     if (row.track_id !== track_id) db.prepare('UPDATE files SET track_id=? WHERE id=?').run(track_id, row.id);
-    db.prepare('UPDATE files SET tier=?, bitrate=COALESCE(?,bitrate), size=COALESCE(?,size), mtime=COALESCE(?,mtime) WHERE id=?')
-      .run(tier, bitrate || null, size || null, mtime || null, row.id);
+    db.prepare('UPDATE files SET tier=?, bitrate=COALESCE(?,bitrate), size=COALESCE(?,size), mtime=COALESCE(?,mtime), external=COALESCE(?,external) WHERE id=?')
+      .run(tier, bitrate || null, size || null, mtime || null, external == null ? null : (external ? 1 : 0), row.id);
     return row.id;
   }
-  const r = db.prepare(`INSERT INTO files (track_id,path,tier,bitrate,size,mtime,added_at) VALUES (?,?,?,?,?,?,?)`)
-    .run(track_id, p, tier, bitrate || null, size || null, mtime || null, now());
+  const r = db.prepare(`INSERT INTO files (track_id,path,tier,bitrate,size,mtime,external,added_at) VALUES (?,?,?,?,?,?,?,?)`)
+    .run(track_id, p, tier, bitrate || null, size || null, mtime || null, external ? 1 : 0, now());
   return Number(r.lastInsertRowid);
 }
 
@@ -497,7 +498,7 @@ function probe(file) {
   return new Promise((resolve) => {
     const { spawn } = require('node:child_process');
     const ff = spawn('ffprobe', ['-v', 'error', '-show_entries',
-      'format=duration,bit_rate,size:format_tags=title,artist,album,date,track,disc',
+      'format=duration,bit_rate,size:format_tags',
       '-of', 'json', file]);
     let out = '';
     ff.stdout.on('data', d => out += d);
@@ -507,8 +508,12 @@ function probe(file) {
         const tg = f.tags || {};
         const trk = String(tg.track || '').match(/^\d+/);
         const dsc = String(tg.disc || '').match(/^\d+/);
+        // ffprobe keeps the case of a non-standard ID3 frame: TBPM is not "tbpm"
+        const tag = (name) => { const hit = Object.entries(tg).find(([k]) => k.toLowerCase() === name); return hit ? hit[1] : null; };
         resolve({
           title: tg.title, artist: tg.artist, album: tg.album, year: (tg.date || '').match(/^\d{4}/) ? tg.date.slice(0, 4) : null,
+          bpm: Number(tag('tbpm')) > 0 ? Number(tag('tbpm')) : null,
+          keyTag: tag('tkey') || null,
           trackNumber: trk ? Number(trk[0]) : null,
           discNumber: dsc ? Number(dsc[0]) : null,
           duration: f.duration ? Number(f.duration) : null,
@@ -854,7 +859,7 @@ let transcodeBusy = false;
 let faststartScan = { at: 0, rows: [] };
 function faststartCandidates() {
   if (Date.now() - faststartScan.at < 10 * 60 * 1000) return faststartScan.rows;
-  const rows = db.prepare("SELECT id, track_id, path FROM files WHERE tier='owned' AND path LIKE '%.m4a'").all()
+  const rows = db.prepare("SELECT id, track_id, path FROM files WHERE tier='owned' AND COALESCE(external,0)=0 AND path LIKE '%.m4a'").all()
     .filter((r) => !transcode.hasFaststart(r.path));
   faststartScan = { at: Date.now(), rows };
   return rows;
@@ -890,6 +895,193 @@ async function pumpTranscode() {
 
 // ---------- uploads and cover helpers ----------
 const MAX_BODY_BYTES = Number(process.env.MUSICFY_MAX_BODY || 64 * 1024 * 1024);
+/* ---------- adopt an existing music folder ----------
+ * Point MUSICFY at a folder (or one playlist file) and it registers the audio where it
+ * already is: nothing is copied, moved or renamed. Playlists written by Traktor,
+ * rekordbox or another player become playlists here, with their order and, when the
+ * file records it, the BPM and key the DJ already analysed. */
+
+const adoptState = {
+  running: false, target: null, startedAt: null, finishedAt: null,
+  total: 0, done: 0, added: 0, linked: 0, skipped: 0, missing: 0,
+  playlists: 0, playlist_tracks: 0, truncated: false, error: null,
+};
+
+function localRequest(req) {
+  const a = String(req.socket.remoteAddress || '');
+  const loop = a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1';
+  // behind Caddy the peer is loopback; a forwarded header means the caller is not
+  return loop && !req.headers['x-forwarded-for'];
+}
+function musicRoots() {
+  return String(process.env.MUSICFY_MUSIC_ROOTS || '')
+    .split(path.delimiter).map((r) => r.trim()).filter(Boolean)
+    .map((r) => folderLib.realish(r));
+}
+function withinMusicRoots(target) {
+  const real = folderLib.realish(target);
+  const roots = musicRoots();
+  return { real, roots, ok: roots.some((r) => real === r || real.startsWith(r + path.sep)) };
+}
+
+function rememberPath(map, file, trackId) {
+  map.set(path.normalize(file), trackId);
+  map.set(path.resolve(file), trackId);
+  map.set(folderLib.realish(file), trackId);
+}
+
+async function adoptOneFile(file, hint) {
+  const abs = folderLib.realish(file);
+  if (!fs.existsSync(abs)) return { status: 'missing' };
+  const known = db.prepare('SELECT track_id FROM files WHERE path=?').get(abs)
+    || db.prepare('SELECT track_id FROM files WHERE path=?').get(path.normalize(file))
+    || db.prepare('SELECT track_id FROM files WHERE path=?').get(path.resolve(file));
+  if (known) return { track: known.track_id, status: 'skipped' };
+
+  let st;
+  try { st = fs.statSync(abs); } catch { return { status: 'missing' }; }
+  const meta = await probe(abs);
+  const ext = path.extname(abs).toLowerCase();
+  const title = String((hint && hint.title) || meta.title || path.basename(abs).replace(/\.[^.]+$/, '')).trim();
+  if (!title) return { status: 'missing' };
+  const artist = String((hint && hint.artist) || meta.artist || '').trim();
+  let bpm = Number((hint && hint.bpm) || meta.bpm) || null;
+  let key = (hint && hint.key) || null;
+  let scale = (hint && hint.scale) || null;
+  if (!key && meta.keyTag) {
+    const kp = folderLib.keyParts(meta.keyTag);
+    if (kp) { key = kp.key; scale = kp.scale; }
+  }
+
+  let tid;
+  try {
+    tid = upsertTrack({
+      title, artist,
+      album: String((hint && hint.album) || meta.album || '').trim(),
+      year: meta.year || null,
+      duration: meta.duration || (hint && hint.duration) || null,
+      format: ext.replace('.', ''),
+      track_no: meta.trackNumber || null,
+      disc_no: meta.discNumber || null,
+    });
+  } catch (e) {
+    log('folder', `adopt ${abs}: ${e.message}`);
+    return { status: 'missing' };
+  }
+
+  const quality = fileQuality(ext, meta.bitrate);
+  const owned = db.prepare(`SELECT f.path, f.bitrate FROM files f JOIN tracks t ON t.id=f.track_id
+    WHERE t.dup_key=? AND f.tier='owned'`).all(dupKeyOf(artist, title))
+    .sort((a, b) => fileQuality(path.extname(b.path), b.bitrate) - fileQuality(path.extname(a.path), a.bitrate));
+  if (bpm) db.prepare('UPDATE tracks SET bpm=COALESCE(bpm,?) WHERE id=?').run(bpm, tid);
+  if (key) db.prepare('UPDATE tracks SET key=COALESCE(key,?), key_scale=COALESCE(key_scale,?) WHERE id=?').run(key, scale || 'major', tid);
+
+  // a better or equal copy already here: the playlist points at that track, and the
+  // owner's file is not registered a second time
+  if (owned.length && fileQuality(path.extname(owned[0].path), owned[0].bitrate) >= quality) {
+    return { track: tid, status: 'linked' };
+  }
+
+  upsertFile({
+    track_id: tid, path: abs, tier: 'owned', bitrate: meta.bitrate,
+    size: st.size, mtime: st.mtimeMs / 1000, external: 1,
+  });
+  db.prepare('INSERT OR REPLACE INTO resolutions (track_id,rung,quality,resolved_at) VALUES (?,?,?,?)')
+    .run(tid, 'folder', meta.bitrate ? `${Math.round(meta.bitrate / 1000)}k` : null, now());
+  const art = await extractCover(tid, abs).catch(() => false);
+  if (art) db.prepare('UPDATE tracks SET has_art=1 WHERE id=?').run(tid);
+  return { track: tid, status: 'added' };
+}
+
+async function runFolderAdopt(target, { local }) {
+  Object.assign(adoptState, {
+    running: true, target, startedAt: Date.now(), finishedAt: null,
+    total: 0, done: 0, added: 0, linked: 0, skipped: 0, missing: 0,
+    playlists: 0, playlist_tracks: 0, truncated: false, error: null,
+  });
+  const allowed = (p) => local || withinMusicRoots(p).ok;
+  try {
+    const stat = fs.statSync(target);
+    const defs = [];
+    const hints = new Map();
+    let audio = [];
+    if (stat.isFile()) {
+      if (folderLib.AUDIO.has(path.extname(target).toLowerCase())) {
+        audio = [target];
+      } else {
+        const parsed = folderLib.readPlaylist(target);
+        if (!parsed) throw new Error('not an audio file, or not a playlist this reads (NML, rekordbox XML, M3U, PLS)');
+        defs.push(...parsed.playlists);
+        for (const [p, meta] of parsed.files) {
+          hints.set(path.normalize(p), meta);
+          hints.set(folderLib.realish(p), meta);
+        }
+        audio = parsed.playlists.flatMap((d) => d.entries);
+      }
+    } else if (stat.isDirectory()) {
+      const found = folderLib.walk(target);
+      adoptState.truncated = found.truncated;
+      audio = found.audio.slice();
+      for (const file of found.playlists) {
+        const parsed = folderLib.readPlaylist(file);
+        if (!parsed) continue;
+        defs.push(...parsed.playlists);
+        for (const [p, meta] of parsed.files) {
+          if (!hints.has(path.normalize(p))) hints.set(path.normalize(p), meta);
+          if (!hints.has(folderLib.realish(p))) hints.set(folderLib.realish(p), meta);
+        }
+      }
+      for (const d of defs) audio.push(...d.entries);
+    } else {
+      throw new Error('that path is not a file or a folder');
+    }
+
+    audio = [...new Set(audio.map((p) => path.normalize(p)))]
+      .filter((p) => folderLib.AUDIO.has(path.extname(p).toLowerCase()) && allowed(p));
+    adoptState.total = audio.length;
+
+    const map = new Map();
+    const queue = audio.slice();
+    const worker = async () => {
+      while (queue.length) {
+        const file = queue.shift();
+        let r;
+        try { r = await adoptOneFile(file, hints.get(path.normalize(file)) || hints.get(folderLib.realish(file)) || null); }
+        catch (e) { r = { status: 'missing' }; log('folder', `adopt ${file}: ${e.message}`); }
+        adoptState.done += 1;
+        adoptState[r.status] = (adoptState[r.status] || 0) + 1;
+        if (r.track) rememberPath(map, file, r.track);
+      }
+    };
+    await Promise.all([worker(), worker(), worker(), worker()]);
+
+    for (const def of defs) {
+      const ids = [];
+      for (const p of def.entries) {
+        const tid = map.get(path.normalize(p)) || map.get(path.resolve(p)) || map.get(folderLib.realish(p));
+        if (tid && !ids.includes(tid)) ids.push(tid);
+      }
+      if (!ids.length) continue;
+      const id = 'fold-' + createHash('sha1').update(`${target}|${def.name}`).digest('hex').slice(0, 12);
+      const t = now();
+      db.prepare(`INSERT INTO playlists (id,name,source,kind,created_at,updated_at) VALUES (?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET name=excluded.name, kind=excluded.kind, updated_at=excluded.updated_at`)
+        .run(id, def.name, 'folder', def.kind === 'dj' ? 'dj' : 'listen', t, t);
+      db.prepare('DELETE FROM playlist_tracks WHERE playlist_id=?').run(id);
+      ids.forEach((tid, i) => db.prepare('INSERT OR IGNORE INTO playlist_tracks (playlist_id,track_id,position,added_at) VALUES (?,?,?,?)')
+        .run(id, tid, i, t));
+      adoptState.playlists += 1;
+      adoptState.playlist_tracks += ids.length;
+    }
+  } catch (e) {
+    adoptState.error = String(e.message || e);
+  } finally {
+    adoptState.running = false;
+    adoptState.finishedAt = Date.now();
+    log('folder', `adopt ${target}: added ${adoptState.added}, linked ${adoptState.linked}, skipped ${adoptState.skipped}, playlists ${adoptState.playlists}${adoptState.error ? `, error ${adoptState.error}` : ''}`);
+  }
+}
+
 function readBody(req, limit = MAX_BODY_BYTES) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -979,7 +1171,7 @@ const LADDER_TTL = Number(process.env.MUSICFY_LADDER_TTL || 5 * 60 * 1000);
 const ladderCache = new Map();
 
 // 4. schema version, so column changes stop being invisible
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 function currentVersion() {
   try {
     const row = db.prepare('SELECT value FROM meta WHERE key=?').get('schema_version');
@@ -1081,6 +1273,12 @@ function migrate() {
           a TEXT NOT NULL, b TEXT NOT NULL, w INTEGER DEFAULT 0, PRIMARY KEY (a, b));
         CREATE INDEX IF NOT EXISTS idx_edges_a ON play_edges(a);
       `);
+    }],
+    [8, () => {
+      // a file adopted from a folder stays where it is, and deleting the track must
+      // never unlink the owner's original. external=1 means "registered, not ours".
+      try { db.exec('ALTER TABLE files ADD COLUMN external INTEGER DEFAULT 0'); } catch {}
+      try { db.exec('CREATE INDEX IF NOT EXISTS idx_files_external ON files(external)'); } catch {}
     }],
   ];
   for (const [version, run] of steps) {
@@ -1571,7 +1769,7 @@ function startLadderDownload(jobId, b, onDone) {
       // One file per track, and the better copy wins. A row can outlive its file (a prune
       // that ran before its mount was up, a rejected concurrent download), and comparing
       // against a missing "better" copy deleted the download that had just landed.
-      const existingFiles = db.prepare("SELECT id, path, bitrate FROM files WHERE track_id=? AND tier='owned'").all(tid)
+      const existingFiles = db.prepare("SELECT id, path, bitrate, COALESCE(external,0) external FROM files WHERE track_id=? AND tier='owned'").all(tid)
         .filter((f) => {
           if (fs.existsSync(f.path)) return true;
           db.prepare('DELETE FROM files WHERE id=?').run(f.id);
@@ -1589,6 +1787,8 @@ function startLadderDownload(jobId, b, onDone) {
         // the same source re-downloaded writes the same name: deleting it here
         // removed the copy that had just landed and left a row for a missing file
         if (path.resolve(f.path) === path.resolve(dest)) continue;
+        // an adopted file is the owner's: forget the row, leave the bytes
+        if (f.external) continue;
         try { fs.rmSync(f.path, { force: true }); } catch {}
       }
       upsertFile({ track_id: tid, path: dest, tier: 'owned', bitrate: br, size: fs.statSync(dest).size, mtime: now() });
@@ -1965,7 +2165,7 @@ function duplicatePlan() {
   const versions = [...families.values()].filter((set) => set.size > 1).length;
 
   const extra = [];
-  const files = db.prepare("SELECT id, track_id, path, bitrate FROM files WHERE tier='owned'").all();
+  const files = db.prepare("SELECT id, track_id, path, bitrate, COALESCE(external,0) external FROM files WHERE tier='owned'").all();
   const perTrack = new Map();
   for (const f of files) {
     if (!perTrack.has(f.track_id)) perTrack.set(f.track_id, []);
@@ -1987,7 +2187,7 @@ function applyDuplicatePlan(plan) {
     for (const g of plan.groups) {
       const keep = g.keep;
       for (const dupe of g.merge) {
-        const dupeFiles = db.prepare('SELECT id, path FROM files WHERE track_id=?').all(dupe.id);
+        const dupeFiles = db.prepare('SELECT id, path, COALESCE(external,0) external FROM files WHERE track_id=?').all(dupe.id);
         db.prepare('UPDATE OR IGNORE playlist_tracks SET track_id=? WHERE track_id=?').run(keep.id, dupe.id);
         db.prepare('DELETE FROM playlist_tracks WHERE track_id=?').run(dupe.id);
         db.prepare('UPDATE OR IGNORE likes SET track_id=? WHERE track_id=?').run(keep.id, dupe.id);
@@ -1997,13 +2197,13 @@ function applyDuplicatePlan(plan) {
         db.prepare('DELETE FROM resolutions WHERE track_id=?').run(dupe.id);
         db.prepare('DELETE FROM files WHERE track_id=?').run(dupe.id);
         db.prepare('DELETE FROM tracks WHERE id=?').run(dupe.id);
-        for (const f of dupeFiles) paths.push(f.path);
+        for (const f of dupeFiles) if (!f.external) paths.push(f.path);
         removed += 1;
       }
     }
     for (const f of plan.extra) {
       db.prepare('DELETE FROM files WHERE id=?').run(f.id);
-      paths.push(f.path);
+      if (!f.external) paths.push(f.path);
       filesRemoved += 1;
     }
     db.exec('COMMIT');
@@ -3119,11 +3319,11 @@ const server = http.createServer(async (req, res) => {
       const groups = db.prepare(`SELECT track_id, COUNT(*) c FROM files WHERE tier='owned' GROUP BY track_id HAVING c > 1`).all();
       let removed = 0;
       for (const g of groups) {
-        const list = db.prepare("SELECT id, path, bitrate FROM files WHERE track_id=? AND tier='owned'").all(g.track_id)
+        const list = db.prepare("SELECT id, path, bitrate, COALESCE(external,0) external FROM files WHERE track_id=? AND tier='owned'").all(g.track_id)
           .sort((a, b) => fileQuality(path.extname(b.path), b.bitrate) - fileQuality(path.extname(a.path), a.bitrate));
         for (const keep of list.slice(1)) {
           db.prepare('DELETE FROM files WHERE id=?').run(keep.id);
-          try { fs.rmSync(keep.path, { force: true }); } catch {}
+          if (!keep.external) { try { fs.rmSync(keep.path, { force: true }); } catch {} }
           removed += 1;
         }
       }
@@ -4617,6 +4817,24 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // adopt a folder, or a playlist file, without copying anything
+    if (u.pathname === '/api/library/scan') {
+      if (req.method === 'GET') return json(res, 200, { ...adoptState, local: localRequest(req), roots: musicRoots() });
+      if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });
+      let b = {};
+      try { b = JSON.parse(await readBody(req) || '{}'); } catch {}
+      const target = String(b.path || '').trim();
+      if (!target) return json(res, 400, { error: 'path required' });
+      if (adoptState.running) return json(res, 409, { error: 'a scan is already running', state: adoptState });
+      const abs = path.resolve(target);
+      const local = localRequest(req);
+      if (!local && !withinMusicRoots(abs).ok) {
+        return json(res, 403, { error: 'a remote scan is limited to MUSICFY_MUSIC_ROOTS', roots: musicRoots() });
+      }
+      runFolderAdopt(abs, { local }).catch(() => {});
+      return json(res, 202, { started: true, target: abs });
+    }
+
     // queue a whole album, or only the tracks that are missing audio
     if (u.pathname === '/api/albums/download' && req.method === 'POST') {
       let body = ''; req.on('data', c => body += c);
@@ -5371,7 +5589,7 @@ const server = http.createServer(async (req, res) => {
           'GET  /api/ladder/stream/youtube/:id', 'GET /api/ladder/stream/soundcloud?u=',
           'POST /api/mirror/spotify', 'GET /api/history/stats', 'POST /api/history/scan',
           'GET  /api/stats', 'GET /api/cover/:id', 'GET /api/cover-playlist/:id', 'GET /api/stream/:id',
-          'POST /api/upload/track', 'POST /api/playlists/:id/cover', 'POST /api/listen',
+          'POST /api/upload/track', 'GET|POST /api/library/scan', 'POST /api/playlists/:id/cover', 'POST /api/listen',
         ],
         auth: 'none at the app layer by default; set MUSICFY_TOKEN or put an authenticated proxy in front',
       });
@@ -5454,7 +5672,7 @@ const server = http.createServer(async (req, res) => {
         try { ids = (JSON.parse(body || '{}').ids || []).map(Number).filter((n) => Number.isFinite(n)); } catch {}
         if (!ids.length) return json(res, 400, { error: 'ids required' });
         const del = db.prepare('DELETE FROM tracks WHERE id=?');
-        const filesOf = db.prepare('SELECT path FROM files WHERE track_id=?');
+        const filesOf = db.prepare('SELECT path, COALESCE(external,0) external FROM files WHERE track_id=?');
         let deleted = 0;
         const freed = [];
         db.exec('BEGIN');
@@ -5470,7 +5688,7 @@ const server = http.createServer(async (req, res) => {
             db.prepare('DELETE FROM files WHERE track_id=?').run(id);
             const r = del.run(id);
             if (r.changes) deleted += 1;
-            for (const f of files) freed.push(f.path);
+            for (const f of files) if (!f.external) freed.push(f.path);
           }
           db.exec('COMMIT');
         } catch (e) {
@@ -5486,9 +5704,9 @@ const server = http.createServer(async (req, res) => {
     const mTrk = u.pathname.match(/^\/api\/tracks\/(\d+)$/);
     if (mTrk && req.method === 'DELETE') {
       const tid = Number(mTrk[1]);
-      const files = db.prepare('SELECT path FROM files WHERE track_id=?').all(tid);
+      const files = db.prepare('SELECT path, COALESCE(external,0) external FROM files WHERE track_id=?').all(tid);
       db.prepare('DELETE FROM tracks WHERE id=?').run(tid);
-      for (const f of files) { try { fs.unlinkSync(f.path); } catch {} }
+      for (const f of files) { if (f.external) continue; try { fs.unlinkSync(f.path); } catch {} }
       json(res, 200, { ok: true });
       return;
     }

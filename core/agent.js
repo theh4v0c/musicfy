@@ -964,8 +964,12 @@ async function propose(db, plan, lang = 'en') {
       }
       const what = [...new Set(cores)].slice(0, 3).join(', ');
       // a genre request should name the genre, not the English catalogue phrase the model
-      // used to search it ("forró dance")
-      const subject = (!artists.length && genres.length) ? genres.join(', ') : [what, artists.join(', ')].filter(Boolean).join(' · ');
+      // used to search it ("forró dance"). A mood brief names the mood first: the words in
+      // the sentence describe it, they are not the thing itself.
+      const moodWord = picked.ctx.mood ? String(picked.ctx.mood.label || '').split(':')[0].trim() : '';
+      const subject = (!artists.length && genres.length)
+        ? genres.join(', ')
+        : [moodWord, what, artists.join(', ')].filter(Boolean).join(' · ');
       reasonBits = [say(lang, `For a brief: ${subject}.`, `Para um briefing: ${subject}.`)];
       if (childSafe && !onlyLocal) {
         reasonBits.push(`${online.length} clean catalogue tracks; nothing from your library, which has no explicit flag.`);

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.73 — 2026-11-26
+
+- **Settings > Library folder**: point at a folder you already have, or at one playlist
+  file, and the audio is registered where it is. Nothing is copied, moved or renamed, and a
+  track removed from the library later leaves its file on disk (`files.external`).
+- Traktor NML, rekordbox XML, M3U/M3U8 and PLS playlists are imported with their order. The
+  BPM and key a Traktor or rekordbox file already carries are kept, so an analysed collection
+  does not need to be analysed again; anything missing stays available for the analyser.
+- A scan from another machine, or through the proxy, is limited to `MUSICFY_MUSIC_ROOTS`.
+  A scan started on the machine itself may read any folder its user can read.
+- Download replacement, transcode, duplicate cleanup and track deletion never unlink an
+  adopted file: they remove the row and leave the owner's bytes alone.
+
 ## 0.1.72 — 2026-11-26
 
 - Library, Playlists, Search, Settings and A&R start with the same header card Prep has:

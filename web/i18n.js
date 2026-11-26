@@ -303,6 +303,27 @@
     'Write Traktor tags (crate)': 'Gravar tags do Traktor (lista)',
     'Download to device (zip)': 'Baixar para o aparelho (zip)',
     'Catalogue country': 'País do catálogo',
+    'Library folder': 'Pasta da biblioteca',
+    'Point at a folder you already have. The files stay where they are: nothing is copied, moved or renamed. Playlists written by Traktor, rekordbox, M3U or PLS are imported with their order, and the BPM and key they already carry are kept.':
+      'Aponte para uma pasta que você já tem. Os arquivos ficam onde estão: nada é copiado, movido ou renomeado. Listas do Traktor, rekordbox, M3U ou PLS entram com a ordem, e o BPM e a tonalidade que elas já trazem são mantidos.',
+    'Folder or playlist file': 'Pasta ou arquivo de lista',
+    'Scan folder': 'Escanear pasta',
+    'Not scanned yet.': 'Ainda não escaneada.',
+    'A track removed from the library later leaves its file on disk. Nothing here writes to your files.':
+      'Uma faixa removida da biblioteca depois deixa o arquivo no disco. Nada aqui grava nos seus arquivos.',
+    'Type a folder or a playlist file first.': 'Digite uma pasta ou um arquivo de lista primeiro.',
+    'Looking at the folder...': 'Olhando a pasta...',
+    'added one': 'adicionada', 'added many': 'adicionadas',
+    'already here one': 'já estava aqui', 'already here many': 'já estavam aqui',
+    'known one': 'conhecida', 'known many': 'conhecidas',
+    'missing one': 'faltando', 'missing many': 'faltando',
+    'playlist one': 'lista', 'playlist many': 'listas',
+    'Scan stopped:': 'Escaneamento parou:', 'files read': 'arquivos lidos', 'nothing new': 'nada novo',
+    'Could not scan:': 'Não foi possível escanear:',
+    'A scan from another machine needs MUSICFY_MUSIC_ROOTS set on the server.':
+      'Um escaneamento a partir de outra máquina precisa de MUSICFY_MUSIC_ROOTS definido no servidor.',
+
+
     'LIBRARY': 'BIBLIOTECA', 'SEARCH': 'BUSCAR', 'SETTINGS': 'AJUSTES',
 
     'Every track you own, with the audio state and the filters that matter.': 'Todas as faixas que você tem, com o estado do áudio e os filtros que importam.',

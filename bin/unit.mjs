@@ -9,6 +9,7 @@ const H = require('../core/harmonic.js');
 const A = require('../core/agent.js');
 const G = require('../core/genre.js');
 const L = require('../core/ladder.js');
+const F = require('../core/folder.js');
 
 const MINOR = { 1: 'G#', 2: 'D#', 3: 'A#', 4: 'F', 5: 'C', 6: 'G', 7: 'D', 8: 'A', 9: 'E', 10: 'B', 11: 'F#', 12: 'C#' };
 const MAJOR = { 1: 'B', 2: 'F#', 3: 'C#', 4: 'G#', 5: 'D#', 6: 'A#', 7: 'F', 8: 'C', 9: 'G', 10: 'D', 11: 'A', 12: 'E' };
@@ -341,4 +342,54 @@ test('a rescue match must name the artist', () => {
   assert.equal(L.artistInCandidate(seed, { title: 'Meninas do Leblon', uploader: 'Wilson Simoninha' }), true);
   // no artist to check: the filter does not reject
   assert.equal(L.artistInCandidate('', { title: 'anything' }), true);
+});
+
+test('a Traktor NML gives its collection, its playlist order and its BPM and key', () => {
+  const xml = `<NML><COLLECTION ENTRIES="2">
+    <ENTRY TITLE="Mas Que Nada" ARTIST="Jorge Ben" BPM="92.5" MUSICAL_KEY="8A" PLAYTIME="180">
+      <LOCATION DIR="/:Users/:me/:Music/Samba/:" FILE="Mas%20Que%20Nada.mp3"></LOCATION></ENTRY>
+    <ENTRY TITLE="Fanfarra" ARTIST="Sergio Mendes">
+      <LOCATION DIR="/:Users/:me/:Music/:" FILE="Fanfarra.flac"></LOCATION></ENTRY>
+    </COLLECTION>
+    <PLAYLISTS><NODE TYPE="FOLDER" NAME="$ROOT"><SUBNODES>
+      <NODE TYPE="PLAYLIST" NAME="Sabado"><PLAYLIST ENTRIES="2">
+        <ENTRY><PRIMARYKEY TYPE="TRACK" KEY="file://localhost/Users/me/Music/Samba/Mas%20Que%20Nada.mp3"></PRIMARYKEY></ENTRY>
+        <ENTRY><PRIMARYKEY TYPE="TRACK" KEY="file://localhost/Users/me/Music/Fanfarra.flac"></PRIMARYKEY></ENTRY>
+      </PLAYLIST></NODE>
+    </SUBNODES></NODE></PLAYLISTS></NML>`;
+  const r = F.parseTraktorNml(xml);
+  assert.equal(r.playlists.length, 1);
+  assert.equal(r.playlists[0].name, 'Sabado');
+  assert.deepEqual(r.playlists[0].entries, ['/Users/me/Music/Samba/Mas Que Nada.mp3', '/Users/me/Music/Fanfarra.flac']);
+  const first = r.files.get('/Users/me/Music/Samba/Mas Que Nada.mp3');
+  assert.equal(first.bpm, 92.5);
+  assert.equal(first.key, 'A');
+  assert.equal(first.scale, 'minor');
+  assert.equal(first.duration, 180);
+});
+
+test('a rekordbox XML links playlist keys to collection locations', () => {
+  const xml = `<DJ_PLAYLISTS><COLLECTION>
+    <TRACK TrackID="7" Name="Magalenha" Artist="Sergio Mendes" AverageBpm="128" Tonality="12B" TotalTime="240" Location="file://localhost/Users/me/Music/Magalenha.flac"></TRACK>
+    </COLLECTION><PLAYLISTS><NODE Type="0" Name="ROOT"><NODE Type="1" Name="Batucada">
+    <TRACK Key="7"/></NODE></NODE></PLAYLISTS></DJ_PLAYLISTS>`;
+  const r = F.parseRekordboxXml(xml);
+  assert.equal(r.playlists[0].name, 'Batucada');
+  assert.deepEqual(r.playlists[0].entries, ['/Users/me/Music/Magalenha.flac']);
+  assert.equal(r.files.get('/Users/me/Music/Magalenha.flac').bpm, 128);
+  assert.equal(r.files.get('/Users/me/Music/Magalenha.flac').key, 'E');
+});
+
+test('an M3U resolves paths against its own folder', () => {
+  const r = F.parseM3u('#EXTM3U\n#EXTINF:180,A - B\na.mp3\n/abs/b.flac\nhttp://stream/x\n', '/music/sets/sabado.m3u');
+  assert.equal(r.playlists[0].name, 'sabado');
+  assert.deepEqual(r.playlists[0].entries, ['/music/sets/a.mp3', '/abs/b.flac']);
+});
+
+test('keys come in as Camelot or names', () => {
+  assert.deepEqual(F.keyParts('8A'), { key: 'A', scale: 'minor' });
+  assert.deepEqual(F.keyParts('12B'), { key: 'E', scale: 'major' });
+  assert.deepEqual(F.keyParts('F#m'), { key: 'F#', scale: 'minor' });
+  assert.deepEqual(F.keyParts('Bb'), { key: 'A#', scale: 'major' });
+  assert.equal(F.keyParts('nonsense'), null);
 });

@@ -141,6 +141,9 @@ Screenshots use a small demo library, not a real one.
 ## What it does
 
 - **Library** of tracks, albums, artists and playlists in `node:sqlite`.
+- **Adopt a folder you already have**: point at it, or at one playlist file, and the audio is
+  registered in place with no copy. Traktor NML, rekordbox XML, M3U and PLS playlists come in
+  with their order, and the BPM and key those files already carry are kept.
 - **One track, many sources.** A track row is metadata plus a ladder: owned file first, then
   free web sources, resolved on demand and verified against the catalogue before playing.
 - **Search** that resolves what a track actually is (canonical artist, title, length) and shows

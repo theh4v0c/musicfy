@@ -2869,6 +2869,16 @@ async function renderSettings() {
         <p class="set-note">Read-only counts: tracks, disk use, plays recorded and how many tracks have cue points.</p>
         <div class="set-facts" id="set-facts">Reading...</div>
       </section>
+      <section class="set-card" data-tone="ok">
+        <h2>Library folder</h2>
+        <p class="set-note">Point at a folder you already have. The files stay where they are: nothing is copied, moved or renamed. Playlists written by Traktor, rekordbox, M3U or PLS are imported with their order, and the BPM and key they already carry are kept.</p>
+        <label>Folder or playlist file<input id="set-folder" placeholder="/Users/you/Music"></label>
+        <div class="lib-actions">
+          <button class="btn btn-primary" id="set-folder-scan" type="button">Scan folder</button>
+          <span class="set-note" id="set-folder-out">Not scanned yet.</span>
+        </div>
+        <p class="set-note">A track removed from the library later leaves its file on disk. Nothing here writes to your files.</p>
+      </section>
     </div>
     <div class="set-actions"><button class="btn btn-primary" id="set-save">Save settings</button><span id="set-msg" class="set-note"></span></div>
     <div class="set-about">
@@ -3202,6 +3212,73 @@ async function renderSettings() {
       bustCache();
     } catch (e) { maint(`Repair failed${e.message ? ` (${e.message})` : ''}`, 'bad'); }
     setRepair.disabled = false;
+  };
+  const folderField = document.getElementById('set-folder');
+  if (folderField) {
+    try { folderField.value = localStorage.getItem('mf-folder') || ''; } catch {}
+  }
+  const setFolderScan = document.getElementById('set-folder-scan');
+  if (setFolderScan) setFolderScan.onclick = async () => {
+    const field = document.getElementById('set-folder');
+    const out = document.getElementById('set-folder-out');
+    const tr = (x) => (window.I18N ? window.I18N.t(x) : x);
+    const target = (field.value || '').trim();
+    if (!target) {
+      out.textContent = tr('Type a folder or a playlist file first.');
+      out.dataset.tone = 'bad';
+      field.focus();
+      return;
+    }
+    setFolderScan.disabled = true;
+    out.dataset.tone = '';
+    out.textContent = tr('Looking at the folder...');
+    try { localStorage.setItem('mf-folder', target); } catch {}
+    try {
+      // this browser may be on another machine: the server decides which folders it may read
+      const probe = await api('/api/library/scan', { nocache: true });
+      if (!probe.local && !(probe.roots || []).length) {
+        out.textContent = tr('A scan from another machine needs MUSICFY_MUSIC_ROOTS set on the server.');
+        out.dataset.tone = 'bad';
+        setFolderScan.disabled = false;
+        return;
+      }
+      const started = await api('/api/library/scan', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ path: target }),
+      });
+      if (!started.started) throw new Error(started.error || 'could not start');
+      for (let i = 0; i < 3000; i += 1) {
+        await new Promise((r) => setTimeout(r, 1200));
+        const st = await api('/api/library/scan', { nocache: true });
+        if (st.running) {
+          out.textContent = st.total
+            ? `${Number(st.done).toLocaleString(LOC())} / ${Number(st.total).toLocaleString(LOC())}`
+            : tr('Looking at the folder...');
+          continue;
+        }
+        const count = (n, one, many) => `${n} ${tr(n === 1 ? one : many)}`;
+        const bits = [];
+        if (st.added) bits.push(count(st.added, 'added one', 'added many'));
+        if (st.linked) bits.push(count(st.linked, 'already here one', 'already here many'));
+        if (st.skipped) bits.push(count(st.skipped, 'known one', 'known many'));
+        if (st.missing) bits.push(count(st.missing, 'missing one', 'missing many'));
+        if (st.playlists) bits.push(count(st.playlists, 'playlist one', 'playlist many'));
+        out.textContent = st.error
+          ? `${tr('Scan stopped:')} ${st.error}`
+          : `${Number(st.total).toLocaleString(LOC())} ${tr('files read')}${bits.length ? ` - ${bits.join(', ')}` : ''}.`;
+        out.dataset.tone = st.error ? 'bad' : 'ok';
+        toast(st.error ? `Folder scan: ${st.error}` : `Library folder: ${bits.join(', ') || tr('nothing new')}`, 7000);
+        state.allTracks = null;
+        bustCache();
+        break;
+      }
+    } catch (e) {
+      out.textContent = `${tr('Could not scan:')} ${e.message || 'unknown'}`;
+      out.dataset.tone = 'bad';
+      toast(`Could not scan: ${e.message || 'unknown'}`, 6000);
+    }
+    setFolderScan.disabled = false;
   };
   const setGenres = document.getElementById('set-genres');
   if (setGenres) setGenres.onclick = async () => {

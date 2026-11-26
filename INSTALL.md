@@ -158,9 +158,26 @@ The first start creates the database automatically.
 
 ### 3.7 Add music
 
-Open **Library** in the left sidebar. Use **Upload files** or **Upload a folder**. At the
-moment there is no scanner for an existing music folder; files have to be uploaded through
-the app. Uploaded files are copied into `~/.musicfy/owned`.
+Two ways, and the first is the one for a folder you already keep:
+
+- **Settings > Library folder.** Point it at a folder, or at one playlist file, and press
+  **Scan folder**. The audio is registered where it already is: nothing is copied, moved or
+  renamed, and deleting a track later leaves the file on disk. Playlists written by Traktor
+  (`.nml`), rekordbox (`.xml`), `.m3u`/`.m3u8` and `.pls` are imported with their order, and
+  the BPM and key they already carry are kept instead of being analysed again.
+- **Library > Upload files / Upload a folder.** Uploaded files are copied into
+  `~/.musicfy/owned`, which is what you want for a one-off import from another machine.
+
+A scan started from the machine MUSICFY runs on may read any folder that user can read. From
+another machine (or through a reverse proxy) it is limited to the folders listed in
+`MUSICFY_MUSIC_ROOTS`, separated by `:` (`;` on Windows):
+
+```sh
+MUSICFY_MUSIC_ROOTS=/home/me/Music:/mnt/drive/Sets
+```
+
+The scan is an import, not a sync: a file deleted from the folder stays in the library until
+you remove it there.
 
 ### 3.8 Make it start automatically (optional)
 
