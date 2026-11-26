@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.57 — 2026-11-26
+
+- `FLEET.md` is the host source of truth: which machine, which ssh name, where the code and
+  data live, which local port maps to which host, how each one updates.
+- `npm run deploy:all` deploys both hosts and verifies the version and `/` on each;
+  `npm run fleet:check` is read-only and exits non-zero on drift.
+- The agent instructions now point at `FLEET.md` instead of an rsync line that updated one
+  host and hand-edited the asset version.
+
 ## 0.1.56 — 2026-11-26
 
 - The home page answers again. It was written with `writeHead` followed by `setHeader`;

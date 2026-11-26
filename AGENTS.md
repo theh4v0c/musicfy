@@ -32,7 +32,8 @@ pass; adjust the CSS or update the token deliberately, and say which.
 - A styling class does one job. Never share a layout class between rows with different
   contents (that is how `.lib-actions` broke two pages at once).
 - Never let a service worker own a media response.
-- Deploy: `rsync -az web/ HOST:/opt/musicfy/web/ && rsync -az core/ HOST:/opt/musicfy/core/ && ssh HOST 'sudo systemctl restart musicfy-core'`.
-  Bump `?v=` in `web/index.html`.
+- **Read `FLEET.md` before touching a host.** Deploy with `npm run deploy:all` (both hosts,
+  verified); `npm run fleet:check` reports drift. Never deploy one host alone, and never
+  hand-edit the asset version: the server writes it from `package.json`.
 - Verify through the client path, not `curl`: the gzip cache is keyed by content hash
   now, but the browser is the only honest witness.

@@ -1,6 +1,6 @@
 {
   "name": "musicfy",
-  "version": "0.1.56",
+  "version": "0.1.57",
   "description": "Self-hosted music library, browser player and DJ prep bench",
   "license": "AGPL-3.0-or-later",
   "type": "commonjs",
@@ -40,7 +40,10 @@
     "core/text.js",
     "core/storefront.js",
     "bin/deploy-pi.sh",
-    "bin/ar-check.mjs"
+    "bin/ar-check.mjs",
+    "bin/deploy-all.sh",
+    "bin/fleet-check.sh",
+    "FLEET.md"
   ],
   "scripts": {
     "start": "node core/core.js",
@@ -52,7 +55,9 @@
     "i18n": "node bin/i18n-check.mjs",
     "update-bundle": "node bin/update-bundle.mjs",
     "deploy:pi": "sh bin/deploy-pi.sh",
-    "ar:check": "node bin/ar-check.mjs"
+    "ar:check": "node bin/ar-check.mjs",
+    "deploy:all": "sh bin/deploy-all.sh",
+    "fleet:check": "sh bin/fleet-check.sh"
   },
   "keywords": [
     "music",
