@@ -1145,6 +1145,8 @@ main.main { transition: margin-right .18s ease; }
   /* the wordmark is the first thing on the page: its left edge has to be the page's
      left edge, which is the view padding (16px), not the old 12px bar padding */
   .topbar { padding: 0 16px; gap: 8px; height: 56px; min-height: 56px; }
+  /* the counts are already in the Library stats line; the pill only squeezed the title */
+  .pill { display: none; }
   .main, .view { max-width: 100vw; overflow-x: hidden; }
 }
 

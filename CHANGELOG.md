@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4 — 2026-11-26
+
+- The library pill is hidden on phones. Its counts already sit in the Library stats line,
+  and on a 390px header it squeezed the page title to "Libr...". The title now has room for
+  the whole word next to the three top-bar controls.
+
 ## 0.2.3 — 2026-11-26
 
 - The rounded display stack is removed. The mast greeting, playlist header, crate names and
