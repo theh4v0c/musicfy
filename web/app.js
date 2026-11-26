@@ -943,6 +943,26 @@ function openPlaylistMenu(p, x, y) {
   m.onclick = async (e) => {
     const b = e.target.closest('button'); if (!b) return;
     const act = b.dataset.act;
+    // Ask for confirmation inside the sheet. A native confirm() is invisible in some
+    // installed web apps; the menu closed and the button looked dead.
+    if (act === 'pl-delete') {
+      m.innerHTML = `<div class="ctx-title">${tr('Delete playlist')} “${esc(p.name)}”?</div>
+        <button data-act="pl-delete-yes">${tr('Delete playlist')}</button>
+        <button data-act="pl-delete-no">${tr('Keep it')}</button>`;
+      m.onclick = async (ev) => {
+        const bb = ev.target.closest('button'); if (!bb) return;
+        if (bb.dataset.act === 'pl-delete-no') { closeCtx(true); m.onclick = null; return; }
+        closeCtx(true); m.onclick = null;
+        try {
+          await api(`/api/playlists/${encodeURIComponent(p.id)}`, { method: 'DELETE' });
+          afterWrite(); await loadPlaylists();
+          toast('Playlist deleted. Tracks are still in Songs.');
+          if (state.playlistId === p.id) { state.playlistId = null; state.history = []; nav('home'); }
+          else refreshView();
+        } catch (err) { toast(`Could not delete: ${err.message || err}`, 5000); }
+      };
+      return;
+    }
     closeCtx(true); m.onclick = null;
     if (act === 'pl-play') { playPlaylist(p.id); return; }
     if (act === 'pl-cover') { uploadPlaylistCover(p.id); return; }
@@ -984,14 +1004,7 @@ function openPlaylistMenu(p, x, y) {
       if (state.playlistId === p.id) openPlaylist(p.id, false);
       return;
     }
-    if (act === 'pl-delete') {
-      if (!confirm(tr(`Delete playlist "${p.name}"? Tracks stay in your library.`))) return;
-      await api(`/api/playlists/${encodeURIComponent(p.id)}`, { method: 'DELETE' });
-      afterWrite(); await loadPlaylists();
-      toast('Playlist deleted. Tracks are still in Songs.');
-      if (state.playlistId === p.id) { state.playlistId = null; state.history = []; nav('home'); }
-      else refreshView();
-    }
+
   };
 }
 

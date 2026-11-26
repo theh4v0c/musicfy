@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.63 — 2026-11-26
+
+- Deleting a playlist asks inside the sheet ("Delete playlist" / "Keep it") instead of a
+  native confirm, which is invisible in some installed web apps and left the item looking
+  dead. Failures are shown ("Could not delete: 403") instead of being swallowed.
+
 ## 0.1.62 — 2026-11-26
 
 - The capability panel renders. A help answer carries no `plan`, and the status line read

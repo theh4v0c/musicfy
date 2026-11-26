@@ -349,7 +349,7 @@
     'Playback log copied': 'Registro de reprodução copiado',
     'Copy the playback log': 'Copie o registro de reprodução',
 
-    'Delete playlist': 'Excluir lista',
+    'Delete playlist': 'Excluir lista', 'Keep it': 'Manter',
     'Search this artist': 'Buscar este artista',
     'Play now': 'Tocar agora', 'Add to playlist (stream)': 'Adicionar à lista (streaming)',
     'Download to library': 'Baixar para a biblioteca',
