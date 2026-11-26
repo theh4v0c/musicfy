@@ -141,7 +141,7 @@ States:
 | hover (pointer) | `--bg-elev2` for ghosts and icons; accent brightens for filled; border to `--fg-mute` |
 | active | `transform: translateY(1px)` (see `.pressed`) |
 | focus-visible | 2px accent outline, never removed |
-| hover / selected pill | 2px border, not a 1px hairline |
+| hover / selected pill | 2px outer ring, so hovering never reflows the row |
 | focus-within | a reveal or hover state also appears when a child has keyboard focus |
 | disabled | `opacity: .45`, `cursor: default`, no hover change |
 | playing | accent text + `--acc-soft` row wash |

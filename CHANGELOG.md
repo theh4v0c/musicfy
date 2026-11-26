@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.5 — 2026-11-26
+
+- Hover and selected pills use a 2px **outer ring** instead of a border. The 2px border grew
+  the pill, so hovering a scope or action chip in Search reflowed the row and shifted the
+  whole result list. The ring keeps the 2px edge and cannot move anything.
+
 ## 0.2.4 — 2026-11-26
 
 - The library pill is hidden on phones. Its counts already sit in the Library stats line,

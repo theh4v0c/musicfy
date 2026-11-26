@@ -786,9 +786,7 @@ Settings), DJ adds Prep. A&R lives in the sidebar's Studio group and is one tap 
 a phone; the bottom Search tab stays active while A&R is open. Search is the single global
 field, with Scope (Both / This library / Web) and playlist hits; the Library field is labelled
 as a local filter and offers "Search everywhere" when nothing matches. The command palette
-(`⌘K` or the top-bar `⌘` button) jumps to views, tracks and playlists. Pills under the pointer
-and focused fields use a 2px accent or neutral border; a collapsed sidebar hides every label,
-including the Studio group. A&R opens with a preloaded "For you now" row from the local
+(`⌘K` or the top-bar `⌘` button) jumps to views, tracks and playlists. Pills under the pointer use a 2px outer ring (no layout shift); focused fields use a 2px accent border. A collapsed sidebar hides every label, including the Studio group. A&R opens with a preloaded "For you now" row from the local
 recommender; it refreshes in the background every five minutes, has a refresh button, and is
 replaced by the results when a request is run. All confirmations and
 one-line prompts use the in-app dialog, so they follow the interface language. The playlist
