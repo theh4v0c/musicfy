@@ -556,7 +556,9 @@ inline (late hours get "Still up,"), the last track as a sentence with its BPM a
 chips, Flow as a transport key and Resume when a queue survived. Below it, picks come from
 `GET /api/home/picks`: artist of the week, more from the last artist, same key, same
 tempo, worn out, never heard. The reason is the point; a pick with no argument is a
-billboard. The phone keeps the first pick as a full-width row (two clipped tiles said
+billboard. The **Fresh in your library** rail is sorted by when the audio
+arrived (`files.added_at`), not by when the catalogue row was created, so a download or an
+upgrade of an old track appears where the listener expects it. The phone keeps the first pick as a full-width row (two clipped tiles said
 nothing); the three library counters that used to sit under it are gone — the sidebar
 pill and Settings already carry those numbers.
 

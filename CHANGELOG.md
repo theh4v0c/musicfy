@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.84 — 2026-11-26
+
+- **"Fresh in your library" now sorts by when the audio arrived**, not by when the track row
+  was created. A download or an upgrade of a track already in the library writes a new file
+  row but leaves the track's `added_at` alone, so the rail sat on the original batch forever.
+  It now reads the newest owned file per track (`MAX(files.added_at)`), with the track date as
+  the fallback. The unplaylisted rail uses the same clock.
+
 ## 0.1.83 — 2026-11-26
 
 - Library and Search no longer open with a page hero: their toolbar is the header. The first

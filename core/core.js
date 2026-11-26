@@ -5112,18 +5112,22 @@ const server = http.createServer(async (req, res) => {
         FROM tracks t
         LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
         LEFT JOIN resolutions r ON r.track_id=t.id`;
-      const recent = db.prepare(`${sel} WHERE ${owned} ORDER BY t.added_at DESC, t.id DESC LIMIT 12`).all();
+      // "fresh" is when the audio arrived, not when the catalogue row was created. A
+      // re-download or an upgrade writes a new file row for an old track, and the rail
+      // used to keep showing the original batch forever.
+      const freshAt = `COALESCE((SELECT MAX(f2.added_at) FROM files f2 WHERE f2.track_id=t.id AND f2.tier='owned'), t.added_at)`;
+      const recent = db.prepare(`${sel} WHERE ${owned} ORDER BY ${freshAt} DESC, t.id DESC LIMIT 12`).all();
       // more from artists you actually play: their owned tracks you have not heard yet
       const deeper = db.prepare(`${sel} WHERE ${owned}
         AND t.artist IN (SELECT t2.artist FROM listens l JOIN tracks t2 ON t2.id=l.track_id
                          WHERE t2.artist IS NOT NULL AND t2.artist != ''
                            ${tasteIncludeChildren() ? '' : "AND COALESCE(t2.genre_family,'') != 'children'"} GROUP BY t2.artist)
         AND NOT EXISTS (SELECT 1 FROM listens l WHERE l.track_id=t.id)
-        ORDER BY (SELECT COUNT(*) FROM listens l WHERE l.track_id=t.id) ASC, t.added_at DESC, t.id DESC LIMIT 40`).all();
+        ORDER BY (SELECT COUNT(*) FROM listens l WHERE l.track_id=t.id) ASC, ${freshAt} DESC, t.id DESC LIMIT 40`).all();
       // owned but in no playlist: the part of the library you have not filed anywhere
       const unplaylisted = db.prepare(`${sel} WHERE ${owned}
         AND t.id NOT IN (SELECT track_id FROM playlist_tracks)
-        ORDER BY t.added_at DESC, t.id DESC LIMIT 40`).all();
+        ORDER BY ${freshAt} DESC, t.id DESC LIMIT 40`).all();
       return json(res, 200, { recent, deeper, unplaylisted });
     }
 
