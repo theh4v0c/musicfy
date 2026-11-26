@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.7 — 2026-11-26
+
+- Album pages are fetched fresh, and a write clears the cached album and artist pages. After
+  Delete the album can no longer reappear from the 90-second GET cache; the confirmation
+  button says Delete and the page lands on the Library, where the album is gone.
+- A&R album cards treat a partially owned album as a download, not as an Open. An outside or
+  incomplete album gets the primary **Download** action and clicking the row queues the
+  missing tracks; only a complete album opens. The meta says "1 of 3 here" or "not in
+  library" instead of hiding the outside part.
+
 ## 0.2.6 — 2026-11-26
 
 - A&R is back in the phone's bottom navigation, between Search and Library. Prep leaves the

@@ -575,7 +575,7 @@ async function deleteTracks(input) {
   const msg = one
     ? (withAudio.length ? 'Delete this track? The audio file is removed from disk and it disappears from every playlist.' : 'Delete this track from the library?')
     : `Delete ${ids.length} tracks?${withAudio.length ? ` ${withAudio.length} audio file${withAudio.length === 1 ? ' is' : 's are'} removed from disk` : ''} and they disappear from every playlist.`;
-  if (!(await uiConfirm(tr(msg)))) return;
+  if (!(await uiConfirm(tr(msg), { confirm: tr('Delete') }))) return;
 
   // the rows go at once, so a forty track delete does not crawl
   for (const id of ids) document.querySelectorAll(`.trow[data-tid="${id}"]`).forEach((r) => r.remove());
@@ -3470,11 +3470,15 @@ function renderAlbumsCard(a, out, stateEl) {
     if (al.cover) art.style.backgroundImage = `url("${al.cover}")`;
     const meta = document.createElement('div');
     meta.className = 'ask-album-meta';
-    const bits = [al.year, al.tracks ? `${al.tracks} track${Number(al.tracks) === 1 ? '' : 's'}` : '', al.owned ? `${al.owned} here` : ''].filter(Boolean);
+    const owned = Number(al.owned) || 0;
+    const total = Number(al.tracks) || 0;
+    const bits = [al.year, total ? `${total} track${total === 1 ? '' : 's'}` : '', owned ? `${owned}${total ? ` of ${total}` : ''} here` : 'not in library'].filter(Boolean);
     meta.innerHTML = `<b>${esc(al.name)}</b><span>${esc(bits.join(' · '))}</span>`;
+    // only a complete album opens; a partial or absent one offers the missing tracks
+    const complete = total > 0 ? owned >= total : owned > 0;
     const act = document.createElement('button');
-    act.className = 'btn btn-ghost ask-album-act';
-    if (al.owned > 0) {
+    act.className = `btn ${complete ? 'btn-ghost' : 'btn-primary'} ask-album-act`;
+    if (complete) {
       act.textContent = 'Open';
       act.onclick = (e) => { e.stopPropagation(); renderAlbum(al.name); };
     } else {
@@ -3491,7 +3495,8 @@ function renderAlbumsCard(a, out, stateEl) {
       };
     }
     row.append(art, meta, act);
-    row.onclick = () => renderAlbum(al.name);
+    // an owned album opens; an outside album downloads, because its page would be empty
+    row.onclick = () => { if (complete) renderAlbum(al.name); else act.click(); };
     list.appendChild(row);
   }
   card.appendChild(list);
@@ -4776,6 +4781,12 @@ function bustCache() {
   for (const p of ['/api/tracks', '/api/playlists', '/api/recent', '/api/likes/full', '/api/stats']) {
     try { localStorage.removeItem(CACHE_PREFIX + p); } catch {}
   }
+  // album and artist pages are cached GETs too; after a delete they would resurrect rows
+  try {
+    for (const k of Object.keys(localStorage)) {
+      if (k.startsWith(`${CACHE_PREFIX}/api/group/`)) localStorage.removeItem(k);
+    }
+  } catch {}
   state.allTracks = null;
 }
 
@@ -4871,7 +4882,7 @@ async function renderArtist(name, push = true) {
       </div></div>
     <div id="g-list"></div>`;
   let list = [];
-  try { list = await api(`/api/group/artist/${encodeURIComponent(name)}`); } catch {}
+  try { list = await api(`/api/group/artist/${encodeURIComponent(name)}`, { nocache: true }); } catch {}
   state._currentList = list;
   const gnA = $('g-n'); const elA = $('g-list');
   if (!gnA || !elA) return;
@@ -4916,7 +4927,7 @@ async function renderAlbum(name, push = true) {
   setNav('library'); state.view = 'album'; paintBack(); state.playlistId = null; renderSidebar();
   $('view-title').textContent = name;
   const v = $('view');
-  const first = (await api(`/api/group/album/${encodeURIComponent(name)}`))[0];
+  const first = (await api(`/api/group/album/${encodeURIComponent(name)}`, { nocache: true }))[0];
   v.innerHTML = `<div class="plhead">
       <img class="plhead-art" src="/api/cover-album/${encodeURIComponent(name)}?v=${state.artV || 0}" alt="" loading="lazy"
         data-cover-initial="${esc(name.charAt(0).toUpperCase())}">
@@ -4937,7 +4948,7 @@ async function renderAlbum(name, push = true) {
       </div></div>
     <div id="g-list"></div>`;
   let list = [];
-  try { list = await api(`/api/group/album/${encodeURIComponent(name)}`); } catch {}
+  try { list = await api(`/api/group/album/${encodeURIComponent(name)}`, { nocache: true }); } catch {}
   state._currentList = list;
   const gnB = $('g-n'); const elB = $('g-list');
   if (!gnB || !elB) return;
@@ -4979,7 +4990,7 @@ async function renderAlbum(name, push = true) {
       toast(`Album deleted - ${r.deleted} track${r.deleted === 1 ? '' : 's'} removed`, 5000);
       state.allTracks = null;
       bustCache();
-      nav('library');
+      nav('songs');
     } catch (e) { toast(`Could not delete the album: ${e.message || 'unknown'}`, 6000); }
   };
   $('g-upgrade').onclick = async () => {
