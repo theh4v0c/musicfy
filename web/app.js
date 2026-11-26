@@ -31,6 +31,47 @@ function applyTier(tier, persist = true) {
 applyTier(state.tier, false);
 const LOC = () => (window.I18N && window.I18N.lang === 'pt-BR' ? 'pt-BR' : 'en');
 const tr = (s) => (window.I18N ? window.I18N.t(String(s ?? '')) : String(s ?? ''));
+/* One in-app dialog for every confirmation and one-line prompt. A native confirm() is
+   invisible in an installed web app and ignores the interface language. */
+let askDone = null;
+function askDialog(opts = {}) {
+  const dlg = $('ask-dialog');
+  if (!dlg) return Promise.resolve(opts.value !== undefined ? String(opts.value ?? '') : true);
+  const title = $('ask-title');
+  const msg = $('ask-message');
+  const input = $('ask-input');
+  const ok = $('ask-ok');
+  const cancel = $('ask-cancel');
+  const isPrompt = opts.value !== undefined;
+  title.textContent = opts.title || '';
+  title.parentElement.hidden = !opts.title;
+  msg.textContent = opts.message || '';
+  msg.hidden = !opts.message;
+  input.hidden = !isPrompt;
+  input.value = isPrompt ? String(opts.value ?? '') : '';
+  ok.textContent = opts.confirm || (isPrompt ? tr('Save') : tr('Confirm'));
+  cancel.textContent = opts.cancel || tr('Cancel');
+  if (dlg.open) dlg.close();
+  return new Promise((resolve) => {
+    const finish = (value) => {
+      if (askDone !== finish) return;
+      askDone = null;
+      if (dlg.open) dlg.close();
+      resolve(value);
+    };
+    askDone = finish;
+    ok.onclick = () => finish(isPrompt ? input.value.trim() : true);
+    cancel.onclick = () => finish(isPrompt ? null : false);
+    input.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); ok.click(); } };
+    dlg.oncancel = (e) => { e.preventDefault(); finish(isPrompt ? null : false); };
+    dlg.onclick = (e) => { if (e.target === dlg) finish(isPrompt ? null : false); };
+    dlg.showModal();
+    setTimeout(() => { if (isPrompt) { input.focus(); input.select(); } else ok.focus(); }, 20);
+  });
+}
+const uiConfirm = (message, opts = {}) => askDialog({ ...opts, message }).then((v) => v === true);
+const uiPrompt = (message, value = '', opts = {}) => askDialog({ ...opts, message, value }).then((v) => (typeof v === 'string' ? v : null));
+
 const esc = (s) => (s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // rung display: short labels, stable classes for color coding
 function shortRung(rung) {
@@ -408,7 +449,7 @@ $('ctx').addEventListener('click', async (e) => {
     try {
       const dry = await api(`/api/tracks/${t.id}/tags?dryRun=1`, { method: 'POST', nocache: true });
       if (dry.error) return toast(dry.error, 6000);
-      const ok = confirm(`${tr('Write Traktor + ID3 tags into the file?')}\n\n${dry.file}\nFrames: ${(dry.frames || []).join(', ')}\n\n${tr('A .mf.bak backup is kept once.')}`);
+      const ok = await uiConfirm(`${tr('Write Traktor + ID3 tags into the file?')}\n\n${dry.file}\nFrames: ${(dry.frames || []).join(', ')}\n\n${tr('A .mf.bak backup is kept once.')}`);
       if (!ok) return;
       const pp = progressPill('Writing tags…');
       const r = await api(`/api/tracks/${t.id}/tags`, { method: 'POST' });
@@ -454,7 +495,7 @@ $('ctx').addEventListener('click', async (e) => {
     try {
       const p = await api(`/api/repair/${t.id}`, { nocache: true });
       if (!p.changed) { toast(p.reasons[0] || 'Nothing to correct', 6000); return; }
-      if (!confirm(`${tr('Apply these corrections?')}\n\n${p.reasons.join('\n')}`)) return;
+      if (!(await uiConfirm(`${tr('Apply these corrections?')}\n\n${p.reasons.join('\n')}`))) return;
       const r = await api(`/api/repair/${t.id}/apply`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(p.after) });
       if (r.error) return toast(r.error, 6000);
       patchTrackEverywhere(t.id, p.after);
@@ -493,7 +534,7 @@ $('ctx').addEventListener('click', async (e) => {
     const msg = hasAudio(t)
       ? tr(`Delete "${t.title}"? The audio file is removed from disk and the track disappears from every playlist.`)
       : tr(`Delete "${t.title}" from the library?`);
-    if (!confirm(msg)) return;
+    if (!(await uiConfirm(msg))) return;
     try {
       // remember where the list was scrolled so deleting does not move the page
       const hosts = [...document.querySelectorAll(`.trow[data-tid="${t.id}"]`)].map((r) => r.parentElement).filter(Boolean);
@@ -534,7 +575,7 @@ async function deleteTracks(input) {
   const msg = one
     ? (withAudio.length ? 'Delete this track? The audio file is removed from disk and it disappears from every playlist.' : 'Delete this track from the library?')
     : `Delete ${ids.length} tracks?${withAudio.length ? ` ${withAudio.length} audio file${withAudio.length === 1 ? ' is' : 's are'} removed from disk` : ''} and they disappear from every playlist.`;
-  if (!confirm(tr(msg))) return;
+  if (!(await uiConfirm(tr(msg)))) return;
 
   // the rows go at once, so a forty track delete does not crawl
   for (const id of ids) document.querySelectorAll(`.trow[data-tid="${id}"]`).forEach((r) => r.remove());
@@ -716,7 +757,7 @@ function openAddPl(t) {
     const b = e.target.closest('button'); if (!b) return;
     closeCtx(true); m.style.transform = ''; m.onclick = null;
     if (b.dataset.newpl) {
-      const name = prompt(tr('Playlist name:')); if (!name) return;
+      const name = await uiPrompt(tr('Playlist name:')); if (!name) return;
       const np = await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
       await api(`/api/playlists/${np.id}/tracks`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ track_id: t.id }) });
       await loadPlaylists();
@@ -798,8 +839,16 @@ function paintBack() {
 }
 function setNav(v) {
   state.view = v;
-  document.querySelectorAll('[data-nav]').forEach(b => {
+  document.querySelectorAll('.snav-btn').forEach(b => {
     const on = b.dataset.nav === v;
+    b.classList.toggle('on', on);
+    if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+  // A&R lives under Studio and is reached from Search on a phone: the Search tab stays
+  // active there, so a mobile user is never left with no selected destination
+  const bottomKey = v === 'askai' ? 'search' : v;
+  document.querySelectorAll('.bn-btn').forEach(b => {
+    const on = b.dataset.nav === bottomKey;
     b.classList.toggle('on', on);
     if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
@@ -850,7 +899,7 @@ function renderSidebar() {
   add.className = 'slib-add';
   add.textContent = '+ New playlist';
   add.onclick = async () => {
-    const name = prompt(tr('New playlist name:')); if (!name) return;
+    const name = await uiPrompt(tr('New playlist name:')); if (!name) return;
     await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, kind: 'listen' }) });
     afterWrite();
     await loadPlaylists();
@@ -861,7 +910,7 @@ function renderSidebar() {
   imp.className = 'slib-add';
   imp.textContent = '+ Import Spotify playlist';
   imp.onclick = async () => {
-    const url = prompt(tr('Paste a Spotify playlist link or ID:'));
+    const url = await uiPrompt(tr('Paste a Spotify playlist link or ID:'));
     if (!url) return;
     toast('Mirroring playlist...');
     try {
@@ -927,11 +976,33 @@ function renderSlibItems() {
 }
 
 /* playlist context menu: play, rename, delete */
+function uploadToPlaylist(pid) {
+  pickFiles('audio/*', async (files) => {
+    const total = files.length;
+    let ok = 0;
+    const t = toastPersistent(`Uploading ${total} file${total > 1 ? 's' : ''} to this playlist…`);
+    for (let i = 0; i < total; i += 1) {
+      t.update(`Uploading ${i + 1} of ${total}: ${files[i].name.slice(0, 30)}`);
+      try {
+        const d = await uploadTrack(files[i]);
+        await api(`/api/playlists/${encodeURIComponent(pid)}/tracks`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ track_id: d.track }),
+        });
+        ok += 1;
+      } catch {}
+    }
+    state.allTracks = null; bustCache(); await loadPlaylists();
+    t.done(`Added ${ok} of ${total} track${total === 1 ? '' : 's'} to this playlist`, 6000);
+    openPlaylist(pid, false);
+  });
+}
+
 function openPlaylistMenu(p, x, y) {
   markCtxOpen();
   const m = $('ctx');
   m.innerHTML = `<div class="ctx-title"><span class="ctx-name">${esc(p.name)}</span></div>
     <button data-act="pl-play">Play</button>
+    <button data-act="pl-upload">Upload tracks</button>
     <button data-act="pl-rename">Rename</button>
     <button data-act="pl-cover">Change cover</button>
     <button data-act="pl-cover-track">Use a track's cover</button>
@@ -972,6 +1043,7 @@ function openPlaylistMenu(p, x, y) {
     }
     closeCtx(true); m.onclick = null;
     if (act === 'pl-play') { playPlaylist(p.id); return; }
+    if (act === 'pl-upload') { uploadToPlaylist(p.id); return; }
     if (act === 'pl-cover') { uploadPlaylistCover(p.id); return; }
     if (act === 'pl-cover-track') { openCoverPicker(p.id); return; }
     if (act === 'pl-repair') {
@@ -995,7 +1067,7 @@ function openPlaylistMenu(p, x, y) {
         const dry = await api(`/api/playlists/${encodeURIComponent(p.id)}/tags?dryRun=1`, { method: 'POST' });
         const ok = (dry.results || []).filter((r) => !r.skipped && !r.error).length;
         if (!ok) { toast('No MP3s to tag in this playlist', 4000); return; }
-        if (!confirm(`${tr('Write Traktor + ID3 tags into')} ${ok} ${tr('file(s)?')}\n\n${tr('A .mf.bak backup is kept once per file.')}`)) return;
+        if (!(await uiConfirm(`${tr('Write Traktor + ID3 tags into')} ${ok} ${tr('file(s)?')}\n\n${tr('A .mf.bak backup is kept once per file.')}`))) return;
         const pp = progressPill(`Tagging ${ok} files…`);
         const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/tags`, { method: 'POST' });
         pp.done();
@@ -1005,7 +1077,7 @@ function openPlaylistMenu(p, x, y) {
     }
     if (act === 'pl-zip') { toast('Building the zip, this can take a minute', 6000); window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/zip`; return; }
     if (act === 'pl-rename') {
-      const name = prompt(tr('Rename playlist:'), p.name); if (!name) return;
+      const name = await uiPrompt(tr('Rename playlist:'), p.name); if (!name) return;
       await api(`/api/playlists/${encodeURIComponent(p.id)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
       afterWrite(); await loadPlaylists(); toast('Renamed');
       if (state.playlistId === p.id) openPlaylist(p.id, false);
@@ -1706,7 +1778,6 @@ async function openPlaylist(pid, push = true) {
             <button class="mode-tab${p.kind === 'listen' ? '' : ' on'}" data-kind="dj" title="Prepped for DJ export">DJ set</button>
             <button class="mode-tab${p.kind === 'listen' ? ' on' : ''}" data-kind="listen" title="Playback only - Prep leaves it alone">Listening</button>
           </div>
-          <button class="btn btn-ghost" id="pl-upload">Upload tracks</button>
           ${viewSwitch('playlist', plView())}
           <button class="icon-btn" id="pl-menu" title="Playlist options">${IC.dots}</button>
         </div>
@@ -1853,25 +1924,6 @@ async function openPlaylist(pid, push = true) {
   };
   $('pl-play').onclick = () => playList(list, 0, false, p.name);
   $('pl-shuf').onclick = () => playList(list, 0, true, p.name);
-  const upBtn = $('pl-upload');
-  if (upBtn) upBtn.onclick = () => pickFiles('audio/*', async (files) => {
-    const total = files.length;
-    let ok = 0;
-    const t = toastPersistent(`Uploading ${total} file${total > 1 ? 's' : ''} to this playlist…`);
-    for (let i = 0; i < total; i += 1) {
-      t.update(`Uploading ${i + 1} of ${total}: ${files[i].name.slice(0, 30)}`);
-      try {
-        const d = await uploadTrack(files[i]);
-        await api(`/api/playlists/${encodeURIComponent(pid)}/tracks`, {
-          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ track_id: d.track }),
-        });
-        ok += 1;
-      } catch {}
-    }
-    state.allTracks = null; bustCache(); await loadPlaylists();
-    t.done(`Added ${ok} of ${total} track${total === 1 ? '' : 's'} to this playlist`, 6000);
-    openPlaylist(pid, false);
-  });
   const harmBtn = $('pl-harm');
   if (harmBtn) harmBtn.onclick = async () => {
     harmBtn.disabled = true;
@@ -2009,7 +2061,7 @@ async function renderLibrary() {
   bindViewSwitch('library', (v) => drawGrid(v));
   bindOrderControls(() => renderLibrary());
   $('hist-import').onclick = async () => {
-    const name = prompt(tr('Playlist name for your most played tracks:'), tr('From your history'));
+    const name = await uiPrompt(tr('Playlist name for your most played tracks:'), tr('From your history'));
     if (!name) return;
     toast('Building playlist from history');
     try {
@@ -2022,7 +2074,7 @@ async function renderLibrary() {
   };
   $('lib-upload').onclick = () => pickFile('audio/*', (f) => uploadFiles([f]));
   $('lib-newpl').onclick = async () => {
-    const name = prompt(tr('New playlist name:')); if (!name) return;
+    const name = await uiPrompt(tr('New playlist name:')); if (!name) return;
     await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, kind: 'listen' }) });
     afterWrite(); await loadPlaylists(); renderLibrary(); toast('Listening playlist created - switch it to DJ set when you want it prepped');
   };
@@ -2105,7 +2157,7 @@ async function renderDjExport() {
   const btn = document.getElementById('dj-analyze');
   if (btn) btn.onclick = async () => {
     if (!remaining) { toast('Every track with audio has been analysed at least once'); return; }
-    if (!confirm(tr(`Analyze ${remaining} track${remaining === 1 ? '' : 's'}? This runs on this machine and takes a while.`))) return;
+    if (!(await uiConfirm(tr(`Analyze ${remaining} track${remaining === 1 ? '' : 's'}? This runs on this machine and takes a while.`)))) return;
     btn.disabled = true;
     try {
       const r = await api('/api/analyze/run?limit=500&workers=2', { method: 'POST' });
@@ -2121,7 +2173,7 @@ async function renderDjExport() {
       cb.hidden = false;
       cb.textContent = `Make ${t.count} playable`;
       cb.onclick = async () => {
-        if (!confirm(tr(`${t.count} file${t.count === 1 ? '' : 's'} are in a format rekordbox and Traktor cannot open. Convert them to m4a now? The originals are replaced.`))) return;
+        if (!(await uiConfirm(tr(`${t.count} file${t.count === 1 ? '' : 's'} are in a format rekordbox and Traktor cannot open. Convert them to m4a now? The originals are replaced.`)))) return;
         cb.disabled = true;
         try {
           const r = await api('/api/maintenance/transcode', { method: 'POST' });
@@ -2192,8 +2244,8 @@ async function renderDjExport() {
              </div>`}`;
       }
       const missingPrep = prepWork(p);
-      const exportCrate = (fmt) => {
-        if (missingPrep && fmt !== 'usb' && !confirm(`${missingPrep} ${tr(missingPrep === 1 ? 'track' : 'tracks')} ${tr('in')} "${p.name}" ${tr('have no cue data at the current analyser. Cues will be missing. Export anyway?')}`)) return;
+      const exportCrate = async (fmt) => {
+        if (missingPrep && fmt !== 'usb' && !(await uiConfirm(`${missingPrep} ${tr(missingPrep === 1 ? 'track' : 'tracks')} ${tr('in')} "${p.name}" ${tr('have no cue data at the current analyser. Cues will be missing. Export anyway?')}`))) return;
         toast(fmt === 'usb' ? 'Building the CDJ library…' : 'Zipping the playlist…', 6000);
         if (fmt === 'usb') window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export/pioneer.zip`;
         else window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.zip?format=${fmt}`;
@@ -2302,7 +2354,7 @@ async function renderSongs(push = true) {
   v.innerHTML = `<h1 class="sr-only">Library</h1>
     <div class="songs-chips" id="songs-chips"></div>
     <div class="lib-actions songs-head">
-      <input class="search" id="songs-q" placeholder="Filter by title, artist or album" autocomplete="off">
+      <input class="search" id="songs-q" placeholder="Filter this library" autocomplete="off">
       <div class="mode-tabs" id="songs-filter">
         <button class="mode-tab on" data-f="all">All</button>
         <button class="mode-tab" data-f="owned">Downloaded</button>
@@ -2436,7 +2488,7 @@ async function renderSongs(push = true) {
         return;
       }
       if (b.dataset.browse === 'covers') {
-        if (!confirm(tr('Replace album covers with the official artwork? This overwrites existing covers for albums with more than one track.'))) return;
+        if (!(await uiConfirm(tr('Replace album covers with the official artwork? This overwrites existing covers for albums with more than one track.')))) return;
         toast('Fetching official album art', 6000);
         (async () => {
           let albums = 0, tracks = 0;
@@ -2483,7 +2535,7 @@ async function renderSongs(push = true) {
         return;
       }
       if (b.dataset.browse === 'dedupe') {
-        if (!confirm(tr('Merge duplicate tracks? The best quality copy is kept and playlists, likes and plays move to it.'))) return;
+        if (!(await uiConfirm(tr('Merge duplicate tracks? The best quality copy is kept and playlists, likes and plays move to it.')))) return;
         toast('Checking for duplicates', 4000);
         api('/api/maintenance/dedupe', { method: 'POST' }).then((r) => {
           bustCache();
@@ -2622,7 +2674,12 @@ async function renderSongs(push = true) {
     const el = $('songs-list');
     el.innerHTML = '';
     if (drawBrowse(el)) return;
-    if (!list.length) { el.innerHTML = `<div class="empty">Nothing matches that filter.</div>`; return; }
+    if (!list.length) {
+      el.innerHTML = `<div class="empty">${tr('Nothing matches that filter.')}<br><button class="btn btn-ghost" id="songs-search-everywhere" type="button">${tr('Search everywhere')}</button></div>`;
+      const go = document.getElementById('songs-search-everywhere');
+      if (go) go.onclick = () => { state.searchPending = query || ''; nav('search'); };
+      return;
+    }
     const view = songView();
     const theadBack = document.getElementById('songs-thead');
     if (theadBack) theadBack.style.display = view === 'list' ? '' : 'none';
@@ -2669,7 +2726,7 @@ async function renderSongs(push = true) {
 }
 
 async function importSpotifyTrack() {
-  const url = prompt(tr('Paste a Spotify track link or ID:'));
+  const url = await uiPrompt(tr('Paste a Spotify track link or ID:'));
   if (!url) return;
   toast('Looking up the track', 4000);
   try {
@@ -2938,7 +2995,7 @@ async function renderSettings() {
       await navigator.clipboard.writeText(text);
       toast('Playback log copied', 4000);
     } catch {
-      prompt(tr('Copy the playback log'), text);
+      try { await navigator.clipboard.writeText(text); toast(tr('Playback log copied'), 4000); } catch { toast(tr('Could not copy the playback log'), 4000); }
     }
   };
 
@@ -3048,7 +3105,7 @@ async function renderSettings() {
     }
   };
   if (updateBtn) updateBtn.onclick = async () => {
-    if (!confirm(tr('Update MUSICFY now? The new version is downloaded first; a restart is needed before it is active.'))) return;
+    if (!(await uiConfirm(tr('Update MUSICFY now? The new version is downloaded first; a restart is needed before it is active.')))) return;
     updateBtn.disabled = true;
     try {
       const res = await fetch('/api/update', { method: 'POST' });
@@ -3362,7 +3419,7 @@ async function renderSettings() {
       if (preview.tracks) bits.push(`${preview.tracks} duplicate track${preview.tracks === 1 ? '' : 's'}`);
       if (preview.extra_files) bits.push(`${preview.extra_files} extra file${preview.extra_files === 1 ? '' : 's'}`);
       const names = (preview.sample || []).slice(0, 3).map((x) => `${x.artist ? x.artist + ' - ' : ''}${x.title}`).join('; ');
-      if (!confirm(`${tr('Remove')} ${bits.join(' ' + tr('and') + ' ')}? ${tr('The best copy is kept, playlists and likes move to it, and the extra files are deleted from disk.')}${names ? `\n\n${names}` : ''}`)) { setDedupe.disabled = false; return; }
+      if (!(await uiConfirm(`${tr('Remove')} ${bits.join(' ' + tr('and') + ' ')}? ${tr('The best copy is kept, playlists and likes move to it, and the extra files are deleted from disk.')}${names ? `\n\n${names}` : ''}`))) { setDedupe.disabled = false; return; }
       const r = await api('/api/maintenance/dedupe', { method: 'POST' });
       maint(`Duplicates: ${r.removed} track${r.removed === 1 ? '' : 's'} merged, ${r.files} file${r.files === 1 ? '' : 's'} removed`, 'ok');
       state.allTracks = null;
@@ -3858,15 +3915,17 @@ async function renderSearch() {
         <button class="ask-ex" data-ar data-ask="create a playlist of 20 tracks">create a playlist of 20 tracks</button>
         <button class="ask-ex" data-ar data-ask="tracks between 120 and 130 BPM">tracks between 120 and 130 BPM</button>
         <button class="ask-ex" data-ar data-ask="how much of my library has audio">how much of my library has audio</button>
+        <button class="ask-ex" data-ar-nav="1">A&amp;R · describe a set</button>
       </div>
       <div class="mode-tabs" id="mode-tabs">
-        <span class="filters-label">Include</span>
-        <button class="mode-tab loc on" data-loc="lib" aria-pressed="true">Library</button>
-        <button class="mode-tab loc on" data-loc="web" aria-pressed="true">Web sources</button>
+        <span class="filters-label">Scope</span>
+        <button class="mode-tab on" data-search-scope="both" aria-pressed="true">Both</button>
+        <button class="mode-tab" data-search-scope="lib" aria-pressed="false">This library</button>
+        <button class="mode-tab" data-search-scope="web" aria-pressed="false">Web</button>
         <button class="mode-tab" id="long-sets" data-on="false" aria-pressed="false" title="Include DJ mixes, sets and long recordings">Long sets</button>
       </div>
       <div class="ladder-state" id="ladder-state"></div>
-    </div><div id="qres"></div><div id="search-discover"></div>`;
+    </div><div id="search-sets"></div><div id="qres"></div><div id="search-discover"></div>`;
   renderExternalInto($('search-discover'));
   const q = $('q'); q.focus();
   if (!state.allTracks) state.allTracks = await api('/api/tracks');
@@ -3877,19 +3936,34 @@ async function renderSearch() {
   let searchWeb = state.searchWeb !== false;
   let ladderCtl = null; // {abort}
 
-  const setLoc = (b, on) => {
-    b.classList.toggle('on', on);
-    b.setAttribute('aria-pressed', String(on));
+  const scopeBtns = [...document.querySelectorAll('[data-search-scope]')];
+  const paintScope = () => {
+    const cur = !searchLib ? 'web' : !searchWeb ? 'lib' : 'both';
+    scopeBtns.forEach((b) => {
+      const on = b.dataset.searchScope === cur;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
   };
-  document.querySelectorAll('.mode-tab.loc').forEach((b) => {
-    setLoc(b, b.dataset.loc === 'lib' ? searchLib : searchWeb);
+  scopeBtns.forEach((b) => {
     b.onclick = () => {
-      if (b.dataset.loc === 'lib') { searchLib = !searchLib; state.searchLib = searchLib; setLoc(b, searchLib); }
-      else { searchWeb = !searchWeb; state.searchWeb = searchWeb; setLoc(b, searchWeb); }
-      if (!searchLib && !searchWeb) toast('Choose Library or Web sources to search', 3000);
+      const s = b.dataset.searchScope;
+      searchLib = s !== 'web';
+      searchWeb = s !== 'lib';
+      state.searchLib = searchLib;
+      state.searchWeb = searchWeb;
+      paintScope();
       draw();
     };
   });
+  paintScope();
+  const arNav = document.querySelector('[data-ar-nav]');
+  if (arNav) arNav.onclick = () => nav('askai');
+  if (state.searchPending) {
+    const pending = state.searchPending;
+    state.searchPending = null;
+    q.value = pending;
+  }
   // a question about the library, not a search for a word: tempo, key, counting, making
   const assistantish = /\b(create|make|build|download|playlist|how many|how much|top rated|top \d|what can|help|which|who|when)\b|\b(tracks?|songs?)\b[^.]*\b(in|between|around|with|from)\b|\bbpm\b/i;
   const disc = $('search-discover');
@@ -3918,7 +3992,7 @@ async function renderSearch() {
   };
   // every example is a question, so it opens the place that answers them
   // the examples are questions; A&R is where a question is answered
-  document.querySelectorAll('#search-hints .ask-ex').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('#search-hints .ask-ex:not([data-ar-nav])').forEach((b) => b.onclick = () => {
     q.value = b.textContent;
     state.arPending = b.dataset.ask || b.textContent;
     nav('askai');
@@ -3939,11 +4013,29 @@ async function renderSearch() {
   };
 
 
+  const setsEl = $('search-sets');
+  const paintSets = (needle) => {
+    if (!setsEl) return;
+    setsEl.innerHTML = '';
+    if (!needle) return;
+    const fold = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const hits = (state.playlists || []).filter((p) => fold(p.name).includes(fold(needle))).slice(0, 8);
+    if (!hits.length) return;
+    const head = document.createElement('div');
+    head.className = 'sec-title';
+    head.textContent = tr('Playlists');
+    setsEl.appendChild(head);
+    const grid = document.createElement('div');
+    grid.className = 'pgrid';
+    hits.forEach((p) => grid.appendChild(pcard(p)));
+    setsEl.appendChild(grid);
+  };
   const draw = async () => {
     closeInlinePreview();
     if (statusEl && q.value.trim()) setSearchStatus('Searching', 'thinking');
     mode = searchLib && searchWeb ? 'all' : searchLib ? 'library' : 'ladder';
     const s = q.value.trim().toLowerCase();
+    paintSets(s);
     if (state.genreFilter) { renderGenreView(res, all, 60); return; }
     res.innerHTML = '';
     if (!s) {
@@ -4827,7 +4919,7 @@ async function renderAlbum(name, push = true) {
     if (!list.length) return;
     const withAudio = list.filter((t) => hasAudio(t)).length;
     const msg = `Delete the album "${name}"? ${list.length} track${list.length === 1 ? '' : 's'} will be removed from the library and from every playlist${withAudio ? `, and ${withAudio} audio file${withAudio === 1 ? '' : 's'} will be deleted from disk` : ''}. This cannot be undone.`;
-    if (!confirm(tr(msg))) return;
+    if (!(await uiConfirm(tr(msg)))) return;
     try {
       const r = await api('/api/tracks/delete', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: list.map((t) => t.id) }),
@@ -4954,7 +5046,7 @@ function openBulkEdit(idsArg, afterSave) {
 async function selCreatePlaylist() {
   const ids = [...state.selectedIds];
   if (!ids.length) return;
-  const name = prompt(tr('Playlist name for the selection:'));
+  const name = await uiPrompt(tr('Playlist name for the selection:'));
   if (!name) return;
   const np = await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
   afterWrite();
@@ -6357,7 +6449,104 @@ async function uploadPlaylistCover(pid) {
   });
 }
 
+/* ============ command palette ============ */
+let paletteItems = [];
+let paletteIndex = 0;
+
+function paletteActions() {
+  const acts = [
+    { label: 'Home', hint: 'Go', run: () => nav('home') },
+    { label: 'Search', hint: 'Go', run: () => nav('search') },
+    { label: 'Library', hint: 'Go', run: () => nav('songs') },
+    { label: 'Playlists', hint: 'Go', run: () => nav('library') },
+  ];
+  if (state.tier === 'dj') acts.push({ label: 'Prep', hint: 'Go', run: () => nav('djexport') });
+  acts.push({ label: 'A&R', hint: 'Go', run: () => nav('askai') });
+  acts.push({ label: 'Settings', hint: 'Go', run: () => nav('settings') });
+  acts.push({
+    label: 'Play library shuffled', hint: 'Play',
+    run: async () => { const all = state.allTracks || await api('/api/tracks'); playList(all || [], 0, true, 'Library'); },
+  });
+  acts.push({
+    label: 'Scan a folder', hint: 'Settings',
+    run: () => { nav('settings'); setTimeout(() => { const f = $('set-folder'); if (f) f.focus(); }, 350); },
+  });
+  return acts;
+}
+
+function paintPalette() {
+  const list = $('palette-list');
+  const q = $('palette-q');
+  if (!list || !q) return;
+  const needle = String(q.value || '').trim().toLowerCase();
+  const acts = paletteActions().filter((a) => !needle || a.label.toLowerCase().includes(needle));
+  const playlists = needle
+    ? (state.playlists || []).filter((p) => String(p.name || '').toLowerCase().includes(needle)).slice(0, 5)
+      .map((p) => ({ label: p.name, hint: `${Number(p.n_tracks || 0).toLocaleString(LOC())} ${tr('tracks')}`, run: () => openPlaylist(p.id, false) }))
+    : [];
+  const tracks = needle && state.allTracks
+    ? state.allTracks.filter((t) => `${t.title || ''} ${t.artist || ''}`.toLowerCase().includes(needle)).slice(0, 8)
+      .map((t) => ({ label: t.title || '', hint: t.artist || tr('Track'), run: () => playList([t], 0, false, 'Command palette') }))
+    : [];
+  paletteItems = [...acts, ...playlists, ...tracks];
+  paletteIndex = Math.max(0, Math.min(paletteIndex, paletteItems.length - 1));
+  list.innerHTML = '';
+  if (!paletteItems.length) {
+    const empty = document.createElement('div');
+    empty.className = 'palette-item empty';
+    empty.textContent = tr('No matches');
+    list.appendChild(empty);
+    return;
+  }
+  paletteItems.forEach((a, i) => {
+    const b = document.createElement('button');
+    b.className = `palette-item${i === paletteIndex ? ' on' : ''}`;
+    b.setAttribute('role', 'option');
+    b.setAttribute('aria-selected', String(i === paletteIndex));
+    b.innerHTML = `<b>${esc(a.label)}</b><small>${esc(a.hint || '')}</small>`;
+    b.onclick = () => runPalette(i);
+    list.appendChild(b);
+  });
+}
+
+function runPalette(i) {
+  const item = paletteItems[i];
+  if (!item) return;
+  closePalette();
+  Promise.resolve().then(item.run).catch(() => toast('That did not work', 4000));
+}
+
+function closePalette() {
+  const dlg = $('palette');
+  if (dlg && dlg.open) dlg.close();
+}
+
+async function openPalette() {
+  const dlg = $('palette');
+  if (!dlg) return;
+  if (!dlg.open) dlg.showModal();
+  const q = $('palette-q');
+  if (q) { q.value = ''; q.focus(); }
+  paletteIndex = 0;
+  if (!state.allTracks) {
+    try { state.allTracks = await api('/api/tracks'); } catch {}
+  }
+  paintPalette();
+}
+
 document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && String(e.key || '').toLowerCase() === 'k') {
+    e.preventDefault();
+    const dlg = $('palette');
+    if (dlg && dlg.open) closePalette(); else openPalette();
+    return;
+  }
+  if ($('palette') && $('palette').open) {
+    if (e.key === 'Escape') { e.preventDefault(); closePalette(); return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); paletteIndex = Math.min(paletteIndex + 1, Math.max(0, paletteItems.length - 1)); paintPalette(); return; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); paletteIndex = Math.max(0, paletteIndex - 1); paintPalette(); return; }
+    if (e.key === 'Enter') { e.preventDefault(); runPalette(paletteIndex); return; }
+  }
   const tag = e.target.tagName;
   const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable;
   if (typing) { if (e.key === 'Escape' && tag === 'INPUT') e.target.blur(); return; }
@@ -6372,6 +6561,16 @@ document.addEventListener('keydown', (e) => {
     deleteTracks([...state.selectedIds]);
   }
 });
+
+const paletteInput = $('palette-q');
+if (paletteInput) paletteInput.addEventListener('input', () => { paletteIndex = 0; paintPalette(); });
+const paletteBtn = $('palette-btn');
+if (paletteBtn) paletteBtn.onclick = () => openPalette();
+const paletteDlg = $('palette');
+if (paletteDlg) {
+  paletteDlg.addEventListener('click', (e) => { if (e.target === paletteDlg) closePalette(); });
+  paletteDlg.addEventListener('close', () => { paletteItems = []; paletteIndex = 0; });
+}
 
 /* ============ offline (service worker) ============ */
 function postToSw(msg) {

@@ -147,7 +147,8 @@ Screenshots use a small demo library, not a real one.
 - **One track, many sources.** A track row is metadata plus a ladder: owned file first, then
   free web sources, resolved on demand and verified against the catalogue before playing.
 - **Search** that resolves what a track actually is (canonical artist, title, length) and shows
-  the catalogue before any web scraping.
+  the catalogue before any web scraping. One scoped field (Both / library / web) and playlist
+  hits; a command palette (`⌘K`) for views, tracks, playlists and actions.
 - **Downloads** with a queue, retries, client fallbacks, and truncation guards so a 30 second
   preview never replaces a real track. Partial albums are completed from the real tracklist.
 - **Analysis** of BPM, key, loudness and energy with librosa, self-running in the background.

@@ -25,15 +25,16 @@
       <button class="snav-btn" data-nav="search">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         Search</button>
-      <button class="snav-btn" data-nav="askai">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5 13.9 9l5.6 1.9-5.6 1.9L12 18.5l-1.9-5.7L4.5 10.9 10.1 9z"/><path d="M18.5 16.5 19.4 19l2.5.9-2.5.9-.9 2.5-.9-2.5-2.5-.9 2.5-.9z" opacity=".7"/></svg>
-        A&amp;R</button>
       <button class="snav-btn" data-nav="songs">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="18" r="2.5"/><circle cx="17" cy="15" r="2.5"/><path d="M8.5 18V7l11-2v10"/></svg>
         Library</button>
       <button class="snav-btn" data-nav="library">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v16M9 4v16M14 5l5 15"/></svg>
         Playlists</button>
+      <div class="snav-group">Studio</div>
+      <button class="snav-btn" data-nav="askai">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5 13.9 9l5.6 1.9-5.6 1.9L12 18.5l-1.9-5.7L4.5 10.9 10.1 9z"/><path d="M18.5 16.5 19.4 19l2.5.9-2.5.9-.9 2.5-.9-2.5-2.5-.9 2.5-.9z" opacity=".7"/></svg>
+        A&amp;R</button>
       <button class="snav-btn" data-nav="djexport">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/></svg>
         <span class="snav-label">Prep</span>
@@ -52,6 +53,9 @@
     <header class="topbar">
       <button class="icon-btn" id="back" hidden aria-label="Back">&#8592;</button>
       <div class="view-title" id="view-title"></div>
+      <button class="icon-btn" id="palette-btn" title="Command palette (⌘K)" aria-label="Command palette">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h7"/><path d="m17 15 3 3-3 3" fill="none"/></svg>
+      </button>
       <button class="icon-btn" id="dl-btn" title="Downloads" aria-label="Downloads">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/></svg>
       </button>
@@ -131,9 +135,6 @@
     <button class="bn-btn" data-nav="search">
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
       <span>Search</span></button>
-    <button class="bn-btn" data-nav="askai">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.5 13.9 9l5.6 1.9-5.6 1.9L12 18.5l-1.9-5.7L4.5 10.9 10.1 9z"/></svg>
-      <span>A&amp;R</span></button>
     <button class="bn-btn" data-nav="songs">
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="18" r="2.5"/><circle cx="17" cy="15" r="2.5"/><path d="M8.5 18V7l11-2v10"/></svg>
       <span>Library</span></button>
@@ -202,6 +203,24 @@
 
   <div class="ctx" id="ctx"></div>
   <div id="ctx-bg" hidden></div>
+  <dialog class="palette" id="palette" aria-label="Command palette">
+    <input class="palette-q" id="palette-q" placeholder="Jump to a view, track or playlist" autocomplete="off" spellcheck="false">
+    <div class="palette-list" id="palette-list" role="listbox" aria-label="Commands"></div>
+    <div class="palette-foot"><span><b>↑↓</b> move</span><span><b>Enter</b> run</span><span><b>Esc</b> close</span><span><b>⌘K</b> open</span></div>
+  </dialog>
+
+  <dialog class="meta-dialog ask-dialog" id="ask-dialog" aria-labelledby="ask-title">
+    <form class="meta-form" method="dialog" id="ask-form">
+      <div class="meta-head"><h2 id="ask-title"></h2></div>
+      <p class="ask-message" id="ask-message"></p>
+      <input class="ask-input" id="ask-input" hidden>
+      <div class="meta-actions">
+        <button type="button" class="btn btn-ghost" id="ask-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="ask-ok">OK</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog class="meta-dialog" id="meta-dialog" aria-labelledby="meta-dialog-title">
     <form class="meta-form" id="meta-form" method="dialog">
       <div class="meta-head">

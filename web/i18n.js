@@ -171,6 +171,18 @@
     'Saved': 'Salvo', 'Metadata saved': 'Metadados salvos', 'Renamed': 'Renomeado',
     'Removed from playlist': 'Removida da lista', 'Deleted': 'Excluída',
     'Could not save those changes': 'Não foi possível salvar as alterações',
+    'Command palette': 'Paleta de comandos', 'Command palette (⌘K)': 'Paleta de comandos (⌘K)',
+    'move': 'mover', 'run': 'executar', 'close': 'fechar', 'open': 'abrir',
+
+    'Confirm': 'Confirmar', 'Could not copy the playback log': 'Não foi possível copiar o registro de reprodução',
+
+    'Filter this library': 'Filtrar esta biblioteca', 'Search everywhere': 'Buscar em tudo',
+    'Scope': 'Escopo', 'Both': 'Ambos', 'This library': 'Esta biblioteca',
+    'A&R · describe a set': 'A&R · descreva um set',
+ 'Jump to a view, track or playlist': 'Ir para uma tela, faixa ou lista',
+    'Play library shuffled': 'Tocar a biblioteca aleatória', 'Scan a folder': 'Escanear uma pasta',
+    'No matches': 'Nada encontrado', 'Go': 'Ir', 'Track': 'Faixa',
+
     'PLAYING FROM': 'TOCANDO DE',
     'Describe a set, a filter or a question.': 'Descreva um set, um filtro ou uma pergunta.',
     'You see the plan and the tracks as a draft.': 'Você vê o plano e as faixas como rascunho.',

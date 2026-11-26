@@ -99,9 +99,11 @@ header (`.plhead-name`, 52px; `.plhead` art 192px). A page hero is `.prep-title`
 30px. These are different containers, not the same element at a different size — do not
 copy their numbers anywhere else.
 
-The interface is one native sans (`system-ui`). No web fonts, no monospace stack
-(`--mono` maps to `--sans`). Letter-spacing is negative only on display type
-(`-.03em`) and positive only on kickers.
+The interface is one native sans (`system-ui`), plus a native display stack for the three
+containers built for it: the mast greeting, the playlist header, crate names and the Prep
+title (`--display: ui-rounded, "SF Pro Rounded", "Avenir Next", system-ui`). No web fonts,
+no monospace stack (`--mono` maps to `--sans`). Letter-spacing is negative only on display
+type (`-.03em`) and positive only on kickers.
 
 ## 5. Controls
 
@@ -202,6 +204,22 @@ one Tools menu for import, upload, recent downloads and the BPM sort. Ten equal 
 five phone rows were chrome before content. The player bar stays hidden until the first
 track starts; an empty player is a broken widget, not a state.
 
+Navigation follows the mode. Listener has Home, Search, Library, Playlists and Settings;
+DJ adds Prep. A&R sits under a **Studio** group in the sidebar and is reached from Search on
+a phone; while A&R is open, the sidebar A&R item and the bottom Search tab are both active.
+Prep disappears entirely in Listener.
+
+Search is the one global search. Its Scope control is Both, This library or Web; playlist
+hits appear above the track results, so sets are found in the same field. The Library field
+is a local filter, labelled as one, and when nothing matches it hands the query to Search
+("Search everywhere").
+
+The command palette (`⌘K` / `Ctrl-K`, and the top-bar button) jumps to a view, track or
+playlist, or runs Play library shuffled and Scan a folder. Every confirmation and prompt is
+the in-app `.ask-dialog` (message, optional field, Cancel, accent action); no native
+`confirm` or `prompt`. Playlist upload lives in the playlist `…` menu with the other
+secondary actions.
+
 Metadata is edited in a modal `<dialog>` (`.meta-dialog`): native focus trap, Escape,
 dimmed backdrop, fields on one column and exactly one accent-filled Save. The sheet menu
 is for actions; it never grows a form. A selected checkbox is a real 18px checkbox with
@@ -241,7 +259,9 @@ Gaps between sections: 22–30px. Anything larger is a deliberate hero.
 
 Fast 120ms, base 160ms, slow 240ms; `ease` unless a transform needs
 `cubic-bezier(.2,.8,.2,1)`. Hover lifts 1px, press pushes 1px, card hover lifts 2px.
-Nothing animates on load. `prefers-reduced-motion` turns the bloom and drift off.
+Nothing animates on load. The mast glow is static; the Flow beam runs once on hover, not
+forever; the thinking orb exists only while a request is in flight. `prefers-reduced-motion`
+turns the remaining motion off.
 
 ## 10. Content
 

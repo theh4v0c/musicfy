@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.0 — 2026-11-26
+
+- **Mode-driven navigation.** Listener has five destinations (Home, Search, Library,
+  Playlists, Settings); DJ adds Prep. A&R moved under a **Studio** group in the sidebar and is
+  reached from Search on a phone; A&R keeps the sidebar item and the bottom Search tab active.
+- **One scoped search.** Search's Include toggles became a Scope control (Both, This library,
+  Web) with a namespaced attribute, and playlist hits appear above track results. The Library
+  field is labelled as a local filter and hands a no-result query to Search.
+- **Command palette** on `⌘K` / `Ctrl-K` and a top-bar button: views, tracks, playlists, Play
+  library shuffled and Scan a folder, with arrow/Enter navigation.
+- **All native confirm/prompt dialogs replaced** by one in-app `.ask-dialog` (message,
+  optional field, Cancel, one accent action). The playback log copies directly instead of
+  opening a prompt.
+- Playlist Upload moved into the `…` menu with Download and the other secondary actions.
+- Motion budget: the mast glow is static, the Flow beam runs once on hover, and the thinking
+  orb exists only while a request is running.
+- A native display stack (`ui-rounded`, SF Pro Rounded, Avenir Next) for the mast greeting,
+  playlist header, crate names and Prep title. No web font.
+- DESIGN.md, DOCS.md and README record the navigation, scopes, palette, dialogs, display
+  stack and motion rules.
+
 ## 0.1.85 — 2026-11-26
 
 - **The selected mode is unmistakable.** A mode switch (Listener/DJ, DJ set/Listening) keeps

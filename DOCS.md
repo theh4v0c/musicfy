@@ -780,6 +780,15 @@ One accent fill per view: the primary action. Filters and sort controls are an e
 surface (`--bg-elev2` with `--fg`); a mode switch (Listener/DJ, DJ set/Listening) marks its
 selection with `--acc-soft` and an accent border, never a solid fill. Card play discs are
 neutral on touch.
+
+Navigation is mode-driven: Listener has five destinations (Home, Search, Library, Playlists,
+Settings), DJ adds Prep. A&R lives in the sidebar's Studio group and is one tap from Search on
+a phone; the bottom Search tab stays active while A&R is open. Search is the single global
+field, with Scope (Both / This library / Web) and playlist hits; the Library field is labelled
+as a local filter and offers "Search everywhere" when nothing matches. The command palette
+(`⌘K` or the top-bar button) jumps to views, tracks and playlists. All confirmations and
+one-line prompts use the in-app dialog, so they follow the interface language. The playlist
+`…` menu holds Upload and Download; the header keeps Play, Shuffle, Harmonic, kind and view.
 The top bar names the page. Library and Search start with their toolbar; Playlists, Settings
 and A&R open with a one-line `.page-hero`, never a kicker or a second title. Library is four ways in (Artists, Albums, Genres, For you) plus a Tools menu for import,
 upload, recent downloads and the BPM sort; the first track row is at 247px on a 1440x900
