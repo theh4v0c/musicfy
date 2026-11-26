@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.68 — 2026-11-26
+
+- Duration matching has a ceiling. A track under three minutes gave 60% slack in both
+  directions, so a 2:12 song accepted a 3:31 candidate; the rescue sweep used the same
+  window. Tolerance is now 25% (max 20s) under three minutes, 8% (max 30s) above it.
+- Ingest rejects a file far longer than the declared length (`1.35x + 20s`, `1.6x + 60s`
+  for long tracks). Before this, only truncation was rejected and a 3 hour DJ set passed as
+  a 4 minute track.
+- yt-dlp is not allowed to download past that ceiling, on the search path and the
+  last-resort query.
+- The title-only rescue requires an artist token in the title or uploader. Without it,
+  "Meninas do Leblon" became "Loiraça Belzebu do Leblon".
+- The ceiling used on the last-resort path was scoped inside the search branch; moved to
+  the function so the fallback cannot throw a ReferenceError.
+
 ## 0.1.67 — 2026-11-26
 
 - Settings: "Modo" sits on the same line as its note. The generic card rule gave every

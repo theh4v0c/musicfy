@@ -120,4 +120,49 @@ function searchPlan(artist, title) {
   return queries.map((q) => `scsearch5:${q}`).concat(queries[0] ? [`ytsearch1:${queries[0]}`] : []);
 }
 
-module.exports = { normalize, artistTokens, scoreCandidate, titleForVersion, QUALITY_RANK, blockedByAddress, searchPlan };
+
+// How far a candidate can be from the length the library knows. The old rule gave a short
+// track 60% of slack in both directions, so a 2:12 song accepted a 3:31 candidate; the
+// rescue sweep used the same window. Tight and asymmetric on purpose: a remaster differs by
+// seconds, a DJ set differs by hours.
+function durationTolerance(expected) {
+  const e = Number(expected);
+  if (!e || e <= 0) return Infinity;
+  if (e < 30) return Math.max(3, Math.min(8, e * 0.5));
+  if (e < 180) return Math.min(20, Math.max(8, e * 0.25));
+  return Math.max(8, Math.min(30, e * 0.08));
+}
+
+function durationFits(expected, actual) {
+  const e = Number(expected), a = Number(actual);
+  if (!e || !a) return true;
+  return Math.abs(a - e) <= durationTolerance(e);
+}
+
+// The ceiling is used twice: yt-dlp does not download past it, and ingest rejects a file
+// that still arrives longer. 1.35x + 20s for a normal track, looser for something long.
+function durationCeiling(expected) {
+  const e = Number(expected);
+  if (!e || e <= 0) return Infinity;
+  return e < 600 ? e * 1.35 + 20 : e * 1.6 + 60;
+}
+
+function durationTooLong(expected, actual) {
+  const e = Number(expected), a = Number(actual);
+  if (!e || !a) return false;
+  return a > durationCeiling(e);
+}
+
+// A rescue search drops the artist, so a title-only match is a different recording more
+// often than not ("Meninas do Leblon" became "Loiraça Belzebu do Leblon"). Require one
+// artist token in the title or the uploader.
+function artistInCandidate(artist, candidate) {
+  const tokens = artistTokens(artist).filter((t) => t.length > 2);
+  if (!tokens.length) return true;
+  const hay = `${normalize((candidate && candidate.title) || '')} ${
+    normalize((candidate && (candidate.uploader || candidate.channel || candidate.artist)) || '')}`;
+  return tokens.some((t) => hay.includes(t));
+}
+
+module.exports = { normalize, artistTokens, scoreCandidate, titleForVersion, QUALITY_RANK, blockedByAddress, searchPlan,
+  durationTolerance, durationFits, durationCeiling, durationTooLong, artistInCandidate };

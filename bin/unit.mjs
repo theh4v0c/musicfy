@@ -318,3 +318,27 @@ test('the planner prompt carries examples, so the model is the guide', () => {
   assert.match(pt, /"intent":"download_album"/);
   assert.match(pt, /JSON only, no prose|Responda apenas JSON/);
 });
+
+test('duration matching rejects a long mix and keeps a remaster', () => {
+  const L = require('../core/ladder.js');
+  // the 2:12 track that accepted a 3:31 candidate at 60% slack
+  assert.equal(L.durationFits(132, 211), false);
+  assert.equal(L.durationFits(132, 140), true);
+  assert.equal(L.durationFits(150, 240), false);
+  // a long track still tolerates an edition that is a few seconds longer
+  assert.equal(L.durationFits(600, 620), true);
+  // ingest: a three hour set for a four minute track
+  assert.equal(L.durationTooLong(240, 10800), true);
+  assert.equal(L.durationTooLong(240, 300), false);
+  assert.equal(L.durationCeiling(240), 344);
+});
+
+test('a rescue match must name the artist', () => {
+  const L = require('../core/ladder.js');
+  const seed = 'Wilson Simoninha, João Sabiá';
+  assert.equal(L.artistInCandidate(seed, { title: 'Loiraça Belzebu do Leblon' }), false);
+  assert.equal(L.artistInCandidate(seed, { title: 'Wilson Simoninha - Meninas do Leblon' }), true);
+  assert.equal(L.artistInCandidate(seed, { title: 'Meninas do Leblon', uploader: 'Wilson Simoninha' }), true);
+  // no artist to check: the filter does not reject
+  assert.equal(L.artistInCandidate('', { title: 'anything' }), true);
+});

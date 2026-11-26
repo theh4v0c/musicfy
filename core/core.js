@@ -9,7 +9,8 @@ const path = require('node:path');
 const os = require('node:os');
 const { createHash, timingSafeEqual } = require('node:crypto');
 const { execFile, execFileSync, spawn } = require('node:child_process');
-const { normalize, scoreCandidate, titleForVersion, QUALITY_RANK, blockedByAddress, searchPlan } = require('./ladder');
+const { normalize, scoreCandidate, titleForVersion, QUALITY_RANK, blockedByAddress, searchPlan,
+  durationFits, durationCeiling, durationTooLong, artistInCandidate } = require('./ladder');
 const ytdlp = require('./ytdlp');
 const bandcamp = require('./bandcamp');
 const mb = require('./mb');
@@ -1556,6 +1557,12 @@ function startLadderDownload(jobId, b, onDone) {
         try { fs.rmSync(dest, { force: true }); } catch {}
         return finish('unavailable', `truncated audio: ${Math.round(dur)}s of ${Math.round(declared)}s`);
       }
+      // The floor had no ceiling: a 3 hour DJ set was a valid "version" of a 4 minute track.
+      if (durationTooLong(declared, dur)) {
+        if (!b.retried) return retryBySearch(`too long: ${Math.round(dur)}s of ${Math.round(declared)}s, retrying by search`);
+        try { fs.rmSync(dest, { force: true }); } catch {}
+        return finish('unavailable', `too long: ${Math.round(dur)}s of ${Math.round(declared)}s`);
+      }
       if (dur && dur < 3) {
         try { fs.rmSync(dest, { force: true }); } catch {}
         return finish('error', `clip too short: ${Math.round(dur)}s`);
@@ -1615,6 +1622,8 @@ function startLadderDownload(jobId, b, onDone) {
     const declared = Number(b.duration) || 0;
     return declared > 30 ? Math.floor(declared * 0.6) : 2;
   };
+  // function scope: both the search path and the last-resort query use it
+  const downloadCeiling = durationCeiling(Number(b.duration) || 0);
   if (b.rung === 'search') {
     const query = [b.artist, b.title].filter(Boolean).join(' ');
     // yt-dlp exits 101 when --max-downloads stops after the first hit, even though that
@@ -1623,7 +1632,9 @@ function startLadderDownload(jobId, b, onDone) {
       .some((f) => !f.startsWith('.') && /\.(mp3|m4a|aac|opus|ogg|flac|wav)$/i.test(f) && !/\.part$/i.test(f));
     // skip covers and lessons while searching: the first hit for a track is often a
     // cover, and downloading it only to reject it left the track without audio
-    const NO_COVER = `duration > ${durationFloor()} & title !~= "(?i)(cover|karaoke|tutorial|lesson|backing track|\\btabs?\\b)"`;
+    // do not download past the ceiling in the first place: a 3 hour set for a 4 minute
+    // track wasted the bandwidth and then failed the ingest check
+    const NO_COVER = `duration > ${durationFloor()}${Number.isFinite(downloadCeiling) ? ` & duration < ${Math.floor(downloadCeiling)}` : ''} & title !~= "(?i)(cover|karaoke|tutorial|lesson|backing track|\\btabs?\\b)"`;
     const trySource = (source, next) => {
       const child = spawn(paths.YTDLP, [
         '--no-warnings', '--newline', ...audioArgs(), ...netArgs(), ...cookieArgs(),
@@ -1681,7 +1692,7 @@ function startLadderDownload(jobId, b, onDone) {
             const retry = spawn(paths.YTDLP, [
               '--no-warnings', '--newline', ...audioArgs(), ...netArgs(), ...cookieArgs(),
               '--concurrent-fragments', '8', '--retries', '2', '--fragment-retries', '2',
-              '--max-downloads', '1', '--match-filter', `duration > ${durationFloor()}`,
+              '--max-downloads', '1', '--match-filter', `duration > ${durationFloor()}${Number.isFinite(downloadCeiling) ? ` & duration < ${Math.floor(downloadCeiling)}` : ''}`,
               '-o', path.join(dir, '%(title)s.%(ext)s'), source,
             ], { stdio: ['ignore', 'pipe', 'pipe'] });
             watch(retry);
@@ -1813,13 +1824,8 @@ async function resolveBest(seed, cap = 1800, opts = {}) {
     // downloads skip SoundCloud: most tracks are DRM protected now and stall the job
     .filter((c) => !opts.download || c.rung !== 'soundcloud')
     .filter((c) => !(c.rung === 'archive' && !c.duration))   // whole collections, not tracks
-    .filter((c) => {
-      if (!expected || !c.duration) return true;
-      // kids songs and interludes differ between album and video cuts, so allow more slack there
-      const tol = expected < 30 ? Math.max(3, expected * 0.5)
-        : expected < 180 ? Math.max(20, expected * 0.6) : 8;
-      return Math.abs(c.duration - expected) <= tol;
-    })
+    // one rule, shared with the ingest guard and the rescue sweep
+    .filter((c) => durationFits(expected, c.duration))
     .map((c) => ({ ...c, isrc: (canonical && canonical.isrc) || null, verified: !!(expected && c.duration && Math.abs(c.duration - expected) <= 4) }))
     .sort((a, b) => {
       const near = (x) => (expected && x.duration ? Math.abs(x.duration - expected) : 9999);
@@ -1834,11 +1840,10 @@ async function resolveBest(seed, cap = 1800, opts = {}) {
   try {
     const loose = await ytdlp.searchYoutube({ title: searchSeed.title, artist: '' }, { limit: 8 }).catch(() => []);
     const want = expected || seed.duration || null;
-    const looseTol = !want ? 8
-      : want < 30 ? Math.max(3, want * 0.5)
-      : want < 180 ? Math.max(20, want * 0.6) : 8;
     const viable = loose
-      .filter((c) => c.duration && (!want || Math.abs(c.duration - want) <= looseTol))
+      // the artist is not in the query any more, so require it in the result
+      .filter((c) => artistInCandidate(searchSeed.artist, c))
+      .filter((c) => c.duration && durationFits(want, c.duration))
       .sort((a, b) => Math.abs((a.duration || 0) - (want || a.duration || 0)) - Math.abs((b.duration || 0) - (want || b.duration || 0)));
     if (viable[0]) return { ...viable[0], score: 30, verified: !!want };
   } catch {}
