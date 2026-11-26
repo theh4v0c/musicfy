@@ -310,3 +310,11 @@ test('storefront resolution follows settings, not a hardcoded US', () => {
   assert.equal(S.resolve({ settings: {}, env: { MUSICFY_COUNTRY: 'de' } }), 'DE');
   assert.equal(S.resolve({ settings: {}, env: {} }), 'US');
 });
+
+test('the planner prompt carries examples, so the model is the guide', () => {
+  const pt = A.planPrompt('pt-BR', '', '10 faixas de samba para uma festa');
+  assert.match(pt, /"genres":\["samba"\]/);
+  assert.match(pt, /"artists":\["Bedouin"\]/);
+  assert.match(pt, /"intent":"download_album"/);
+  assert.match(pt, /JSON only, no prose|Responda apenas JSON/);
+});

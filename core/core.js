@@ -3763,26 +3763,22 @@ const server = http.createServer(async (req, res) => {
         // pays the model round trip, so a 5 second provider cannot slow a simple command
         let plan = followUp ? agent.mergePlan(previous, q) : agent.planLocally(q);
         let source = followUp ? 'follow-up' : 'rules';
-        // a brief naming people, ages or several likes needs the model to read it: the
-        // rules planner only hears verbs. Everything keeps a local fallback.
+        // A&R is a natural-language request: when a model is configured it reads every
+        // sentence, not only the ones a regex guesses are hard. The rules planner stays as
+        // the fallback for a timeout, an empty completion or no model at all.
         const richBrief = /\b(for my|for a|for the|she likes|he likes|they like|who likes|likes|don'?t limit|birthday|wedding|party for|kids?|children|story time|year old|\d+\s*yo|about (unicorns?|robots?|dinosaurs?|space|animals?))\b/i.test(q);
-        // the model reads briefs. Counting questions are answered by the query engine,
-        // and letting the model re-label them is how 'how many tracks in Dm' became a search
-        // mood changes ("darker", "less vocals") are worth the model; counts are not
-        const moodyFollow = followUp && /\b(darker|lighter|deeper|harder|softer|faster|slower|melodic|aggressive|calm|vocal|instrumental|energetic|mellow)\b/i.test(q);
-        const askModel = llm.available() && ((plan.intent === 'build_playlist' && richBrief) || moodyFollow);
-        if (askModel) {
+        if (llm.available()) {
           try {
-            const modelPlan = await Promise.race([agent.planWithModel(llm, q, previous, lang), new Promise((r) => setTimeout(() => r(null), 9000))]);
+            const modelPlan = await Promise.race([agent.planWithModel(llm, q, previous, lang), new Promise((r) => setTimeout(() => r(null), 15000))]);
             if (modelPlan && modelPlan.intent) {
-              modelPlan.args = { ...(plan.args || {}), ...(modelPlan.args || {}), query: plan.args.query || q };
-              // the model sometimes calls an occasion a plain genre. The local heuristic
-              // knows a wedding is a brief even when the model does not.
+              // the model's plan wins what it answered; the rules fill only what is missing
+              modelPlan.args = { ...(plan.args || {}), ...(modelPlan.args || {}) };
+              modelPlan.args.query = modelPlan.args.query || plan.args.query || q;
               if (richBrief) modelPlan.args.brief = true;
               plan = modelPlan;
               source = followUp ? 'follow-up+llm' : 'llm';
             }
-          } catch (e) { console.log('[agent] model plan failed:', String(e.message || e).slice(0, 120)); }
+          } catch (e) { console.log('[agent] model plan failed:', String(e.message || e).slice(0, 160)); }
         }
         if (plan.intent === 'artist_albums') {
           const r = await agent.artistAlbums(db, plan.args.artist || plan.args.query);

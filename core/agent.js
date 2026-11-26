@@ -150,9 +150,18 @@ Rules:
 - "albums by X", "X's discography", "what albums does X have" is artist_albums, never search_tracks.
 - A brief with a person, an age, an occasion or several likes is build_playlist even without the word playlist.
 - themes must be things a catalogue can actually search: not 'unicorns' alone but "unicorn song for kids".
-- artists only real artists; never invent.
+- artists only real artists; never invent, and never put instruction words or genres there.
+- A genre or style after "de"/"of" ("uma lista de techno", "10 faixas de samba") is a genre, not an artist.
+- genres are broad names (techno, samba, jazz); themes are 1-4 short search phrases for the catalogue.
 - allowExternal is true when they say not to limit to the library, or ask for things they do not have.
-- count defaults to 20. download is true only if they ask to download.`;
+- count defaults to 20. download is true only if they ask to download.
+Examples, request -> JSON:
+"uma lista de techno que eu não tenho" -> {"intent":"build_playlist","args":{"query":"uma lista de techno que eu não tenho","count":20,"genres":["techno"],"allowExternal":true}}
+"10 faixas de samba para uma festa" -> {"intent":"build_playlist","args":{"query":"10 faixas de samba para uma festa","count":10,"genres":["samba"],"themes":["samba party"],"allowExternal":true}}
+"create a playlist based on Bedouin" -> {"intent":"build_playlist","args":{"query":"create a playlist based on Bedouin","count":20,"artists":["Bedouin"],"allowExternal":true}}
+"baixar o álbum Random Access Memories" -> {"intent":"download_album","args":{"query":"Daft Punk Random Access Memories"}}
+"quantas faixas eu tenho" -> {"intent":"report_library","args":{"query":"quantas faixas eu tenho"}}
+"algo mais escuro" (after a draft) -> {"intent":"build_playlist","args":{"query":"algo mais escuro","count":20}}`;
 
 /* The agent speaks the interface language: same endpoint, same model, a prompt written in
    the language the request arrives in, instead of translating the answer afterwards. */
@@ -188,9 +197,9 @@ const PT_SENTENCES = [
   [/^(\d+) new from the catalogue\.$/, '$1 novas do catálogo.'],
   [/^Nothing new turned up this time\.$/, 'Nada novo apareceu desta vez.'],
   [/^All from your library\.$/, 'Tudo da sua biblioteca.'],
-  [/^nothing in your library matched$/i, 'nada na sua biblioteca correspondeu'],
-  [/^(\d+) in your library fit$/, '$1 na sua biblioteca servem'],
-  [/^(.+) from your library$/, '$1 da sua biblioteca'],
+  [/^nothing in your library matched\.?$/i, 'nada na sua biblioteca correspondeu.'],
+  [/^(\d+) in your library fit\.?$/, '$1 na sua biblioteca servem.'],
+  [/^(.+) from your library\.?$/, '$1 da sua biblioteca.'],
   [/^You do not have (.+) yet, so this follows the request instead$/,
     'Você ainda não tem $1, então isto segue o pedido'],
   [/^follows (.+): (\d+) BPM, (.+)$/, 'segue $1: $2 BPM, $3'],
@@ -242,7 +251,7 @@ async function planWithModel(llm, text, previous, lang = 'en') {
     : '';
   const prompt = planPrompt(lang, context, text);
   let parsed = null;
-  for (let attempt = 0; attempt < 2 && !parsed; attempt += 1) {
+  for (let attempt = 0; attempt < 3 && !parsed; attempt += 1) {
     let raw = '';
     try { raw = String(await llm.askRaw(prompt, 20000) || ''); } catch (e) { if (attempt === 1) throw e; continue; }
     const cleaned = raw.replace(/^```(json)?/i, '').replace(/```$/, '').trim();
@@ -250,6 +259,7 @@ async function planWithModel(llm, text, previous, lang = 'en') {
     const end = cleaned.lastIndexOf('}');
     const body = start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned;
     try { parsed = JSON.parse(body); } catch { parsed = null; }
+    if (!parsed && attempt === 2) console.error('[agent] model raw:', String(raw).slice(0, 240).replace(/\s+/g, ' '));
   }
   if (!parsed) throw new Error('model returned nothing usable');
   if (!INTENTS.includes(parsed.intent)) throw new Error('unknown intent');
@@ -641,7 +651,9 @@ async function briefFill(db, { artists = [], themes = [], need = 0, childSafe = 
   const lists = [];
   for (const th of themes) {
     const res = await identity.catalog(th, { songs: childSafe ? 30 : 12, albums: 0, artists: 0 }).catch(() => ({ songs: [] }));
-    lists.push((res.songs || []).filter((t) => briefMatches(themes, t)));
+    // filter against this theme, not the union: "samba party" + "samba" required both
+    // words in every row, so the broad genre list came back empty
+    lists.push((res.songs || []).filter((t) => briefMatches([th], t)));
   }
   for (let i = 0; out.length < need && i < 12; i += 1) {
     let took = false;
@@ -743,6 +755,7 @@ async function propose(db, plan, lang = 'en') {
     const count = Math.max(1, Math.min(Number(plan.args.count) || 20, 100));
     const artists = (plan.args.artists || []).map((a) => String(a).trim()).filter(Boolean).slice(0, 4);
     const themes = (plan.args.themes || []).map((t) => String(t).trim()).filter(Boolean).slice(0, 4);
+    const genres = (plan.args.genres || []).map((g) => String(g).trim()).filter(Boolean).slice(0, 4);
     let normQ0 = q;
     try { normQ0 = require('./query').normalizePortuguese(q); } catch {}
     const onlyLocalEarly = /\b(only|just|from)\s+(my|the)\s+library\b|\bno new\b/i.test(normQ0);
@@ -752,7 +765,7 @@ async function propose(db, plan, lang = 'en') {
     const BRIEF_PT = /\b(?:para (?:a|o|minha|meu|nossa|nosso)|anivers[aá]rio|festa|casamento|crian[cç]a|filh[ao]|beb[eê]|gosta de|curte|anos de idade)\b/i;
     // the model is good at naming artists and themes, unreliable at deciding what a brief
     // is: 'a techno set for a warehouse' is not one. Decide locally.
-    const brief = BRIEF_RE.test(q) || BRIEF_PT.test(q) || artists.length > 0;
+    const brief = BRIEF_RE.test(q) || BRIEF_PT.test(q) || artists.length > 0 || themes.length > 0;
     if (brief && !themes.length && !artists.length) {
       // the model called it a brief but gave us nothing to look for: use the sentence,
       // minus the instructions, as the search phrase
@@ -760,7 +773,7 @@ async function propose(db, plan, lang = 'en') {
         .replace(/\s+/g, ' ').trim();
       if (fallback) themes.push(fallback.slice(0, 60));
     }
-    const picked = mood.select(db, q, count);
+    const picked = mood.select(db, String(plan.args.query || q), count);
     const moodNames = { question: 'Question everything', feel: 'Emotional', euphoric: 'Euphoric' };
     const styleNames = { burningman: 'Burning Man', indiedance: 'Indie dance', downtempo: 'Downtempo', techno: 'Techno', house: 'House', dance: 'Dance floor' };
     const textName = listName(q);
@@ -805,10 +818,16 @@ async function propose(db, plan, lang = 'en') {
     // "by X" means only X. "based on X" / "like X" means use X to search, not a hard
     // filter: an English request like "a playlist like Berghain" names a club, and
     // filtering every catalogue result by that word returned nothing.
-    const strictArtist = !!byName;
-    const wantedArtist = byName
-      ? byName.replace(/\b(i|we|you|don'?t|do not|have|has|not|my|the|library|please|now|that|which|are|is|and|or|new|unheard)\b.*$/i, '').trim()
-      : seedArtist(q);
+    // The model already classified the sentence. "10 faixas de samba para uma festa"
+    // normalises to "10 tracks by samba para uma festa", and treating that as an artist
+    // emptied both the library and the catalogue. A genre is not a name.
+    const modelClassified = genres.length > 0 || themes.length > 0;
+    const strictArtist = !!byName && !modelClassified;
+    const wantedArtist = modelClassified
+      ? ''
+      : byName
+        ? byName.replace(/\b(i|we|you|don'?t|do not|have|has|not|my|the|library|please|now|that|which|are|is|and|or|new|unheard)\b.*$/i, '').trim()
+        : seedArtist(q);
     let local = [];
     if (brief) {
       // the brief names people and things: match those, not the sentence
@@ -865,8 +884,11 @@ async function propose(db, plan, lang = 'en') {
           themes.push('kids dance songs');
         }
       }
+      // genres are broad names: they belong in the catalogue search even when the model
+      // also gave narrower themes. Without this, "samba para uma festa" searched only
+      // "samba party" and matched nothing.
       online = allowExternal ? await briefFill(db, {
-        artists, themes, need: Math.max(0, count - local.length), childSafe,
+        artists, themes: [...themes, ...genres], need: Math.max(0, count - local.length), childSafe,
       }) : [];
     } else {
       targetOnline = onlyLocal ? 0 : Math.max(Math.round(count * discovery), count - local.length);
@@ -874,7 +896,7 @@ async function propose(db, plan, lang = 'en') {
       if (wantedArtist) targetOnline = Math.max(targetOnline, count - local.length);
       if (targetOnline > 0 && !outsideOnly && local.length > count - targetOnline) local = local.slice(0, Math.max(0, count - targetOnline));
       // a count is not a search term: "10 ambient" used to be sent to the catalogue whole
-      const onlineQuery = (wantedArtist || searchQ || picked.ctx.text.join(' '))
+      const onlineQuery = (wantedArtist || genres.join(' ') || searchQ || picked.ctx.text.join(' '))
         .replace(/\b\d+\b/g, ' ').replace(/\s+/g, ' ').trim();
       online = await onlineFill(db, outsideOnly || wantedArtist ? [] : local,
         Math.min(targetOnline, Math.max(0, count - local.length)),
@@ -916,7 +938,10 @@ async function propose(db, plan, lang = 'en') {
         if (core && !artists.some((a) => core.toLowerCase().includes(a.toLowerCase()))) cores.push(core);
       }
       const what = [...new Set(cores)].slice(0, 3).join(', ');
-      reasonBits = [`For a brief: ${[what, artists.join(', ')].filter(Boolean).join(' · ')}.`];
+      // a genre request should name the genre, not the English catalogue phrase the model
+      // used to search it ("forró dance")
+      const subject = (!artists.length && genres.length) ? genres.join(', ') : [what, artists.join(', ')].filter(Boolean).join(' · ');
+      reasonBits = [say(lang, `For a brief: ${subject}.`, `Para um briefing: ${subject}.`)];
       if (childSafe && !onlyLocal) {
         reasonBits.push(`${online.length} clean catalogue tracks; nothing from your library, which has no explicit flag.`);
       } else if (childSafe) {
@@ -930,7 +955,7 @@ async function propose(db, plan, lang = 'en') {
     } else if (local.length) reasonBits.push(`${played} of ${local.length} you already play.`);
     // 'include some I don't have' is an instruction, not a search term
     const FILLER = /^(include|including|some|any|ones|tracks|songs|track|song|that|which|i|dont|don't|have|has|not|no|in|my|library|new|find|more|from|the|a|an|and|or|with|of|for|to|please|create|make|build|playlist|crate|set|by|like)$/i;
-    const sourceName = (searchQ || picked.ctx.text.join(' '))
+    const sourceName = (wantedArtist || genres.join(' ') || searchQ || picked.ctx.text.join(' '))
       .replace(/\b\d+\b/g, ' ')
       .replace(/\s+/g, ' ')
       .trim()

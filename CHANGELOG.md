@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.52 — 2026-11-25
+
+- A&R asks the model to read every request when one is configured, not only the sentences
+  a regex guessed were hard. The rules planner is the fallback for a timeout, an empty
+  completion or no model. Plans carry genres, themes, artists and allowExternal.
+- The real cause of "the model returned nothing usable": the planner ran with
+  `max_tokens: 700`, and a reasoning model spent the budget on hidden reasoning and
+  returned empty content with `finish_reason: length`. It now gets 2500 and reports that
+  case explicitly.
+- Genres from the plan are searched in the catalogue alongside themes, each theme filtered
+  on its own words; a genre is not treated as an artist ("10 faixas de samba…" returned 0).
+- Follow-ups read the sentence together with the request they follow.
+
 ## 0.1.51 — 2026-11-25
 
 - `bin/deploy-pi.sh` (`npm run deploy:pi`) deploys the whole app — including

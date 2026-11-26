@@ -107,9 +107,15 @@ async function ask(question, timeoutMs = 12000) {
 
 // raw completion, used by the agent planner
 async function askRaw(prompt, timeoutMs = 10000) {
-  const body = JSON.stringify({ model: (config() || {}).model || 'Auto', temperature: 0, max_tokens: 700, messages: [{ role: 'user', content: prompt }] });
+  // A reasoning model spends this budget on hidden reasoning first. At 700 the planner
+  // prompt sometimes came back with finish_reason "length" and an empty content, which
+  // looked like "the model returned nothing usable".
+  const body = JSON.stringify({ model: (config() || {}).model || 'Auto', temperature: 0, max_tokens: 2500, messages: [{ role: 'user', content: prompt }] });
   const parsed = await post(body, timeoutMs);
-  return String((((parsed.choices || [])[0] || {}).message || {}).content || '');
+  const choice = (parsed.choices || [])[0] || {};
+  const text = String((choice.message || {}).content || '').trim();
+  if (!text && choice.finish_reason === 'length') throw new Error('model ran out of tokens');
+  return text;
 }
 
 // A tiny completion, used by Settings to show whether the endpoint actually answers.
