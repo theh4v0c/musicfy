@@ -2,6 +2,9 @@
 
 Self-hosted music platform. Own catalogue, own metadata, no third party account in the playback chain.
 
+**Status: in development (pre-1.0).** Interfaces, endpoints and the schema can change between
+releases. The store deployment tracks a tagged release; check `musicfy version`.
+
 - Host: one 64-bit Linux or macOS machine, LAN `http://<host>:8710`, optionally behind an authenticated reverse proxy
 - Code `/opt/musicfy/{core,web}` on the host
 - Data `/opt/musicfy/data` (sqlite + covers + history), audio `<library root>/{web,upload,playlist-*}`
@@ -838,18 +841,44 @@ the primary path: key, scale, BPM range, year or decade, genre, owned, play coun
 free text. `POST /api/ask {q, create, name}` returns the filters it understood (as `notes`), the
 matching tracks, and, when `create` is true, a new playlist built from them.
 
-`core/llm.js` can refine that for free form wishes ("a playlist for kids", "trending hard
-techno"). It posts the sentence to the model endpoint in `data/llm.json` (`base_url`,
-`api_key`, `model`) and expects JSON filters back. The model never sees the library.
-Settings → Model endpoint probes it with a tiny completion and shows a green, red or grey
-dot. It is used only by A&R/Ask; cover lookup, search, downloads and playback do not need
-it. Its result is raced against a 4 second timer, and when it loses the local parser
-answers instead, so a slow provider costs at most 4 seconds and never correctness.
+### Language model: with and without
 
-Verified: "tracks in Dm between 120 and 130 bpm" answered in 4.08 s with 15 tracks,
-"what tracks do I have in Dm" with 22, and creating a playlist from F#m produced one with 47
-tracks. The WNL endpoint itself was answering in 1 to 2 seconds earlier in the session and
-timing out at 60 during testing, which is why the local parser leads.
+A&R is the only feature that can use a model. Everything else works without one: playback,
+playlists, downloads, covers, metadata, Prep, exports and statistics.
+
+**With an OpenAI-compatible endpoint** (`data/llm.json`, or Settings -> Model endpoint):
+
+- `core/llm.js` posts the sentence to `/v1/chat/completions` and expects JSON. The model
+  sees the sentence and nothing else: not the library, not the files, not the history.
+- `core/agent.js` builds the plan prompt (schema, rules and examples in the request
+  language), asks for `response_format: json_object` and retries twice inside a 45 s budget.
+  The answer is `{intent,args}`: `build_playlist`, `search_tracks`, `artist_albums`,
+  `download_album`, `download_missing`, `report_library`.
+- The server executes the plan. A mutation is a proposal until a human confirms
+  (`POST /api/agent/action/:id`). The model cannot write to the library.
+- What it adds: briefs by person, age or occasion ("birthday for a 7 year old who loves
+  dinosaurs"), vague mood follow-ups ("something darker"), and Portuguese phrasing that is
+  not a command.
+- Settings probes it with a tiny completion and shows a green, red or grey dot. `http://` is
+  accepted only for a localhost/LAN model; a remote endpoint must be `https://`.
+
+**Without an endpoint:** the local planner (`core/agent.js` `planLocally`, with
+`core/query.js` normalising Portuguese) reads explicit requests and returns the same
+`{intent,args}` shape:
+
+- counts and coverage, genre or family, key ("em Dm"), BPM ranges, years, play counts,
+  "never played", "not downloaded", "by X", "based on X", "in the style of X", albums,
+  downloads;
+- no network call, deterministic and fast;
+- it will not invent a theme for an occasion, read a long brief, or follow "make it darker"
+  without the previous request.
+
+Capability questions ("what can you do") and audio coverage are answered before the planner,
+deterministically, with or without a model.
+
+**When the model fails** (timeout, empty completion, unusable JSON) the rules answer and the
+UI labels the result `local`; the request is not lost. The acceptance check is
+`npm run ar:check`: five real sentences, must return tracks.
 
 UI: Search has an Ask tab. It shows the understood filters as pills, marks whether the answer
 came from the model or locally, warns when a filter was dropped, and offers "Create playlist
@@ -1025,5 +1054,6 @@ Source archive `backups/musicfy-src-<stamp>.tar.gz` on the Mac and in the Pi bac
 - Spotify is metadata only. There is no playback path through Spotify and none may be added.
 - Internet exposure only through an authenticated reverse proxy or VPN.
 - No paid services, and no paid source rung. Only free sources and optional free-account tokens.
+- The LLM endpoint is optional and free to omit; A&R's rules planner is the baseline, not a fallback bolted on.
 - Always take a source and database backup before modifying code.
 - No emojis in the UI, no em dashes in anything user facing, no marketing copy in the interface.

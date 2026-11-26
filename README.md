@@ -3,6 +3,10 @@
 Self-hosted music library with a browser player, a DJ prep bench, and a library you own.
 One Node service, one SQLite database, no npm dependencies, no account in the playback path.
 
+> **Status: in development (pre-1.0).** Interfaces, settings and the database schema can
+> change between releases. Try it on a copy of a library before depending on it in a shop.
+> `musicfy version` prints the build you are running.
+
 Runs on 64-bit Linux and macOS. Windows works through Docker Desktop or WSL2. See **Which computers it runs on** below.
 
 **Jump to:** [Install](#install) · [Which computers](#which-computers-it-runs-on) · [Screenshots](#a-look) · [What it does](#what-it-does) · [Requirements](#requirements) · [License](#license)
@@ -10,7 +14,9 @@ Runs on 64-bit Linux and macOS. Windows works through Docker Desktop or WSL2. Se
 ## Install
 
 You need a terminal and about 10 minutes. MUSICFY runs on your computer; you use it in a
-browser. You do not need an account or a cloud service. A VPS or home server is a computer
+browser. You do not need an account or a cloud service to run it; an OpenAI-compatible model
+endpoint is optional and only A&R uses it (see [Language model](#language-model-optional)).
+A VPS or home server is a computer
 too: install it the same way, keep it on `127.0.0.1`, and reach it through SSH or a VPN.
 
 ### macOS
@@ -158,6 +164,28 @@ Screenshots use a small demo library, not a real one.
   exports. A&R, search, playlists and the model endpoint stay. DJ shows the full bench.
   The mode is in Settings → Mode.
 
+## Language model (optional)
+
+MUSICFY does not need one. Playback, playlists, downloads, covers, metadata, Prep, exports and
+statistics never call a model. A&R is the only feature that can use one, and it works without
+it.
+
+| With an OpenAI-compatible endpoint | Without one |
+|---|---|
+| Free-form briefs: "a playlist for a 7 year old who loves dinosaurs", "something darker than the last set", Portuguese that is not a command | Explicit requests: counts, genre or family, key, BPM range, year, play count, "never played", "not downloaded", "by X", "based on X", albums, downloads |
+| The model reads the sentence and returns `{intent,args}`; the server does the search, never the model | The built-in rules read the sentence directly: no network call, faster and deterministic |
+| Configure it in Settings -> Model endpoint; **Test connection** shows the state. `http://` is accepted only for a model on localhost or the LAN; a remote one must be `https://` | A&R still answers; it will not invent themes for an occasion or follow a vague mood |
+
+The model sees the sentence and nothing else: not the library, not the files, not the
+history. If it times out (45 s), returns unusable JSON, or is not configured, A&R falls back
+to the rules and labels the answer `local` instead of `model`.
+
+Catalogue metadata comes from free public APIs (the iTunes storefront and Deezer); audio
+comes from yt-dlp and SoundCloud; none of that needs an account. A YouTube `cookies.txt` is
+optional and only for addresses YouTube blocks.
+
+See `DOCS.md` ("Language model: with and without") for the exact contract.
+
 ## Layout
 
 ```
@@ -225,7 +253,9 @@ service and keeps MUSICFY on `127.0.0.1`.
 ## Design rules
 
 1. Metadata may come from anywhere. Playback never goes through a paid service.
-2. No paid APIs, no subscriptions, no registrations that can expire.
+2. No paid APIs, subscriptions or registrations. Two optional free exceptions: an
+   OpenAI-compatible model endpoint for A&R (or none), and a YouTube cookies file for a
+   blocked address.
 3. Back up source and database before changing code.
 4. Keep the interface plain: no emojis, no em dashes, no marketing copy.
 
