@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.83 — 2026-11-26
+
+- Library and Search no longer open with a page hero: their toolbar is the header. The first
+  track row is 247px on a 1440x900 desktop (was 343) and 342px on an iPhone 13, about half
+  the visible height (was 438, 66%). The one-line hero remains on Playlists, Settings, A&R
+  and Prep.
+- DESIGN.md and DOCS.md record the rule and the measured positions.
+
 ## 0.1.82 — 2026-11-26
 
 - **One accent per view.** Filters, sort controls and segmented tabs are an elevated neutral

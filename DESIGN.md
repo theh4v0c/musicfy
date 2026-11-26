@@ -181,7 +181,7 @@ kicker: `never in picks`.
 | container | radius | padding | background | use |
 |---|---|---|---|---|
 | `.mast` hero | `--r-xl` 18px | 16/20 | `--bg-elev` + light bloom | home only |
-| `.page-hero` | `--r-lg` 14px | 20/22 (13/15 on phone) | `--bg-elev` + right-edge texture | every main view: one line of context, no repeated page name |
+| `.page-hero` | `--r-lg` 14px | 20/22 (13/15 on phone) | `--bg-elev` + right-edge texture | Playlists, Settings and A&R: one line of context |
 | `.prep-hero` | `--r-lg` 14px | 20/22 (13/15 on phone) | `--bg-elev` + right-edge texture | Prep only: title plus the coverage meter |
 | `.pcard` / card | `--r-lg` | 12px | `--bg-elev` | playlists, albums, artists |
 | `.answer`, `.inline-panel`, `.set-card` | `--r-lg` | 14–16px | `--bg-elev` | blocks inside a page |
@@ -191,10 +191,10 @@ kicker: `never in picks`.
 Cards are 150px wide in a rail on desktop, 128px on a phone, with the artwork square
 and the title under it. A rail scrolls sideways; it does not wrap.
 
-The page name lives in the top bar, once. A `.page-hero` is one contextual line, never a
-kicker or a second title; Library, Search, Playlists, Settings and A&R all follow it, and a
-hidden `h1` keeps the document outline correct. Prep is the exception: its card carries the
-page's identity and its coverage meter.
+The page name lives in the top bar, once. Library and Search start with their toolbar: the
+first track row is the content. Playlists, Settings and A&R open with a `.page-hero` holding
+one line of context, never a kicker or a second title. Prep is the exception: its card
+carries the page's identity and its coverage meter. A hidden `h1` keeps the outline correct.
 
 The Library toolbar is four ways into the library (Artists, Albums, Genres, For you) plus
 one Tools menu for import, upload, recent downloads and the BPM sort. Ten equal pills across

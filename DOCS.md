@@ -776,10 +776,10 @@ the filter is cleared when leaving Songs so it cannot leak into Search.
 
 One accent fill per view: the primary action. Filters, sort controls and segmented tabs are an
 elevated neutral surface (`--bg-elev2` with `--fg`), and card play discs are neutral on touch.
-The top bar names the page; a `.page-hero` is one line of context, never a kicker or a second
-title. Library is four ways in (Artists, Albums, Genres, For you) plus a Tools menu for import,
-upload, recent downloads and the BPM sort; the first track row is at 343px on a 1440x900
-desktop and 438px on a 390x844 phone, down from 467 and 578. The player bar stays hidden until
+The top bar names the page. Library and Search start with their toolbar; Playlists, Settings
+and A&R open with a one-line `.page-hero`, never a kicker or a second title. Library is four ways in (Artists, Albums, Genres, For you) plus a Tools menu for import,
+upload, recent downloads and the BPM sort; the first track row is at 247px on a 1440x900
+desktop and 342px on an iPhone 13 (about half the visible height), down from 467 and 578. The player bar stays hidden until
 the first track starts, and A&R opens with three steps instead of an empty canvas.
 
 ## AI features (all four, working)

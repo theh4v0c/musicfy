@@ -2300,7 +2300,6 @@ async function renderSongs(push = true) {
   $('view-title').textContent = tr('Library');
   const v = $('view');
   v.innerHTML = `<h1 class="sr-only">Library</h1>
-    ${pageHero('', '', 'Every track you own, with the audio state and the filters that matter.')}
     <div class="songs-chips" id="songs-chips"></div>
     <div class="lib-actions songs-head">
       <input class="search" id="songs-q" placeholder="Filter by title, artist or album" autocomplete="off">
@@ -3850,7 +3849,6 @@ async function renderSearch() {
   $('view-title').textContent = tr('Search');
   const v = $('view');
   v.innerHTML = `<h1 class="sr-only">Search</h1>
-    ${pageHero('', '', 'Your library and the open web, resolved before anything plays.')}
     <div class="search-wrap">
       <div class="search-field">
         <input class="search" id="q" placeholder="Search tracks, artists and albums" autocomplete="off">
