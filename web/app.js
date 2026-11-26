@@ -3541,7 +3541,10 @@ async function runAssistant(text, out, stateEl, box) {
         if (a.plan) state.arLast = { question: a.question || text, plan: a.plan };
         stateEl.classList.remove('thinking');
         const src = String(a.source || 'rules');
-        stateEl.textContent = `${String(a.plan.intent).replace(/_/g, ' ')} · ${/llm/.test(src) ? 'model' : 'local'}${/follow/.test(src) ? ' · follow-up' : ''}${/outside/.test(src) ? ' · outside' : ''}`;
+        // a help answer has no plan; reading a.plan.intent threw and the answer never showed
+        stateEl.textContent = a.plan
+          ? `${String(a.plan.intent).replace(/_/g, ' ')} · ${/llm/.test(src) ? 'model' : 'local'}${/follow/.test(src) ? ' · follow-up' : ''}${/outside/.test(src) ? ' · outside' : ''}`
+          : (src === 'help' ? 'What I can do' : src);
         if (!a.action) {
           const said = document.createElement('div');
           said.className = 'ai-said';

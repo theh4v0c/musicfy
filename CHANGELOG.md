@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.62 — 2026-11-26
+
+- The capability panel renders. A help answer carries no `plan`, and the status line read
+  `a.plan.intent`, threw, and swallowed the answer. The four examples now work end to end.
+
 ## 0.1.61 — 2026-11-26
 
 - "What can you do" renders its answer. The agent returns the capability text as `answer`,
