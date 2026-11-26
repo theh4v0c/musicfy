@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.60 — 2026-11-26
+
+- The draft reason no longer starts with ". ": an empty reason returned a lone period.
+- `deploy:all` checks a host behind the token login with the token and accepts either the
+  login page (200) or the root page (200) as "up"; it also restarts the systemd unit
+  instead of `musicfy restart`, which refuses while the unit is active.
+
 ## 0.1.59 — 2026-11-26
 
 - The A&R examples are generic and static: "create a playlist of 20 tracks", "tracks between

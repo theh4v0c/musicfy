@@ -119,7 +119,8 @@ function reason(ctx, picked) {
   else if (ctx.reference) bits.push(`You do not have ${ctx.reference} yet, so this follows the request instead`);
   if (!picked.length) bits.push('nothing in your library matched');
   else if (picked.length < ctx.count) bits.push(`${picked.length} in your library fit`);
-  return bits.join('. ') + '.';
+  // an empty reason is empty: "" + '.' produced a leading ". " in the draft sentence
+  return bits.length ? bits.join('. ') + '.' : '';
 }
 
 function select(db, query, count) {
