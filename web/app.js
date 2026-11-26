@@ -243,7 +243,7 @@ function ctxRename(t) {
   closeCtx(true);
   openMetaDialog({
     title: 'Edit metadata',
-    subtitle: [t.artist, t.title].filter(Boolean).join(' — '),
+    subtitle: [t.artist, t.title].filter(Boolean).join(' - '),
     fields: [
       { key: 'title', label: 'Title', value: t.title },
       { key: 'artist', label: 'Artist', value: t.artist },
@@ -419,7 +419,7 @@ $('ctx').addEventListener('click', async (e) => {
     return;
   }
   if (act === 'offline') {
-    if (!('serviceWorker' in navigator)) { toast('Offline playback needs HTTPS — open the https:// URL', 6000); return; }
+    if (!('serviceWorker' in navigator)) { toast('Offline playback needs HTTPS - open the https:// URL', 6000); return; }
     const on = !(state.offlineIds && state.offlineIds.has(t.id));
     postToSw(on ? { type: 'cache-track', id: t.id } : { type: 'uncache-track', id: t.id });
     toast(on ? 'Saving for offline…' : 'Removed from offline', 4000);
@@ -437,7 +437,7 @@ $('ctx').addEventListener('click', async (e) => {
         pp.done();
         if (!j) { toast('Upgrade is still running in the background', 6000); return; }
         if (j.state === 'done' && /kept the higher quality/i.test(j.detail || '')) {
-          toast('No better copy found — your current file is the best available', 7000);
+          toast('No better copy found - your current file is the best available', 7000);
           return;
         }
         if (j.state === 'done') {
@@ -569,7 +569,7 @@ async function deleteTracks(input) {
     [...document.querySelectorAll('.view, .list-scroll')].forEach((el, i) => { if (scrolls[i] != null) el.scrollTop = scrolls[i]; });
     window.scrollTo(0, winY);
   });
-  toast(`Deleted ${deleted} track${deleted === 1 ? '' : 's'}${wasCurrent ? ' — the current one keeps playing until the end' : ''}`, 5000);
+  toast(`Deleted ${deleted} track${deleted === 1 ? '' : 's'}${wasCurrent ? ' - the current one keeps playing until the end' : ''}`, 5000);
 }
 
 function findTrack(rowEl) {
@@ -683,7 +683,7 @@ async function watchRepair(url) {
     }
     if (j.same) parts.push(`${j.same} already correct`);
     if (j.failed) parts.push(`${j.failed} could not be changed`);
-    toast(`Metadata: ${j.done || j.total} checked — ${parts.join(', ') || 'nothing to do'}`, 9000);
+    toast(`Metadata: ${j.done || j.total} checked - ${parts.join(', ') || 'nothing to do'}`, 9000);
     if (j.fixed) {
       if (Array.isArray(j.changes) && j.changes.length) {
         for (const c of j.changes) patchTrackEverywhere(c.id, c);
@@ -850,7 +850,7 @@ function renderSidebar() {
     await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, kind: 'listen' }) });
     afterWrite();
     await loadPlaylists();
-    toast('Listening playlist created — switch it to DJ set when you want it prepped');
+    toast('Listening playlist created - switch it to DJ set when you want it prepped');
   };
   el.appendChild(add);
   const imp = document.createElement('button');
@@ -979,7 +979,7 @@ function openPlaylistMenu(p, x, y) {
       return;
     }
     if (act === 'pl-upgrade') {
-      try { const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/upgrade`, { method: 'POST' }); toast(r.queued ? `${r.queued} higher quality downloads queued` : 'No low-bitrate tracks to upgrade', 6000); if (r.queued) toast(`${r.queued} queued — see Downloads for progress`, 6000); } catch { toast('Could not queue upgrades', 4000); }
+      try { const r = await api(`/api/playlists/${encodeURIComponent(p.id)}/upgrade`, { method: 'POST' }); toast(r.queued ? `${r.queued} higher quality downloads queued` : 'No low-bitrate tracks to upgrade', 6000); if (r.queued) toast(`${r.queued} queued - see Downloads for progress`, 6000); } catch { toast('Could not queue upgrades', 4000); }
       return;
     }
     if (act === 'pl-m3u') { window.location.href = `/api/playlists/${encodeURIComponent(p.id)}/export.m3u`; return; }
@@ -1461,12 +1461,12 @@ function toggleSuggestionPreview(s, anchor, opts = {}) {
         : await api('/api/ladder/download', { method: 'POST', headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ rung: 'search', title: s.title, artist: s.artist, duration: s.duration }) });
       // the panel stays open: this is the confirmation, and it names the track
-      say(`Downloading “${s.title}”${s.artist ? ' — ' + s.artist : ''} · 0%`);
+      say(`Downloading “${s.title}”${s.artist ? ' - ' + s.artist : ''} · 0%`);
       const res = await watchDownload({
         trackId: s.id || null, job: r.job,
         onTick: (pct, state2) => {
           if (state2 === 'done') return;
-          say(`Downloading “${s.title}”${s.artist ? ' — ' + s.artist : ''} · ${pct}%`);
+          say(`Downloading “${s.title}”${s.artist ? ' - ' + s.artist : ''} · ${pct}%`);
         },
       });
       if (res.ok) {
@@ -1478,11 +1478,11 @@ function toggleSuggestionPreview(s, anchor, opts = {}) {
       } else if (res.why === 'still running') {
         dl.disabled = false;
         dl.textContent = 'Still downloading';
-        say('Still running in the background — it will land in your library', '');
+        say('Still running in the background - it will land in your library', '');
       } else {
         dl.disabled = false;
         dl.textContent = 'Retry download';
-        say(`Could not get “${s.title}”${res.why ? ' — ' + String(res.why).replace(/^error\s*/i, '').slice(0, 70) : ''}`, 'bad');
+        say(`Could not get “${s.title}”${res.why ? ' - ' + String(res.why).replace(/^error\s*/i, '').slice(0, 70) : ''}`, 'bad');
       }
     } catch (e) {
       dl.disabled = false;
@@ -1701,7 +1701,7 @@ async function openPlaylist(pid, push = true) {
           <button class="btn btn-ghost" id="pl-harm" title="Order by harmonic key progression (Camelot)">Harmonic</button>
           <div class="kind-switch" id="pl-kind" role="group" aria-label="How this playlist is used">
             <button class="mode-tab${p.kind === 'listen' ? '' : ' on'}" data-kind="dj" title="Prepped for DJ export">DJ set</button>
-            <button class="mode-tab${p.kind === 'listen' ? ' on' : ''}" data-kind="listen" title="Playback only — Prep leaves it alone">Listening</button>
+            <button class="mode-tab${p.kind === 'listen' ? ' on' : ''}" data-kind="listen" title="Playback only - Prep leaves it alone">Listening</button>
           </div>
           <button class="btn btn-ghost" id="pl-upload">Upload tracks</button>
           ${viewSwitch('playlist', plView())}
@@ -1740,8 +1740,8 @@ async function openPlaylist(pid, push = true) {
         if (row) row.kind = kind;
         document.querySelectorAll('#pl-kind .mode-tab').forEach((x) => x.classList.toggle('on', x.dataset.kind === kind));
         toast(kind === 'listen'
-          ? 'Listening only — Prep will not analyse this playlist'
-          : 'DJ set — Prep will analyse it for export', 5000);
+          ? 'Listening only - Prep will not analyse this playlist'
+          : 'DJ set - Prep will analyse it for export', 5000);
       } catch { toast('Could not change how this playlist is used', 4000); }
     };
   });
@@ -1832,7 +1832,7 @@ async function openPlaylist(pid, push = true) {
       dl.disabled = true;
       try {
         const r = await api(`/api/playlists/${encodeURIComponent(pid)}/download`, { method: 'POST' });
-        toast(`${r.queued} downloads queued — progress stays in the Downloads tab`, 6000);
+        toast(`${r.queued} downloads queued - progress stays in the Downloads tab`, 6000);
       } catch { toast('could not queue downloads', 5000); }
       dl.disabled = false;
     };
@@ -2014,7 +2014,7 @@ async function renderLibrary() {
   $('lib-newpl').onclick = async () => {
     const name = prompt(tr('New playlist name:')); if (!name) return;
     await api('/api/playlists', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, kind: 'listen' }) });
-    afterWrite(); await loadPlaylists(); renderLibrary(); toast('Listening playlist created — switch it to DJ set when you want it prepped');
+    afterWrite(); await loadPlaylists(); renderLibrary(); toast('Listening playlist created - switch it to DJ set when you want it prepped');
   };
 }
 
@@ -2053,7 +2053,7 @@ async function renderDjExport() {
     <div class="prep-hero">
       <div class="prep-kicker">EXPORT</div>
       <div class="prep-title">Prep</div>
-      <p class="prep-sub">The playlists you play out — BPM, key, beat grid and cue points ready to export. Listening playlists stay off this page.</p>
+      <p class="prep-sub">The playlists you play out - BPM, key, beat grid and cue points ready to export. Listening playlists stay off this page.</p>
       <div class="prep-meter"><div class="prep-meter-bar"><i id="prep-fill" style="width:0%"></i></div><span id="prep-cov">…</span></div>
       <div class="prep-actions">
         <button class="btn btn-primary" id="dj-analyze">Analyze unanalyzed</button>
@@ -2178,7 +2178,7 @@ async function renderDjExport() {
              <div class="crate-acts">
                <button class="crate-btn" data-rb title="Download a ZIP with the audio + rekordbox XML">Rekordbox</button>
                <button class="crate-btn" data-tr title="Download a ZIP with the audio + Traktor NML">Traktor</button>
-               <button class="crate-btn" data-usb title="Pioneer device export: export.pdb, analysis files and audio — extract to the root of a FAT32 USB">USB</button>
+               <button class="crate-btn" data-usb title="Pioneer device export: export.pdb, analysis files and audio - extract to the root of a FAT32 USB">USB</button>
              </div>`}`;
       }
       const missingPrep = prepWork(p);
@@ -2803,8 +2803,8 @@ async function renderSettings() {
       </section>
       <section class="set-card" data-tone="acc">
         <h2>Model endpoint</h2>
-        <p class="set-note">A language model turns one sentence into a structured request: key, BPM, year, genre, plays, count and order. MUSICFY sends the sentence and nothing else — never your library, your files or your listening history.</p>
-        <p class="set-note">Two callers only. A&amp;R uses it when the request is a brief: a person, an age, an occasion, several likes ("a birthday set for a 7 year old who loves dinosaurs"). Ask uses it when the question is fuzzy ("something darker", "less vocals"). Everything else — genres, keys, tempo, years, counts — is parsed by the built-in rules, without a network call.</p>
+        <p class="set-note">A language model turns one sentence into a structured request: key, BPM, year, genre, plays, count and order. MUSICFY sends the sentence and nothing else - never your library, your files or your listening history.</p>
+        <p class="set-note">Two callers only. A&amp;R uses it when the request is a brief: a person, an age, an occasion, several likes ("a birthday set for a 7 year old who loves dinosaurs"). Ask uses it when the question is fuzzy ("something darker", "less vocals"). Everything else - genres, keys, tempo, years, counts - is parsed by the built-in rules, without a network call.</p>
         <p class="set-note">Without an endpoint both fall back to those rules, which cover the explicit requests and miss the conversational ones. Covers, metadata, search inside your library, downloads and playback never use it.</p>
         <p class="set-note llm-status" id="set-llm-status"><span class="llm-dot" data-state="idle"></span> <span>Checking...</span></p>
         <button class="btn btn-ghost" id="set-llm-test" type="button">Test connection</button>
@@ -2835,7 +2835,7 @@ async function renderSettings() {
         </label>
         <p class="set-note dj-only">Display only. Exports always write musical notation, which is what Rekordbox and Traktor read.</p>
         <label class="set-check"><input type="checkbox" id="set-normalize"${s.normalize_loudness ? ' checked' : ''}> Normalize loudness</label>
-        <p class="set-note">Turns loud tracks down towards a common level, using the loudness measured during analysis. It only ever attenuates — it cannot add distortion and it never rewrites a file. iOS ignores per-track volume, so on a phone or in a car this does nothing.</p>
+        <p class="set-note">Turns loud tracks down towards a common level, using the loudness measured during analysis. It only ever attenuates - it cannot add distortion and it never rewrites a file. iOS ignores per-track volume, so on a phone or in a car this does nothing.</p>
         <label>Target level
           <select id="set-target">
             <option value="-12"${String(s.target_loudness) === '-12' ? ' selected' : ''}>-12 dB (loud)</option>
@@ -3189,7 +3189,7 @@ async function renderSettings() {
       if (durations) bits.push(`${durations} duration${durations === 1 ? '' : 's'} filled`);
       maint(bits.length
         ? `Repair: ${bits.join(' · ')}${r.unknown_artists ? ` · ${r.unknown_artists} still have no artist` : ''}`
-        : `Repair: nothing to fix — years, albums and titles are clean${r.unknown_artists ? `; ${r.unknown_artists} tracks have no artist` : ''}.`,
+        : `Repair: nothing to fix - years, albums and titles are clean${r.unknown_artists ? `; ${r.unknown_artists} tracks have no artist` : ''}.`,
         bits.length ? 'ok' : 'muted');
       state.allTracks = null;
       bustCache();
@@ -3212,7 +3212,7 @@ async function renderSettings() {
           maint(`Genres: ${j.checked} artists checked · ${j.tagged} newly tagged · ${st.tagged} of ${st.total} tracks have a genre`);
         } else {
           maint(j.error
-            ? `Genres: stopped — ${j.error}`
+            ? `Genres: stopped - ${j.error}`
             : `Genres: ${j.checked} artists checked · ${j.tagged} newly tagged · ${j.families} families learned · ${st.tagged} of ${st.total} tracks now have a genre`, j.error ? 'bad' : 'ok');
           state.allTracks = null;
           break;
@@ -3234,7 +3234,7 @@ async function renderSettings() {
         maint(`Covers: ${r.tried} tried, ${r.failed} could not be saved. Check that ffmpeg is installed and the data folder is writable, then run musicfy doctor.`, 'bad');
       } else {
         const names = (r.missing_titles || []).slice(0, 3).map((t) => `“${String(t).slice(0, 40)}”`).join(', ');
-        maint(`Covers: ${r.tried} tried, none matched${names ? ` — the catalogue has nothing for ${names}` : ''}. ${r.remaining} still without art.`, 'warn');
+        maint(`Covers: ${r.tried} tried, none matched${names ? ` - the catalogue has nothing for ${names}` : ''}. ${r.remaining} still without art.`, 'warn');
       }
       state.allTracks = null;
     } catch (e) { maint(`Cover repair failed: ${e.message || 'unknown'}`, 'bad'); }
@@ -3248,15 +3248,15 @@ async function renderSettings() {
       if (!preview.groups && !preview.extra_files) {
         const versions = Number(preview.versions) || 0;
         maint(versions
-          ? `Duplicates: none — ${versions} group${versions === 1 ? '' : 's'} are different versions (live, remaster, remix) and were left alone.`
-          : 'Duplicates: none — no two rows share artist, title, album and length.', 'ok');
+          ? `Duplicates: none - ${versions} group${versions === 1 ? '' : 's'} are different versions (live, remaster, remix) and were left alone.`
+          : 'Duplicates: none - no two rows share artist, title, album and length.', 'ok');
         setDedupe.disabled = false;
         return;
       }
       const bits = [];
       if (preview.tracks) bits.push(`${preview.tracks} duplicate track${preview.tracks === 1 ? '' : 's'}`);
       if (preview.extra_files) bits.push(`${preview.extra_files} extra file${preview.extra_files === 1 ? '' : 's'}`);
-      const names = (preview.sample || []).slice(0, 3).map((x) => `${x.artist ? x.artist + ' — ' : ''}${x.title}`).join('; ');
+      const names = (preview.sample || []).slice(0, 3).map((x) => `${x.artist ? x.artist + ' - ' : ''}${x.title}`).join('; ');
       if (!confirm(`${tr('Remove')} ${bits.join(' ' + tr('and') + ' ')}? ${tr('The best copy is kept, playlists and likes move to it, and the extra files are deleted from disk.')}${names ? `\n\n${names}` : ''}`)) { setDedupe.disabled = false; return; }
       const r = await api('/api/maintenance/dedupe', { method: 'POST' });
       maint(`Duplicates: ${r.removed} track${r.removed === 1 ? '' : 's'} merged, ${r.files} file${r.files === 1 ? '' : 's'} removed`, 'ok');
@@ -3681,7 +3681,7 @@ async function runAssistant(text, out, stateEl, box) {
       out.appendChild(wrap);
     } catch (e) {
       stateEl.classList.remove('thinking');
-      stateEl.textContent = 'That did not go through — try a plain phrase like “tracks between 120 and 130 BPM”.';
+      stateEl.textContent = 'That did not go through - try a plain phrase like “tracks between 120 and 130 BPM”.';
     }
   }
 
@@ -3940,7 +3940,7 @@ async function renderSearch() {
                 body: JSON.stringify({ q: `download the album ${al.name} by ${al.artist}` }) })
                 .then((r) => {
                   if (r.action) renderActionCard(r, box, null);
-                  else { toast(r.spoken || 'Queueing album', 9000); if (r.data && r.data.queued) toast(`${r.data.queued} queued — see Downloads for progress`, 6000); }
+                  else { toast(r.spoken || 'Queueing album', 9000); if (r.data && r.data.queued) toast(`${r.data.queued} queued - see Downloads for progress`, 6000); }
                 })
                 .catch(() => toast('Could not queue that album', 4000));
             };
@@ -4337,7 +4337,7 @@ function trow(t, i, list) {
       : t.streamable
         ? `<div class="trbadge rung-yt" title="Plays from the source when you press play."><b>STREAM</b></div>`
         : `<div class="trbadge rung-mirror" title="Metadata only. Press the download icon to get the audio."><b>Not downloaded</b></div>`}
-    <div class="tdur">${t.duration ? fmt(t.duration) : '—'}${state.offlineIds && state.offlineIds.has(t.id) ? '<span class="offline-dot" title="Available offline"></span>' : ''}</div>
+    <div class="tdur">${t.duration ? fmt(t.duration) : '-'}${state.offlineIds && state.offlineIds.has(t.id) ? '<span class="offline-dot" title="Available offline"></span>' : ''}</div>
     ${hasAudio(t)
       ? `<button class="tmore" title="More options">${IC.dots}</button>`
       : `<button class="tmore tdl" title="Download this track">${IC.download}</button>`}`;
@@ -4688,7 +4688,7 @@ async function renderAlbum(name, push = true) {
     try {
       const r = await api('/api/albums/download', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
       toast(r.queued ? `Downloading ${r.queued} of ${r.total} tracks` : 'Everything on this album is already here', 6000);
-      if (r.queued) { toast(`${r.queued} queued — see Downloads for progress`, 6000); refreshView(); }
+      if (r.queued) { toast(`${r.queued} queued - see Downloads for progress`, 6000); refreshView(); }
     } catch { toast('Could not queue the album', 4000); }
     btn.textContent = label;
     btn.disabled = false;
@@ -4709,14 +4709,14 @@ async function renderAlbum(name, push = true) {
       const r = await api('/api/tracks/delete', {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ids: list.map((t) => t.id) }),
       });
-      toast(`Album deleted — ${r.deleted} track${r.deleted === 1 ? '' : 's'} removed`, 5000);
+      toast(`Album deleted - ${r.deleted} track${r.deleted === 1 ? '' : 's'} removed`, 5000);
       state.allTracks = null;
       bustCache();
       nav('library');
     } catch (e) { toast(`Could not delete the album: ${e.message || 'unknown'}`, 6000); }
   };
   $('g-upgrade').onclick = async () => {
-    try { const r = await api(`/api/albums/${encodeURIComponent(name)}/upgrade`, { method: 'POST' }); toast(r.queued ? `${r.queued} higher quality downloads queued` : 'No low-bitrate tracks to upgrade', 6000); if (r.queued) toast(`${r.queued} queued — see Downloads for progress`, 6000); } catch { toast('Could not queue upgrades', 4000); }
+    try { const r = await api(`/api/albums/${encodeURIComponent(name)}/upgrade`, { method: 'POST' }); toast(r.queued ? `${r.queued} higher quality downloads queued` : 'No low-bitrate tracks to upgrade', 6000); if (r.queued) toast(`${r.queued} queued - see Downloads for progress`, 6000); } catch { toast('Could not queue upgrades', 4000); }
   };
   $('g-pick').onclick = async () => {
     state.albumPick = !state.albumPick;
@@ -4739,7 +4739,7 @@ async function renderAlbum(name, push = true) {
       if (!chosen.length) { toast('Nothing selected', 3000); return; }
       let n = 0;
       for (const t of chosen) { try { await api(`/api/tracks/${t.id}/download`, { method: 'POST' }); n += 1; } catch {} }
-      toast(`Downloading ${n} tracks — progress stays in the Downloads tab`, 6000);
+      toast(`Downloading ${n} tracks - progress stays in the Downloads tab`, 6000);
     }
   };
 }
@@ -6020,12 +6020,12 @@ async function openAlbumCoverPicker(album, artist) {
   } catch {}
   const options = (d && d.options) || [];
   if (!options.length) {
-    toast(`No cover candidates for ${artist ? `${artist} — ` : ''}${album}`, 6000);
+    toast(`No cover candidates for ${artist ? `${artist} - ` : ''}${album}`, 6000);
     return;
   }
   markCtxOpen();
   const m = $('ctx');
-  m.innerHTML = `<div class="ctx-title">${esc(album)} — choose a cover</div>` +
+  m.innerHTML = `<div class="ctx-title">${esc(album)} - choose a cover</div>` +
     options.map((o) => `<button class="ctx-cover" data-cover="${esc(o.cover)}">
       <span class="ctx-cover-art" style="background-image:url('${esc(o.cover)}')"></span>
       <span class="ctx-cover-name">${esc(o.artist || '')} · ${esc(o.name || '')}${o.tracks ? ` · ${o.tracks} tracks` : ''}</span>
@@ -6087,7 +6087,7 @@ async function uploadFiles(files) {
   let replaced = 0;
   let why = '';
   const dups = [];
-  const t = toastPersistent(`Uploading ${total} file${total > 1 ? 's' : ''} — duplicates are skipped…`);
+  const t = toastPersistent(`Uploading ${total} file${total > 1 ? 's' : ''} - duplicates are skipped…`);
   for (let i = 0; i < total; i += 1) {
     const f = files[i];
     t.update(`Uploading ${i + 1} of ${total}: ${f.name.slice(0, 34)}`);
@@ -6096,7 +6096,7 @@ async function uploadFiles(files) {
       ok += 1;
       if (d.replaced) replaced += 1;
     } catch (e) {
-      if (e.duplicate) { duplicates += 1; dups.push(e.artist ? `${e.artist} — ${e.title}` : (e.title || f.name)); }
+      if (e.duplicate) { duplicates += 1; dups.push(e.artist ? `${e.artist} - ${e.title}` : (e.title || f.name)); }
       else { failed += 1; why = e.message || 'upload failed'; }
     }
   }
@@ -6106,7 +6106,7 @@ async function uploadFiles(files) {
   const bits = [];
   if (ok) bits.push(`Added ${ok} track${ok === 1 ? '' : 's'}${replaced ? ` (${replaced} replaced a lower-quality copy)` : ''}`);
   if (duplicates) bits.push(`${duplicates} already in your library${dups.length ? ` (${dups.slice(0, 2).join('; ')}${dups.length > 2 ? '…' : ''})` : ''}`);
-  if (failed) bits.push(`${failed} failed — ${why}`);
+  if (failed) bits.push(`${failed} failed - ${why}`);
   t.done(bits.join(' · ') || 'Nothing to upload', duplicates || failed ? 10000 : 8000);
   if (duplicates && !ok) toast('Those tracks were not uploaded again. Use "Find higher quality" to replace a copy.', 9000);
   await loadPlaylists().catch(() => {});

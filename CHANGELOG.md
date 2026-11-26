@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.70 — 2026-11-26
+
+- The interface follows its own rule: no em dashes. 60 occurrences in toasts, notes,
+  separators and the Portuguese dictionary replaced with a plain hyphen, and
+  `design-check` now fails when one comes back.
+- The paid-API rule says what it means: no paid API is required; a model endpoint you run
+  yourself (or a free one) and a cookies file from your own YouTube session are optional,
+  never required.
+
 ## 0.1.69 — 2026-11-26
 
 - A YouTube sign-in request is treated as temporary. When every source fails and YouTube

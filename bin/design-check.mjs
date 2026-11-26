@@ -26,6 +26,13 @@ const cssNoComments = css.replace(/\/\*[\s\S]*?\*\//g, '');
 const tokens = JSON.parse(fs.readFileSync(tokensPath, 'utf8'));
 
 const problems = [];
+
+/* the interface is plain text: no em dashes (README design rule 4) */
+for (const file of ['web/app.js', 'web/i18n.js', 'web/index.html']) {
+  const text = fs.readFileSync(path.join(root, file), 'utf8');
+  const hit = text.split('\n').findIndex((line) => line.includes('\u2014'));
+  if (hit >= 0) problems.push(`${file}:${hit + 1}: em dash in interface text`);
+}
 // -.04em and -0.04em are the same number; compare canonically
 const norm = (v) => String(v).replace(/\s+/g, '').toLowerCase().replace(/(-?)0\.(\d)/g, '$1.$2');
 

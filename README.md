@@ -271,9 +271,9 @@ service and keeps MUSICFY on `127.0.0.1`.
 ## Design rules
 
 1. Metadata may come from anywhere. Playback never goes through a paid service.
-2. No paid APIs, subscriptions or registrations. Two optional free exceptions: an
-   OpenAI-compatible model endpoint for A&R (or none), and a YouTube cookies file for a
-   blocked address.
+2. No paid APIs, subscriptions or registrations are required. Optional and never required:
+   a model endpoint you run yourself (or a free one) for A&R, and a cookies file from your
+   own YouTube session for a server address YouTube blocks.
 3. Back up source and database before changing code.
 4. Keep the interface plain: no emojis, no em dashes, no marketing copy.
 
