@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.65 — 2026-11-26
+
+- A read after a write cannot come from a cache. `nocache` requests set `cache: no-store`
+  on the fetch, JSON responses carry `cache-control: no-store`, and the service worker
+  passes those through without storing them. A deleted playlist disappeared from the list
+  only after a reload; now the refresh after the delete is honest.
+
 ## 0.1.64 — 2026-11-26
 
 - The service worker answered `/api/playlists` (and tracks/likes) from its cache first.

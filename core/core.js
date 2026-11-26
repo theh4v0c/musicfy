@@ -1875,7 +1875,7 @@ const json = (res, code, obj) => {
   const ae = String((res.req && res.req.headers['accept-encoding']) || '');
   const wantGzip = body.length > 1024 && /\bgzip\b/.test(ae);
   const out = wantGzip ? compressJson(body) : body;
-  const headers = { 'content-type': 'application/json', 'content-length': out.length, vary: 'Accept-Encoding' };
+  const headers = { 'content-type': 'application/json', 'content-length': out.length, vary: 'Accept-Encoding', 'cache-control': 'no-store' };
   if (wantGzip) headers['content-encoding'] = 'gzip';
   res.writeHead(code, headers);
   res.end(out);

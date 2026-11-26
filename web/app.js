@@ -119,7 +119,10 @@ async function api(p, opts) {
   const lang = (window.I18N && window.I18N.lang) || 'en';
   let r;
   try {
-    r = await fetch(p, { signal: ctl.signal, ...(opts || {}), headers: { 'x-mf-lang': lang, ...((opts && opts.headers) || {}) } });
+    // a read after a write must not come from the HTTP cache either: the app cache was
+    // bypassed, the transport was not, so a deleted playlist could still be in the answer
+    const fetchOpts = { signal: ctl.signal, ...(opts || {}), cache: bypass ? 'no-store' : 'default', headers: { 'x-mf-lang': lang, ...((opts && opts.headers) || {}) } };
+    r = await fetch(p, fetchOpts);
   } catch (e) {
     if (cached) return cached.body;
     throw e;
