@@ -59,6 +59,20 @@ function diskVersion() {
   try { return JSON.parse(fs.readFileSync(path.join(APP_ROOT, 'package.json'), 'utf8')).version || APP_VERSION; } catch { return APP_VERSION; }
 }
 
+// One capability answer for both boxes. The agent used to send "what can you do" to the
+// planner, which filed it as a search for the word "do".
+function helpPayload(lang) {
+  const pt = String(lang || '').toLowerCase().startsWith('pt');
+  return {
+    answer: pt
+      ? 'Eu procuro na sua biblioteca e monto coisas a partir dela. Encontro faixas por tonalidade, tempo, ano, gênero, número de reproduções ou se o áudio está baixado; busco por título, artista ou álbum; crio uma lista com qualquer um desses filtros; informo a cobertura da biblioteca; e baixo um álbum ou o áudio que falta. Não navego na web nem respondo perguntas gerais.'
+      : 'I search your library and build things from it. I can find tracks by key, tempo, year, genre, play count or whether the audio is downloaded; find by title, artist or album; create a playlist from any of those filters; report library coverage; and download a missing album or missing audio. I do not browse the web or answer general questions.',
+    examples: pt
+      ? ['faixas em Dm entre 120 e 130 bpm', 'techno que nunca toquei', 'criar uma lista com 20 faixas ambient', 'quanto da minha biblioteca tem áudio', 'baixar o álbum Random Access Memories']
+      : ['tracks in Dm between 120 and 130 bpm', 'techno I never played', 'create a playlist of 20 ambient tracks', 'how much of my library has audio', 'download the album Random Access Memories'],
+  };
+}
+
 async function updateInfo(check = false) {
   const onDisk = diskVersion();
   const out = {
@@ -3762,6 +3776,18 @@ const server = http.createServer(async (req, res) => {
         const lang = String(b.lang || req.headers['x-mf-lang'] || 'en').toLowerCase().startsWith('pt') ? 'pt-BR' : 'en';
         const q = agent.cleanQuery(String(b.q || '')).trim();
         if (!q) return json(res, 400, { error: 'q required' });
+        const ql0 = q.toLowerCase().replace(/[?.!]+$/, '').trim();
+        // These two have one correct answer. A planner that reads "what can you do" as a
+        // search for the word "do" is not helping anybody; answer them here.
+        if (/^(help|capabilities|what can you do|what do you do|what can you help with|how can you help|who are you|what is this|ajuda|o que (?:voc[eê]|vc) (?:pode|faz|sabe)(?: fazer)?|quem (?:é|e) (?:voc[eê]|vc))$/.test(ql0)) {
+          const help = helpPayload(lang);
+          return json(res, 200, { question: q, source: 'help', lang, count: 0, results: [], filters: null, answer: help.answer, examples: help.examples });
+        }
+        if (/(?:how much of my library has audio|how many tracks have audio|quanta da minha biblioteca tem [aá]udio|quantas faixas (?:da|na) (?:minha )?biblioteca t[eê]m [aá]udio)/i.test(q)) {
+          const result = await agent.execute(db, { intent: 'report_library', args: { query: '' } }, { enqueueTrackDownload }, lang);
+          if (result && result.spoken) result.spoken = agent.localizeReason(result.spoken, lang);
+          return json(res, 200, { question: q, plan: { intent: 'report_library', args: { query: '' } }, source: 'rules', lang, ...result });
+        }
         // a short "make it darker" points at the previous draft, not at the library
         const previous = (b.previous && b.previous.plan) ? b.previous : null;
         const followUp = !!previous && agent.isFollowUp(q);
@@ -4027,27 +4053,10 @@ const server = http.createServer(async (req, res) => {
           // Portuguese capability questions reached the text parser and answered with a search
           || /^(ajuda|socorro|o que (?:voc[eê]|vc) (?:pode|faz|sabe)(?: fazer)?|quem (?:é|e) (?:voc[eê]|vc)|para que serve|como (?:voc[eê]|vc) (?:ajuda|funciona))$/.test(ql);
         if (wantsHelp) {
-          const examples = askLang === 'pt-BR'
-            ? [
-              'faixas em Dm entre 120 e 130 bpm',
-              'techno que nunca toquei',
-              'criar uma lista com 20 faixas ambient',
-              'quanto da minha biblioteca tem áudio',
-              'baixar o álbum Random Access Memories',
-            ]
-            : [
-              'tracks in Dm between 120 and 130 bpm',
-              'techno I never played',
-              'create a playlist of 20 ambient tracks',
-              'how much of my library has audio',
-              'download the album Random Access Memories',
-            ];
-          const answer = askLang === 'pt-BR'
-            ? 'Eu procuro na sua biblioteca e monto coisas a partir dela. Encontro faixas por tonalidade, tempo, ano, gênero, número de reproduções ou se o áudio está baixado; busco por título, artista ou álbum; crio uma lista com qualquer um desses filtros; informo a cobertura da biblioteca; e baixo um álbum ou o áudio que falta. Não navego na web nem respondo perguntas gerais.'
-            : 'I search your library and build things from it. I can find tracks by key, tempo, year, genre, play count or whether the audio is downloaded; find by title, artist or album; create a playlist from any of those filters; report library coverage; and download a missing album or missing audio. I do not browse the web or answer general questions.';
+          const help = helpPayload(askLang);
           return json(res, 200, {
             question, source: 'help', lang: askLang, count: 0, results: [], filters: null,
-            answer, examples,
+            answer: help.answer, examples: help.examples,
           });
         }
 

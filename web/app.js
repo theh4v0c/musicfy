@@ -3648,7 +3648,7 @@ async function runAssistant(text, out, stateEl, box) {
       out.appendChild(wrap);
     } catch (e) {
       stateEl.classList.remove('thinking');
-      stateEl.textContent = 'That did not go through — try a plain phrase like “tracks in Dm between 120 and 130 bpm”.';
+      stateEl.textContent = 'That did not go through — try a plain phrase like “tracks between 120 and 130 BPM”.';
     }
   }
 
@@ -3658,13 +3658,15 @@ async function renderAskAi() {
   state.view = 'askai'; state.playlistId = null; state.genreFilter = null; renderSidebar();
   $('view-title').textContent = 'A&R';
   const v = $('view');
+  // Generic on purpose: a fresh install must show examples that make sense without the
+  // owner's library, artists or taste. No real artist names, no library-derived prompts.
   v.innerHTML = `<h1 class="sr-only">A&amp;R</h1><div class="search-wrap">
-      <input class="search" id="ai-q" placeholder="Ask, build or teach: 20 dark techno I don't have · no Imagine Dragons" autocomplete="off">
+      <input class="search" id="ai-q" placeholder="Describe what you want: a playlist, a filter or a question" autocomplete="off">
       <div class="ask-hint">
-        <button class="ask-ex" data-ask="10 ambient tracks I don't have">10 ambient tracks I don't have</button>
-        <button class="ask-ex" data-ask="build a crate of 10 tracks by Aphex Twin">build a crate of 10 tracks by Aphex Twin</button>
+        <button class="ask-ex" data-ask="create a playlist of 20 tracks">create a playlist of 20 tracks</button>
+        <button class="ask-ex" data-ask="tracks between 120 and 130 BPM">tracks between 120 and 130 BPM</button>
         <button class="ask-ex" data-ask="how much of my library has audio">how much of my library has audio</button>
-        <button class="ask-ex" data-ask="tracks in Dm between 120 and 130 bpm">tracks in Dm between 120 and 130 bpm</button>
+        <button class="ask-ex" data-ask="what can you do">what can you do</button>
       </div>
       <div class="ladder-state" id="ai-state"></div>
     </div><div id="ai-res"></div><div id="ask-discover"></div>`;
@@ -3688,20 +3690,9 @@ async function renderAskAi() {
   v.querySelectorAll('.ask-ex').forEach((b) => b.onclick = () => { box.value = b.textContent; run(box.value); });
   box.focus();
   renderExternalInto($('ask-discover'));
-  // dynamic examples: your top artist this week, your key, your tempo
-  api('/api/ask/suggest', { nocache: true }).then((d) => {
-    const hint = v.querySelector('.ask-hint');
-    if (!hint || !d.prompts || !d.prompts.length) return;
-    hint.innerHTML = '';
-    for (const label of d.prompts.slice(0, 4)) {
-      const b = document.createElement('button');
-      b.className = 'ask-ex';
-      b.dataset.ask = label;          // canonical English for the planner
-      b.textContent = tr(label);      // what the person reads and keeps in the box
-      b.onclick = () => { box.value = b.textContent; run(label); };
-      hint.appendChild(b);
-    }
-  }).catch(() => {});
+  // The examples stay generic. They used to be replaced on load with "10 tracks by
+  // <artist from this library>", which reads as a bug on a fresh install and as a
+  // presumption on someone else's.
 }
 
 async function renderSearch() {
@@ -3716,8 +3707,8 @@ async function renderSearch() {
         <span class="search-status status" id="search-status" hidden></span>
       </div>
       <div class="ask-hint" id="search-hints">
-        <button class="ask-ex" data-ar data-ask="tracks in Dm between 120 and 130 bpm">tracks in Dm between 120 and 130 bpm</button>
-        <button class="ask-ex" data-ar data-ask="create a playlist of 10 ambient tracks">create a playlist of 10 ambient tracks</button>
+        <button class="ask-ex" data-ar data-ask="create a playlist of 20 tracks">create a playlist of 20 tracks</button>
+        <button class="ask-ex" data-ar data-ask="tracks between 120 and 130 BPM">tracks between 120 and 130 BPM</button>
         <button class="ask-ex" data-ar data-ask="how much of my library has audio">how much of my library has audio</button>
       </div>
       <div class="mode-tabs" id="mode-tabs">

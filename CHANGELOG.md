@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.59 — 2026-11-26
+
+- The A&R examples are generic and static: "create a playlist of 20 tracks", "tracks between
+  120 and 130 BPM", "how much of my library has audio", "what can you do". The library-derived
+  prompts ("10 tracks by <artist from this library>") are gone; on a fresh install they read
+  as a bug, and on someone else's they presume taste.
+- "What can you do" and the audio-coverage question are answered deterministically before
+  the planner, which had been filing them as searches for the words "do" and "library".
+- No leading ". " when the mood has no reason sentence.
+
 ## 0.1.58 — 2026-11-26
 
 - `deploy:all` prints the asset URL each host serves (`app.js?v=…`); the check's grep was

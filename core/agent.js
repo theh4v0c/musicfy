@@ -955,7 +955,7 @@ async function propose(db, plan, lang = 'en') {
     ];
     const missing = tracks.filter((t) => !t.owned).length;
     const played = local.filter((t) => Number(t.plays) > 0).length;
-    let reasonBits = [picked.reason];
+    let reasonBits = [picked.reason].filter(Boolean);
     if (brief) {
       const cores = [];
       for (const t of themes) {

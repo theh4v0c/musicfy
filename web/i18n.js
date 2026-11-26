@@ -305,6 +305,11 @@
     'Write Traktor tags (crate)': 'Gravar tags do Traktor (lista)',
     'Download to device (zip)': 'Baixar para o aparelho (zip)',
     'Catalogue country': 'País do catálogo',
+    'Describe what you want: a playlist, a filter or a question': 'Descreva o que você quer: uma lista, um filtro ou uma pergunta',
+    'create a playlist of 20 tracks': 'criar uma lista com 20 faixas',
+    'tracks between 120 and 130 BPM': 'faixas entre 120 e 130 BPM',
+    'what can you do': 'o que você pode fazer',
+
     'Two letters. The catalogue differs by country: a release in Brazil can be missing from the US store. Empty follows the country of the city above. Set it while travelling when you want another storefront; Deezer is queried too, so the answer does not depend on one store.':
       'Duas letras. O catálogo muda por país: um lançamento no Brasil pode faltar na loja dos EUA. Em branco segue o país da cidade acima. Defina ao viajar quando quiser outra loja; o Deezer também é consultado, então a resposta não depende de uma só loja.',
 
