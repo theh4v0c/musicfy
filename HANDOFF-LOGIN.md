@@ -1,6 +1,7 @@
 # Handoff: put MUSICFY behind a login for the store
 
-For the agent working on the store VPS. Read `FLEET.md` first. This is a hosting task: no
+For the agent working on the store VPS. Read `FLEET.md` first; the machine's address
+and user are in the private fleet note, not here. This is a hosting task: no
 application code changes, no library changes, no settings changed beyond the ones named
 here. If a step needs a decision from the owner, stop and ask.
 
@@ -8,9 +9,9 @@ here. If a step needs a decision from the owner, stop and ask.
 
 | | |
 |---|---|
-| host | `SERVER_HOST`, `root@SERVER_IP` (ssh alias `mf-vps`) |
-| code | `/root/.musicfy/app` (git checkout, release `0.1.58`) |
-| data | `/root/.musicfy` (database, covers, audio under `/root/.musicfy/owned`) |
+| host | the store VPS, ssh alias `mf-vps`; its address and user are in the private fleet note |
+| code | `$HOME/.musicfy/app` (git checkout, current release) |
+| data | `$HOME/.musicfy` (database, covers, audio under `$HOME/.musicfy/owned`) |
 | process | PID file, `musicfy start|stop|restart|status`; **no systemd unit** |
 | listen | `MUSICFY_BIND=127.0.0.1`, port `8710` |
 | login | `MUSICFY_TOKEN` — not set today |
@@ -51,7 +52,7 @@ Decisions:
    ss -ltnp | grep 8710     # 127.0.0.1:8710, never 0.0.0.0
    curl -fsS http://127.0.0.1:8710/ | head -3
    ```
-4. **DNS.** At the registrar (Hostinger hPanel): `A music -> SERVER_IP`, TTL 300. Add an
+4. **DNS.** At the registrar (Hostinger hPanel): `A music -> <server public IP>`, TTL 300. Add an
    `AAAA` **only** if the server answers on the IPv6 address; a stale AAAA makes the page
    hang before falling back. Verify with `dig +short A music.example.com`.
 5. **Firewall.** Allow SSH, 80, 443; nothing else. `ufw status` must not list 8710.
@@ -75,7 +76,7 @@ Decisions:
 9. **Verify from outside**, on mobile data, not the store Wi-Fi:
    - the URL loads over HTTPS and shows the login page;
    - the password works and the player loads;
-   - `curl -m 5 http://SERVER_IP:8710/health` times out or is refused;
+   - `curl -m 5 http://<server public IP>:8710/health` times out or is refused;
    - Settings shows the version from `FLEET.md` and "up to date".
 10. **Survive a reboot.** The app is a PID file, not a service. Either install the unit
     (`musicfy service install`) or confirm whatever starts it now is enabled; `caddy` must

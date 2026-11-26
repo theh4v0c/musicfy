@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* A&R acceptance check: real sentences, real catalogue, same endpoint the UI uses.
  *
- *   BASE=http://LAN_IP:8710 node bin/ar-check.mjs
+ *   BASE=http://HOST:8710 node bin/ar-check.mjs
  *
  * Fails when a request does not produce the expected intent and at least one track.
  */

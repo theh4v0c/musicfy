@@ -3,12 +3,15 @@
 Read this before touching a machine. It exists because two installs drifted once: the VPS
 was updated, the Pi was not, and the version on screen disagreed with the release.
 
+Addresses, hostnames and the owner's paths live in `backups/private-docs/FLEET.local.md`,
+which is not tracked. This file is public and carries only roles and mechanisms.
+
 ## Hosts
 
 | name | ssh | code root | data root | service | how it updates |
 |---|---|---|---|---|---|
-| VPS (store) | `mf-vps` (`root@SERVER_IP`) | `/root/.musicfy/app` | `/root/.musicfy` | PID file, `musicfy` | `musicfy update` (git tag `main`) |
-| Pi (home) | `plm` (`PI_USER@PI_HOST`) | `/opt/musicfy` | `/opt/musicfy` (audio at `EXTERNAL_MOUNT/owned`) | `musicfy-core` systemd unit | rsync of the tree, then restart |
+| VPS (store) | `mf-vps` (ssh alias, see the private note) | `$HOME/.musicfy/app` | `$HOME/.musicfy` | PID file, `musicfy` | `musicfy update` (git tag `main`) |
+| Pi (home) | `plm` (ssh alias) | `/opt/musicfy` | `/opt/musicfy` (audio on an external mount) | `musicfy-core` systemd unit | rsync of the tree, then restart |
 
 The VPS is a git checkout. The Pi is a bundle: its `package.json` is part of the deploy, and
 that is what the app reports as its version.
