@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.1.82 — 2026-11-26
+
+- **One accent per view.** Filters, sort controls and segmented tabs are an elevated neutral
+  surface; the accent fill is the primary action. Playlist Play is the only orange fill on
+  that page, Search's Library/Web toggles are states, and card play discs are neutral on
+  touch.
+- **Library is content first.** Ten equal chips became four ways in (Artists, Albums, Genres,
+  For you) plus a Tools menu for import, upload, recent downloads and the BPM sort. Counts
+  have thousands separators. First track row: 343px on desktop (was 467), 438px on phone
+  (was 578).
+- **The page name appears once.** The top bar owns it; a page hero is one line of context,
+  with no kicker and no repeated title. Library and Search lose about 60px of chrome.
+- Type: the card artist is the meta role (11px, was the 13.33px browser default), genre, key
+  and table labels start at 10.5px, and the title/artist hierarchy is visible again.
+- The top bar pill is on Library only (not Playlists or Settings), the back arrow is on
+  detail pages only, and static page titles are translated in a Portuguese session.
+- The player bar is hidden until the first track starts. Settings cards size to their
+  content. A&R opens with a three-step starter instead of a void.
+- Playlist cards say "em audição" instead of "· listening", and the playlist header meta
+  ("2 precisam de análise") is translated.
+- DESIGN.md and DOCS.md record the accent rule, the one-line hero, the toolbar and the
+  measured first-row positions.
+
 ## 0.1.81 — 2026-11-26
 
 - **A model base URL keeps its path.** OpenRouter serves at `/api/v1`; the endpoint builder

@@ -52,7 +52,10 @@ Two consequences worth stating plainly:
 | `--ok` | `#3fc57d` | success, ready |
 | `--liked` | `#ff4d6d` | liked hearts only |
 
-Rules: one accent colour. Accent fills the primary action only — never two filled
+Rules: one accent colour. Accent fills the primary action only. Filters, sort controls and
+segmented tabs are an elevated neutral surface (`--bg-elev2`) with `--fg`; they are states,
+not actions, and must not borrow the primary fill. On a touch screen every card play disc is
+neutral until it is tapped. Never two filled
 actions in one row. A selected filter or sort chip is a state, not an action: it uses the
 `--acc-soft` wash with `--acc` text and the normal border, so a row can show its selection
 without competing with the button that does something. Text is `--fg`, `--fg-soft` or
@@ -85,7 +88,8 @@ it uses these two tokens, not a new colour or a new letter-spacing.
 | section | `--fs-section` | 19px | 600 | `.sec-title` |
 | card title | `--fs-card` | 14px | 600 | `.tcard-name`, `.pcard-name` |
 | row title | `--fs-row` | 14.5px | 600 | `.tt` |
-| meta | `--fs-meta` | 11px | 400 | `.tcard-sub`, `.pcard-sub`, `.talbum-line` |
+| meta | `--fs-meta` | 11px | 400 | `.tcard-sub`, `.pcard-sub`, `.tcard-artist`, `.talbum-line` |
+| data label | (none) | 10.5px | 600 | `.genrechip`, `.keychip`, `.thead` |
 | kicker | `--fs-kicker` | 9.5px | 400, letter-spacing .18em, uppercase | `.prep-kicker` |
 
 **Display type is the one exception**, and only for the two containers built for it:
@@ -177,7 +181,8 @@ kicker: `never in picks`.
 | container | radius | padding | background | use |
 |---|---|---|---|---|
 | `.mast` hero | `--r-xl` 18px | 16/20 | `--bg-elev` + light bloom | home only |
-| `.page-hero` / `.prep-hero` | `--r-lg` 14px | 20/22 (13/15 on phone) | `--bg-elev` + right-edge texture | every main view: kicker, page name, one line |
+| `.page-hero` | `--r-lg` 14px | 20/22 (13/15 on phone) | `--bg-elev` + right-edge texture | every main view: one line of context, no repeated page name |
+| `.prep-hero` | `--r-lg` 14px | 20/22 (13/15 on phone) | `--bg-elev` + right-edge texture | Prep only: title plus the coverage meter |
 | `.pcard` / card | `--r-lg` | 12px | `--bg-elev` | playlists, albums, artists |
 | `.answer`, `.inline-panel`, `.set-card` | `--r-lg` | 14–16px | `--bg-elev` | blocks inside a page |
 | `.trow` row | `--r-sm` | 6px 12px | transparent, `--bg-elev` on hover | track list |
@@ -186,9 +191,15 @@ kicker: `never in picks`.
 Cards are 150px wide in a rail on desktop, 128px on a phone, with the artwork square
 and the title under it. A rail scrolls sideways; it does not wrap.
 
-The page name lives in the top bar. No view repeats it in a hero: Library, Search,
-Playlists, Settings and A&R start with their content. A hidden `h1` keeps the document
-outline correct.
+The page name lives in the top bar, once. A `.page-hero` is one contextual line, never a
+kicker or a second title; Library, Search, Playlists, Settings and A&R all follow it, and a
+hidden `h1` keeps the document outline correct. Prep is the exception: its card carries the
+page's identity and its coverage meter.
+
+The Library toolbar is four ways into the library (Artists, Albums, Genres, For you) plus
+one Tools menu for import, upload, recent downloads and the BPM sort. Ten equal pills across
+five phone rows were chrome before content. The player bar stays hidden until the first
+track starts; an empty player is a broken widget, not a state.
 
 Metadata is edited in a modal `<dialog>` (`.meta-dialog`): native focus trap, Escape,
 dimmed backdrop, fields on one column and exactly one accent-filled Save. The sheet menu

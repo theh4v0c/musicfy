@@ -274,7 +274,7 @@ main.main { grid-area: main; display: flex; flex-direction: column; overflow: hi
 .btn-ghost:hover { color: var(--fg); border-color: var(--fg-mute); }
 
 /* track table */
-.thead { display: grid; grid-template-columns: 34px 46px minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) 92px 34px 94px 48px 34px; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 10px; letter-spacing: .14em; color: var(--fg-mute); }
+.thead { display: grid; grid-template-columns: 34px 46px minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) 92px 34px 94px 48px 34px; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 10.5px; letter-spacing: .14em; color: var(--fg-mute); }
 .trow { display: grid; grid-template-columns: 34px 46px minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) 92px 34px 94px 48px 34px; gap: 10px; align-items: center; padding: 6px 12px; border-radius: var(--r-sm); cursor: pointer; user-select: none; }
 .trow > * { min-width: 0; }
 .tt, .ta, .tartist, .talbum, .tadded { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -302,7 +302,7 @@ main.main { grid-area: main; display: flex; flex-direction: column; overflow: hi
 .trow:hover .tno-num { display: none; }
 .trow:hover .tno-play { display: inline-flex; border-color: var(--line); }
 /* harmonic key chips: same colour family for neighbouring keys */
-.genrechip { align-self: flex-start; margin: 2px 0 0; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0)); color: var(--fg-soft); border-radius: var(--r-pill); padding: 1px 8px; font-size: 9px; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; font-family: inherit; }
+.genrechip { align-self: flex-start; margin: 2px 0 0; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0)); color: var(--fg-soft); border-radius: var(--r-pill); padding: 1px 8px; font-size: var(--fs-micro); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; font-family: inherit; }
 .genrechip:hover { color: var(--fg); border-color: var(--fg-mute); }
 /* genre and catalogue cards get a coloured tile instead of a flat grey box */
 #browse-grid .pcard-art.ph, #cat-albums .cat-art, #cat-artists .cat-art { background: linear-gradient(145deg, var(--bg-elev2), var(--bg-elev)); }
@@ -352,7 +352,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .set-mode .set-note { margin: 8px 0 0; max-width: 760px; }
 .set-mode .kind-switch { margin-left: auto; }
 .set-wrap { width: 100%; max-width: 1100px; margin: 0 auto; }
-.set-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; align-items: stretch; }
+.set-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; align-items: start; }
 .set-card { height: 100%; }
 .set-card { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px; background: var(--bg-elev); }
 .set-card h2 { display: flex; align-items: center; gap: 8px; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--fg-soft); margin: 0 0 12px; }
@@ -400,7 +400,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .set-check { flex-direction: row !important; align-items: center; gap: 10px !important; text-transform: none !important; letter-spacing: 0 !important; font-size: 13px !important; color: var(--fg) !important; }
 .set-check input { width: 20px; height: 20px; }
 .ai-said { font-size: 14px; color: var(--fg); margin: 6px 0 10px; line-height: 1.45; }
-.keychip { border: none; border-radius: var(--r-pill); padding: 1px 7px; font-size: 9.5px; font-weight: 600; letter-spacing: .02em; cursor: pointer; color: #0c0c0c; font-family: inherit;
+.keychip { border: none; border-radius: var(--r-pill); padding: 1px 7px; font-size: 10.5px; font-weight: 600; letter-spacing: .02em; cursor: pointer; color: #0c0c0c; font-family: inherit;
   background-image: linear-gradient(180deg, rgba(255,255,255,.55), rgba(0,0,0,.10));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 1px 2px rgba(0,0,0,.35);
   text-shadow: 0 1px 0 rgba(255,255,255,.25); }
@@ -450,7 +450,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
 /* 'font: inherit' here reset the size of every styled link inside a button: it beat
    .np-artist's own font-size on specificity, so 15px rendered as 16px. Family only. */
 button.alink { padding: 0; border: 0; background: none; font-family: inherit; color: inherit; text-align: left; }
-.tcard-artist { display: block; width: 100%; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tcard-artist { display: block; width: 100%; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-meta); color: var(--fg-mute); }
 @media (max-width: 920px) { .tcard-artist { max-width: 128px; } }
 .volume-locked .vol { display: none; }
 .th { cursor: pointer; user-select: none; }
@@ -603,6 +603,7 @@ main.main { transition: margin-right .18s ease; }
 .q-empty { color: var(--fg-mute); font-size: 12.5px; padding: 10px 0; }
 
 /* player bar */
+.playerbar[hidden] { display: none; }
 .playerbar { grid-area: player; background: var(--bg-elev); border-top: 1px solid var(--line); display: grid;
   grid-template-columns: minmax(200px, 1fr) minmax(280px, 560px) minmax(160px, 1fr); align-items: center; gap: 16px; padding: 0 18px; }@media (max-width: 1240px){
   .playerbar { grid-template-columns: minmax(180px, 1fr) minmax(240px, 520px) minmax(120px, 1fr); gap: 10px; }
@@ -653,7 +654,11 @@ main.main { transition: margin-right .18s ease; }
 .ctx-title { font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; color: var(--fg-mute); padding: 8px 12px 4px; }
 .ctx-sep { height: 1px; background: var(--line); margin: 5px 4px; }
 .tcard .tcard-play { position: absolute; right: 10px; bottom: 32px; width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--acc); color: var(--on-acc); box-shadow: 0 8px 24px rgba(0,0,0,.5); opacity: 0; transform: translateY(4px); transition: opacity .14s ease, transform .14s ease; }
-.tcard:hover .tcard-play, .tcard:focus-within .tcard-play { opacity: 1; transform: none; }@media (hover: none){ .tcard .tcard-play { opacity: 1; transform: none; background: var(--bg-elev2); border: 1px solid var(--line); color: var(--fg); box-shadow: 0 8px 24px rgba(0,0,0,.45); } }
+.tcard:hover .tcard-play, .tcard:focus-within .tcard-play { opacity: 1; transform: none; }@media (hover: none){
+  .tcard .tcard-play { opacity: 1; transform: none; background: var(--bg-elev2); border: 1px solid var(--line); color: var(--fg); box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+  .pcard .pcard-play { opacity: 1; transform: none; background: var(--bg-elev2); border: 1px solid var(--line); color: var(--fg); box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+  .trow.lrow .lrow-play { background: var(--bg-elev2); border: 1px solid var(--line); color: var(--fg); }
+}
 .pb-menu { flex: none; }
 .pb-left, .mini, .tcard { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .pb-left { cursor: default; }
@@ -665,6 +670,23 @@ main.main { transition: margin-right .18s ease; }
 .action-chip:hover { border-color: var(--acc); background: var(--acc-soft); }
 .action-chip b { font-size: var(--fs-action); font-weight: 600; white-space: nowrap; }
 .action-chip span { font-size: var(--fs-micro); letter-spacing: .04em; color: var(--fg-mute); text-transform: none; }
+/* the library's secondary actions live here, not in the row of primary chips */
+.chip-tools { position: relative; display: inline-flex; }
+.chip-tools > summary { list-style: none; cursor: pointer; }
+.chip-tools > summary::-webkit-details-marker { display: none; }
+.chip-tools[open] > summary { border-color: var(--acc); }
+.chip-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 50; min-width: 250px; max-width: calc(100vw - 48px);
+  padding: 6px; display: flex; flex-direction: column; gap: 2px; background: var(--bg-elev); border: 1px solid var(--line);
+  border-radius: var(--r-md); box-shadow: 0 18px 44px rgba(0,0,0,.55); }
+.chip-menu .action-chip { justify-content: flex-start; border-color: transparent; background: none; min-height: var(--h-tab); padding: 0 10px; }
+.chip-menu .action-chip:hover { background: var(--bg-elev2); border-color: var(--line); }
+/* A&R before the first request: say what happens, in three lines */
+.ask-start { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 18px 0 6px; }
+.ask-start-step { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--line);
+  border-radius: var(--r-md); background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,0)); color: var(--fg-soft); font-size: 12px; line-height: 1.45; }
+.ask-start-step b { color: var(--acc); font-family: var(--mono); font-size: 11px; font-weight: 600; flex: none; }
+@media (max-width: 760px) { .ask-start { grid-template-columns: 1fr; } }
+
 /* albums for an artist: a two column list, one column on a phone, names that truncate */
 /* catalogue cards (artist, album) are cards, not pills: a fixed square, then two lines */
 .cat-card { flex: 0 0 132px; width: 132px; display: flex; flex-direction: column; gap: 7px; padding: 0; background: none; border: 0;
@@ -1266,8 +1288,8 @@ main.main { transition: margin-right .18s ease; }
 .search-status { margin-top: 8px; }
 .mode-tab { background: transparent; color: var(--fg-mute); border: 1px solid var(--line); transition: color .15s, background .15s, border-color .15s; }
 .mode-tab:hover { color: var(--fg-soft); border-color: var(--fg-mute); }
-.mode-tab.on { background: var(--acc-soft); border-color: var(--line); color: var(--acc); }
-.mode-tab.on:hover { color: var(--acc); border-color: var(--acc); }
+.mode-tab.on { background: var(--bg-elev2); border-color: var(--line); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line); }
+.mode-tab.on:hover { color: var(--fg); border-color: var(--fg-mute); }
 .np-status { margin-top: 6px; justify-content: center; font-size: 11px; letter-spacing: 0; text-transform: none; }
 .status { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; line-height: 1.3; letter-spacing: 0; text-transform: none; color: var(--fg-mute); }
 .dots { display: inline-flex; align-items: center; gap: 3px; margin-left: 2px; }

@@ -772,6 +772,16 @@ Library, Songs and Search: page scroll width equals viewport, zero overflowing r
 Genre cards now apply a real filter through a shared `renderGenreView`, with a Clear button, and
 the filter is cleared when leaving Songs so it cannot leak into Search.
 
+## Interface hierarchy
+
+One accent fill per view: the primary action. Filters, sort controls and segmented tabs are an
+elevated neutral surface (`--bg-elev2` with `--fg`), and card play discs are neutral on touch.
+The top bar names the page; a `.page-hero` is one line of context, never a kicker or a second
+title. Library is four ways in (Artists, Albums, Genres, For you) plus a Tools menu for import,
+upload, recent downloads and the BPM sort; the first track row is at 343px on a 1440x900
+desktop and 438px on a 390x844 phone, down from 467 and 578. The player bar stays hidden until
+the first track starts, and A&R opens with three steps instead of an empty canvas.
+
 ## AI features (all four, working)
 
 **1. Metadata repair.** `core/repair.js` compares a track against the catalogue and proposes

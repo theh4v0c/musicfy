@@ -171,6 +171,12 @@
     'Saved': 'Salvo', 'Metadata saved': 'Metadados salvos', 'Renamed': 'Renomeado',
     'Removed from playlist': 'Removida da lista', 'Deleted': 'Excluída',
     'Could not save those changes': 'Não foi possível salvar as alterações',
+    'PLAYING FROM': 'TOCANDO DE',
+    'Describe a set, a filter or a question.': 'Descreva um set, um filtro ou uma pergunta.',
+    'You see the plan and the tracks as a draft.': 'Você vê o plano e as faixas como rascunho.',
+    'Nothing is saved or downloaded until you confirm.': 'Nada é salvo ou baixado até você confirmar.',
+    'Tools': 'Ferramentas', 'IMPORT · SORT': 'IMPORTAR · ORDENAR',
+
     'settings': 'ajustes', 'name': 'nome', 'time zone': 'fuso horário', 'city': 'cidade',
     'model endpoint': 'endpoint do modelo', 'model': 'modelo',
     'format': 'formato', 'loudness switch': 'normalização', 'target level': 'nível alvo',
@@ -503,6 +509,9 @@
     [/^All (\d+) playlists$/, (m) => `Todas as ${m[1]} listas`],
     [/^You left off on /, () => 'Você parou em '],
     [/^more from (.+)$/, (m) => `mais de ${m[1]}`],
+    [/^(\d+) tracks? · listening$/, (m) => `${m[1]} ${m[1] === '1' ? 'faixa' : 'faixas'} · em audição`],
+    [/^(\d+) tracks? · listening only$/, (m) => `${m[1]} ${m[1] === '1' ? 'faixa' : 'faixas'} · só para audição`],
+
     [/^Saved · (\d+) settings$/, (m) => `Salvo · ${m[1]} ajustes`],
     [/^Saved · (.+)$/, (m) => `Salvo · ${m[1]}`],
 
@@ -703,6 +712,10 @@
     [/\bnever analysed\b/g, () => 'nunca analisadas'],
     [/\bnot downloaded\b/g, () => 'não baixadas'],
     [/\bANALYSED\b/g, () => 'ANALISADAS'],
+    [/\b(\d+) need analysis\b/g, (m) => `${m[1]} ${m[1] === '1' ? 'precisa' : 'precisam'} de análise`],
+    [/\banalysed, current\b/g, () => 'analisadas, em dia'],
+    [/\blistening only\b/g, () => 'somente audição'],
+    [/\blistening\b/g, () => 'em audição'],
   ];
 
   const SKIP = [

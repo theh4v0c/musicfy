@@ -791,6 +791,11 @@ async function startRadio(t) {
 }
 
 /* ============ navigation ============ */
+const DETAIL_VIEWS = new Set(['playlist', 'artist', 'album', 'import']);
+function paintBack() {
+  const el = $('back');
+  if (el) el.hidden = !(DETAIL_VIEWS.has(state.view) && state.history.length);
+}
 function setNav(v) {
   state.view = v;
   document.querySelectorAll('[data-nav]').forEach(b => {
@@ -799,7 +804,7 @@ function setNav(v) {
     if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
   // the library size is only useful where you manage the library; everywhere else it is noise
-  const pill = $('pill'); if (pill) pill.hidden = !(v === 'library' || v === 'settings');
+  const pill = $('pill'); if (pill) pill.hidden = v !== 'songs';
 }
 function nav(v, push = true) {
   if (state.tier === 'listener' && v === 'djexport') v = 'home';
@@ -807,7 +812,6 @@ function nav(v, push = true) {
   const qd = $('queue-drawer'); if (qd) qd.hidden = true;
   if (typeof clearSelection === 'function') clearSelection();
   if (push && state.view && v !== state.view) state.history.push({ v: state.view, pid: state.playlistId });
-  $('back').hidden = !state.history.length;
   const resetScroll = () => {
     try { window.scrollTo(0, 0); } catch {}
     const view = document.getElementById('view');
@@ -828,10 +832,10 @@ function nav(v, push = true) {
   if (v === 'import') { const f = document.getElementById('imp-name'); if (f) f.scrollIntoView({ block: 'start' }); }
   else if (v === 'artist' && state.artistName) renderArtist(state.artistName, false);
   else if (v === 'album' && state.albumName) renderAlbum(state.albumName, false);
+  paintBack();
 }
 function goBack() {
   const h = state.history.pop() || { v: 'home' };
-  $('back').hidden = !state.history.length;
   if (h.v === 'playlist') openPlaylist(h.pid, false);
   else if (h.v === 'artist' && h.name) renderArtist(h.name, false);
   else if (h.v === 'album' && h.name) renderAlbum(h.name, false);
@@ -1680,8 +1684,7 @@ function pcard(p, idx) {
 async function openPlaylist(pid, push = true) {
   const p = state.playlists.find(x => x.id === pid) || { id: pid, name: pid };
   if (push) state.history.push({ v: state.view === 'playlist' ? 'playlist' : state.view, pid: state.playlistId });
-  $('back').hidden = !state.history.length;
-  setNav('library'); state.view = 'playlist'; state.playlistId = pid;
+  setNav('library'); state.view = 'playlist'; state.playlistId = pid; paintBack();
   renderSidebar();
   $('view-title').textContent = p.name;
   const v = $('view');
@@ -1892,7 +1895,7 @@ function plHeadArt(pid, name) {
 
 async function renderLiked() {
   setNav('library'); state.view = 'liked'; state.playlistId = 'liked'; renderSidebar();
-  $('view-title').textContent = 'Liked Songs';
+  $('view-title').textContent = tr('Liked Songs');
   const v = $('view');
   v.innerHTML = `<div class="plhead">
       <div class="plhead-art ph liked-art" style="background:linear-gradient(135deg,#ff6b47,#8a1d12)">${IC.heartFull}</div>
@@ -1971,7 +1974,7 @@ function bindOrderControls(rerender) {
 async function renderLibrary() {
   state.genreFilter = null;
   setNav('library'); state.playlistId = null; renderSidebar();
-  $('view-title').textContent = 'Playlists';
+  $('view-title').textContent = tr('Playlists');
   const v = $('view');
   v.innerHTML = `<h1 class="sr-only">Playlists</h1>
     ${pageHero('PLAYLISTS', 'Playlists', 'Listening lists and DJ sets, ordered and ready to open.')}
@@ -2054,7 +2057,7 @@ function sortedCrates() {
 async function renderDjExport() {
   if (state.tier === 'listener') return nav('home');
   setNav('djexport'); state.playlistId = null; renderSidebar();
-  $('view-title').textContent = 'Prep';
+  $('view-title').textContent = tr('Prep');
   const v = $('view');
   v.innerHTML = `
     <div class="prep-hero">
@@ -2292,13 +2295,12 @@ function renderGenreView(host, all, limit) {
 
 async function renderSongs(push = true) {
   if (push && state.view !== 'songs') state.history.push({ v: state.view, pid: state.playlistId, name: state.artistName || state.albumName });
-  $('back').hidden = !state.history.length;
-  setNav('songs'); state.view = 'songs'; state.playlistId = null; state.artistName = null; state.albumName = null;
+  setNav('songs'); state.view = 'songs'; paintBack(); state.playlistId = null; state.artistName = null; state.albumName = null;
   renderSidebar();
-  $('view-title').textContent = 'Library';
+  $('view-title').textContent = tr('Library');
   const v = $('view');
   v.innerHTML = `<h1 class="sr-only">Library</h1>
-    ${pageHero('LIBRARY', 'Library', 'Every track you own, with the audio state and the filters that matter.')}
+    ${pageHero('', '', 'Every track you own, with the audio state and the filters that matter.')}
     <div class="songs-chips" id="songs-chips"></div>
     <div class="lib-actions songs-head">
       <input class="search" id="songs-q" placeholder="Filter by title, artist or album" autocomplete="off">
@@ -2339,18 +2341,27 @@ async function renderSongs(push = true) {
   const paintChips = () => {
     const artists = new Set(all.map((t) => t.artist).filter(Boolean));
     const albums = new Set(all.map((t) => t.album).filter(Boolean));
+    // four ways into the library, and one Tools menu. Ten equal pills across five phone
+    // rows pushed the first track to 68% of the screen.
     chips.innerHTML = `
-      <button class="action-chip" data-browse="artists"><b>Artists</b><span>${artists.size}</span></button>
-      <button class="action-chip" data-browse="albums"><b>Albums</b><span>${albums.size}</span></button>
-      <button class="action-chip" data-browse="import"><b>Import track</b><span>SPOTIFY LINK</span></button>
+      <button class="action-chip" data-browse="artists"><b>Artists</b><span>${Number(artists.size).toLocaleString(LOC())}</span></button>
+      <button class="action-chip" data-browse="albums"><b>Albums</b><span>${Number(albums.size).toLocaleString(LOC())}</span></button>
+      <button class="action-chip" data-browse="genres"><b>Genres</b><span>BROWSE BY FAMILY</span></button>
       <button class="action-chip" data-browse="picks"><b>For you</b><span>FROM WHAT YOU PLAY</span></button>
-      <button class="action-chip" data-browse="importpl"><b>Import playlist</b><span>PASTE A LIST OR A LINK</span></button>
-      <button class="action-chip" data-browse="recentdl"><b>Recently downloaded</b><span>NEWEST FIRST</span></button>
-      <button class="action-chip" data-browse="upload"><b>Upload files</b><span>MP3, FLAC, M4A, WAV</span></button>
-      <button class="action-chip" data-browse="uploadfolder"><b>Upload a folder</b><span>ADDS EVERY TRACK INSIDE</span></button>
-      <button class="action-chip" data-browse="bpm"><b>Sort by BPM</b><span>${all.filter((t) => t.bpm).length} ANALYSED</span></button>
-      <button class="action-chip" data-browse="genres"><b>Genres</b><span>BROWSE BY FAMILY</span></button>`;
+      <details class="chip-tools">
+        <summary class="action-chip"><b>Tools</b><span>IMPORT · SORT</span></summary>
+        <div class="chip-menu" role="menu">
+          <button class="action-chip" data-browse="recentdl" role="menuitem"><b>Recently downloaded</b><span>NEWEST FIRST</span></button>
+          <button class="action-chip" data-browse="bpm" role="menuitem"><b>Sort by BPM</b><span>${Number(all.filter((t) => t.bpm).length).toLocaleString(LOC())} ANALYSED</span></button>
+          <button class="action-chip" data-browse="upload" role="menuitem"><b>Upload files</b><span>MP3, FLAC, M4A, WAV</span></button>
+          <button class="action-chip" data-browse="uploadfolder" role="menuitem"><b>Upload a folder</b><span>ADDS EVERY TRACK INSIDE</span></button>
+          <button class="action-chip" data-browse="import" role="menuitem"><b>Import track</b><span>SPOTIFY LINK</span></button>
+          <button class="action-chip" data-browse="importpl" role="menuitem"><b>Import playlist</b><span>PASTE A LIST OR A LINK</span></button>
+        </div>
+      </details>`;
     chips.querySelectorAll('[data-browse]').forEach((b) => b.onclick = async () => {
+      const menu = b.closest('details');
+      if (menu) menu.open = false;
       if (b.dataset.browse === 'import') { importSpotifyTrack(); return; }
       if (b.dataset.browse === 'picks') {
         try {
@@ -2687,7 +2698,7 @@ async function importSpotifyTrack() {
 
 async function renderImport() {
   setNav('songs'); state.playlistId = null; state.genreFilter = null; renderSidebar();
-  $('view-title').textContent = 'Import playlist';
+  $('view-title').textContent = tr('Import playlist');
   const v = $('view');
   try { window.scrollTo(0, 0); } catch {}
   v.innerHTML = `<div class="inline-panel">
@@ -2735,7 +2746,7 @@ async function renderImport() {
 
 async function renderSettings() {
   setNav('settings'); state.playlistId = null; renderSidebar();
-  $('view-title').textContent = 'Settings';
+  $('view-title').textContent = tr('Settings');
   const v = $('view');
   v.innerHTML = '<div class="ladder-state">Loading...</div>';
   let d = { settings: {}, llm: {} };
@@ -3784,7 +3795,7 @@ async function renderAskAi() {
   closeInlinePreview();
   setNav('askai');
   state.view = 'askai'; state.playlistId = null; state.genreFilter = null; renderSidebar();
-  $('view-title').textContent = 'A&R';
+  $('view-title').textContent = tr('A&R');
   const v = $('view');
   // Generic on purpose: a fresh install must show examples that make sense without the
   // owner's library, artists or taste. No real artist names, no library-derived prompts.
@@ -3799,12 +3810,20 @@ async function renderAskAi() {
         <button class="ask-ex" data-ask="what can you do">what can you do</button>
       </div>
       <div class="ladder-state" id="ai-state"></div>
-    </div><div id="ai-res"></div><div id="ask-discover"></div>`;
+    </div>
+    <div class="ask-start" id="ai-start">
+      <div class="ask-start-step"><b>1</b><span>Describe a set, a filter or a question.</span></div>
+      <div class="ask-start-step"><b>2</b><span>You see the plan and the tracks as a draft.</span></div>
+      <div class="ask-start-step"><b>3</b><span>Nothing is saved or downloaded until you confirm.</span></div>
+    </div>
+    <div id="ai-res"></div><div id="ask-discover"></div>`;
   const box = $('ai-q');
   const out = $('ai-res');
   const stateEl = $('ai-state');
 
   const run = (text) => {
+    const start = document.getElementById('ai-start');
+    if (start) start.hidden = true;
     const teach = String(text || '').trim().match(TEACH_RE);
     if (teach) return teachExclusion(teach[1], out, stateEl, box);
     return runAssistant(text, out, stateEl, box);
@@ -3828,10 +3847,10 @@ async function renderAskAi() {
 async function renderSearch() {
   closeInlinePreview();
   setNav('search'); state.playlistId = null; state.genreFilter = null; renderSidebar();
-  $('view-title').textContent = 'Search';
+  $('view-title').textContent = tr('Search');
   const v = $('view');
   v.innerHTML = `<h1 class="sr-only">Search</h1>
-    ${pageHero('SEARCH', 'Search', 'Your library and the open web, resolved before anything plays.')}
+    ${pageHero('', '', 'Your library and the open web, resolved before anything plays.')}
     <div class="search-wrap">
       <div class="search-field">
         <input class="search" id="q" placeholder="Search tracks, artists and albums" autocomplete="off">
@@ -4418,9 +4437,9 @@ function keyHueClass(key, scale) {
 // The page header card, the same shape Prep has always used. The page name stays in the
 // top bar too; this is the visual header, not the document title.
 function pageHero(kicker, title, sub) {
+  // The top bar names the page. A kicker and a title repeated it two more times and cost
+  // about 50px on every view; the card keeps the one line that says what the page is for.
   return `<div class="page-hero">
-    <div class="prep-kicker">${esc(kicker)}</div>
-    <div class="prep-title">${esc(title)}</div>
     <p class="prep-sub">${esc(sub)}</p>
   </div>`;
 }
@@ -4694,9 +4713,8 @@ async function pollJob(jobId, onTick, tries = 150) {
 /* artist page: all owned tracks for one artist */
 async function renderArtist(name, push = true) {
   if (push) state.history.push({ v: state.view, pid: state.playlistId, name: state.artistName || state.albumName });
-  $('back').hidden = !state.history.length;
   state.artistName = name; state.albumName = null;
-  setNav('library'); state.view = 'artist'; state.playlistId = null; renderSidebar();
+  setNav('library'); state.view = 'artist'; paintBack(); state.playlistId = null; renderSidebar();
   $('view-title').textContent = name;
   const v = $('view');
   v.innerHTML = `<div class="plhead">
@@ -4752,9 +4770,8 @@ async function renderArtist(name, push = true) {
 /* album page: all owned tracks for one album */
 async function renderAlbum(name, push = true) {
   if (push) state.history.push({ v: state.view, pid: state.playlistId, name: state.artistName || state.albumName });
-  $('back').hidden = !state.history.length;
   state.albumName = name; state.artistName = null;
-  setNav('library'); state.view = 'album'; state.playlistId = null; renderSidebar();
+  setNav('library'); state.view = 'album'; paintBack(); state.playlistId = null; renderSidebar();
   $('view-title').textContent = name;
   const v = $('view');
   const first = (await api(`/api/group/album/${encodeURIComponent(name)}`))[0];
@@ -4964,7 +4981,7 @@ function paintPill() {
   const el = $('pill');
   if (!el) return;
   // it takes 138px of the top bar on every page; it belongs to Library and Settings
-  el.hidden = !(state.view === 'library' || state.view === 'settings');
+  el.hidden = state.view !== 'songs';
   api('/api/stats', { nocache: true }).then((s) => {
     el.textContent = `${Number(s.tracks).toLocaleString(LOC())} TRACKS · ${fmtSize(s.owned_bytes)}`;
   }).catch(() => { el.textContent = ''; });
@@ -5624,6 +5641,12 @@ function bindMediaSession() {
   for (const [action, fn] of Object.entries(mediaActions)) set(action, fn);
 }
 bindMediaSession();
+// a popover that only closes when its own button is pressed again is a trap on a phone
+document.addEventListener('click', (e) => {
+  document.querySelectorAll('details.chip-tools[open]').forEach((d) => {
+    if (!d.contains(e.target)) d.open = false;
+  });
+});
 window.MF_MEDIA = mediaActions;   // a phone has no console: the lock-screen handlers can be exercised
 window.addEventListener('pageshow', (e) => { if (e.persisted) bindMediaSession(); });
 document.addEventListener('visibilitychange', () => {
@@ -5687,6 +5710,8 @@ window.addEventListener('orientationchange', () => setTimeout(fitNowPlaying, 120
 
 function paintNowPlaying() {
   const t = state.current; if (!t) return;
+  const bar = $('playerbar');
+  if (bar) bar.hidden = false;
   try { bindMediaSession(); paintMediaSession(t); } catch {}
   const rung = (t.rung || 'local').toUpperCase(), q = t.quality || '';
   $('pb-title').textContent = t.title || '';
