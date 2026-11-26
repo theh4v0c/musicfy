@@ -213,6 +213,24 @@ DOCS.md          data model, endpoints, rungs, incident log
 OPERATIONS.md    deploy, backup, restore, diagnose (generic)
 ```
 
+## YouTube and servers
+
+On a home connection YouTube serves the audio. On a **rented server** the same request can
+be answered with `Sign in to confirm you're not a bot`: search and metadata still work, the
+audio download needs a session. That is YouTube's decision about the address, not a MUSICFY
+setting.
+
+Free ways through it:
+
+- **Cookies from your own YouTube session.** Export `cookies.txt` from a logged-in browser,
+  put it on the server, set `MUSICFY_YTDLP_COOKIES=/path/cookies.txt`. This is the reliable
+  one. See `INSTALL.md`.
+- **Download at home and upload.** A home address is not challenged; the file lands owned.
+- **Let SoundCloud answer.** MUSICFY already tries it first on a server, and a challenged
+  YouTube job is retried later instead of being marked broken.
+
+A VPN is not required, and no paid service is involved.
+
 ## Requirements
 
 - Node 22.13 or newer (`node:sqlite` is unflagged there, and there are no npm dependencies).

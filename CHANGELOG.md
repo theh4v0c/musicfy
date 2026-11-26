@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.69 — 2026-11-26
+
+- A YouTube sign-in request is treated as temporary. When every source fails and YouTube
+  asked for a login, the job returns to the queue and retries after 10 minutes, then 20,
+  instead of being marked permanently failed.
+- README says plainly that a rented server can be asked for a YouTube session, that search
+  and metadata still work, and lists only free fixes (cookies, upload from home, SoundCloud).
+
 ## 0.1.68 — 2026-11-26
 
 - Duration matching has a ceiling. A track under three minutes gave 60% slack in both

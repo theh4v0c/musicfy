@@ -1687,6 +1687,7 @@ function startLadderDownload(jobId, b, onDone) {
           // downloader was asked for "scsearch1:ytsearch1:Artist Title" and could never
           // find anything; the failure then reported the stale YouTube error.
           const base = [b.artist, b.title].filter(Boolean).join(' ').trim();
+          let sawBotCheck = false;
           const tryQuery = (source, next) => {
             lastYtError = '';
             const retry = spawn(paths.YTDLP, [
@@ -1703,16 +1704,31 @@ function startLadderDownload(jobId, b, onDone) {
             retry.on('close', () => settleRetry(() => {
               // same 101 quirk: judge by the file on disk, not the exit code
               const got = fs.readdirSync(dir).some((f) => /\.(mp3|m4a|aac|opus|ogg|flac|wav|webm|mp4)$/i.test(f) && !/\.part$/i.test(f));
-              if (!got) return next();
+              if (!got) {
+                // a sign-in request is temporary: it is not the same as "no such track"
+                if (/Sign in to confirm|not a bot/i.test(lastYtError)) sawBotCheck = true;
+                return next();
+              }
               ingestDownloaded();
             }));
           };
           // SoundCloud first: it answers a server address that YouTube wants a login for,
           // and its search handles the accented titles. YouTube is the last attempt.
           const plan = searchPlan(b.artist, b.title);
-          const step = (i) => (i >= plan.length
-            ? finish('error', `yt-dlp exit ${code}, no source for "${base}"`)
-            : tryQuery(plan[i], () => step(i + 1)));
+          const step = (i) => {
+            if (i < plan.length) return tryQuery(plan[i], () => step(i + 1));
+            // Every source failed. If YouTube asked for a sign-in, retry later instead of
+            // marking the track permanently broken: the check clears, and a batch that
+            // keeps hammering only makes it worse.
+            const attemptNo = Number(b.ytRetry || 0);
+            if (sawBotCheck && attemptNo < 2) {
+              const minutes = 10 * (attemptNo + 1);
+              finish('queued', `YouTube asked for a sign-in; retrying in ${minutes} min`);
+              setTimeout(() => enqueueDownload(jobId, { ...b, ytRetry: attemptNo + 1 }), minutes * 60000);
+              return;
+            }
+            finish('error', `yt-dlp exit ${code}, no source for "${base}"`);
+          };
           step(0);
           return;
         }
