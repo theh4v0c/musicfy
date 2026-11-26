@@ -3769,7 +3769,7 @@ const server = http.createServer(async (req, res) => {
         const richBrief = /\b(for my|for a|for the|she likes|he likes|they like|who likes|likes|don'?t limit|birthday|wedding|party for|kids?|children|story time|year old|\d+\s*yo|about (unicorns?|robots?|dinosaurs?|space|animals?))\b/i.test(q);
         if (llm.available()) {
           try {
-            const modelPlan = await Promise.race([agent.planWithModel(llm, q, previous, lang), new Promise((r) => setTimeout(() => r(null), 15000))]);
+            const modelPlan = await Promise.race([agent.planWithModel(llm, q, previous, lang), new Promise((r) => setTimeout(() => r(null), 45000))]);
             if (modelPlan && modelPlan.intent) {
               // the model's plan wins what it answered; the rules fill only what is missing
               modelPlan.args = { ...(plan.args || {}), ...(modelPlan.args || {}) };

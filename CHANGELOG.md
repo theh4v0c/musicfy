@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.53 — 2026-11-25
+
+- The planner asks the endpoint for JSON (`response_format`) and falls back to a plain call
+  if the endpoint rejects it. Empty completions and the long hidden-reasoning delays are
+  gone in practice: five prompts ran 5/5 three times.
+- `\b` does not sit next to an accented letter, so "forró" never matched the genre list and
+  the rules fallback treated it as an artist ("0 de forr"). The boundary is letter-class
+  based now; a genre after "de" is searched as a genre, and the fallback returns tracks.
+- The model gets 45s for its retries instead of being cut at 15s.
+- `npm run ar:check` runs five real sentences against the running instance and fails when
+  one produces no tracks.
+
 ## 0.1.52 — 2026-11-25
 
 - A&R asks the model to read every request when one is configured, not only the sentences

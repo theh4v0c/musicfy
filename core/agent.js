@@ -253,7 +253,7 @@ async function planWithModel(llm, text, previous, lang = 'en') {
   let parsed = null;
   for (let attempt = 0; attempt < 3 && !parsed; attempt += 1) {
     let raw = '';
-    try { raw = String(await llm.askRaw(prompt, 20000) || ''); } catch (e) { if (attempt === 1) throw e; continue; }
+    try { raw = String(await llm.askRaw(prompt, 20000, { json: true }) || ''); } catch (e) { if (attempt === 1) throw e; continue; }
     const cleaned = raw.replace(/^```(json)?/i, '').replace(/```$/, '').trim();
     const start = cleaned.indexOf('{');
     const end = cleaned.lastIndexOf('}');
@@ -729,6 +729,31 @@ async function artistAlbums(db, artist) {
 // "create a playlist based on Bedouin" names an artist without the word "by". The rules
 // planner only looked for "by X", so the whole sentence went to the catalogue, which
 // answered with nothing and the playlist came back empty.
+// A word after "de" that names a style is a genre, not an artist. The family regexes are
+// English-centric, so the Brazilian styles are listed explicitly.
+// \\b does not sit next to an accented letter (it is not an ASCII word character), so
+// "forró" never matched. A letter-class boundary works for both spellings.
+const PT_GENRES = /(?:^|[^\p{L}])(samba-enredo|samba|pagode|forr[oó]|xote|bai[aã]o|piseiro|arrocha|tecnobrega|brega|carimb[oó]|lambada|frevo|maracatu|ax[eé]|bossa nova|mpb|choro|seresta|mod[aã]o|sertanejo|funk carioca|baile funk|funk|trap|rap|gospel|louvor)(?![\p{L}])/iu;
+function genreWord(name) {
+  const v = String(name || '');
+  const hit = v.match(PT_GENRES);
+  if (hit) return hit[1];
+  try {
+    for (const [, re] of require('./genre').FAMILIES) {
+      const m = v.match(re);
+      if (m) return m[0];
+    }
+  } catch {}
+  return '';
+}
+
+function looksLikeGenre(name) {
+  const v = String(name || '').trim();
+  if (!v) return false;
+  if (PT_GENRES.test(v)) return true;
+  try { return require('./genre').FAMILIES.some(([, re]) => re.test(v)); } catch { return false; }
+}
+
 function seedArtist(text) {
   const m = String(text || '').match(
     /(?:\bbased on\b|\binspired by\b|\bin the style of\b|\bsimilar to\b|\bsounds? like\b|\b(?:artists?|music|something|songs?|tracks?)\s+like\b|\bby\b|\bno estilo de\b|\bbasead[oa] (?:em|no)\b|\bparecid[oa] com\b|\bpor\b)\s+(.{2,60})/i);
@@ -814,14 +839,14 @@ async function propose(db, plan, lang = 'en') {
     // read the artist from the normalised sentence: "10 faixas de X" becomes "10 tracks by X"
     let normQ = q;
     try { normQ = require('./query').normalizePortuguese(q); } catch {}
-    const byName = (normQ.match(/\bby\s+([a-z0-9][a-z0-9 .&'\-]{1,48})/i) || [])[1];
+    const byName = (normQ.match(/\bby\s+([\p{L}\p{N}][\p{L}\p{N} .&'\-]{1,48})/iu) || [])[1];
     // "by X" means only X. "based on X" / "like X" means use X to search, not a hard
     // filter: an English request like "a playlist like Berghain" names a club, and
     // filtering every catalogue result by that word returned nothing.
     // The model already classified the sentence. "10 faixas de samba para uma festa"
     // normalises to "10 tracks by samba para uma festa", and treating that as an artist
     // emptied both the library and the catalogue. A genre is not a name.
-    const modelClassified = genres.length > 0 || themes.length > 0;
+    const modelClassified = genres.length > 0 || themes.length > 0 || looksLikeGenre(byName || seedArtist(q));
     const strictArtist = !!byName && !modelClassified;
     const wantedArtist = modelClassified
       ? ''
@@ -896,7 +921,7 @@ async function propose(db, plan, lang = 'en') {
       if (wantedArtist) targetOnline = Math.max(targetOnline, count - local.length);
       if (targetOnline > 0 && !outsideOnly && local.length > count - targetOnline) local = local.slice(0, Math.max(0, count - targetOnline));
       // a count is not a search term: "10 ambient" used to be sent to the catalogue whole
-      const onlineQuery = (wantedArtist || genres.join(' ') || searchQ || picked.ctx.text.join(' '))
+      const onlineQuery = (wantedArtist || genres.join(' ') || genreWord(byName || seedArtist(q)) || searchQ || picked.ctx.text.join(' '))
         .replace(/\b\d+\b/g, ' ').replace(/\s+/g, ' ').trim();
       online = await onlineFill(db, outsideOnly || wantedArtist ? [] : local,
         Math.min(targetOnline, Math.max(0, count - local.length)),

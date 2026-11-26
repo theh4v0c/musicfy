@@ -106,12 +106,20 @@ async function ask(question, timeoutMs = 12000) {
 }
 
 // raw completion, used by the agent planner
-async function askRaw(prompt, timeoutMs = 10000) {
+async function askRaw(prompt, timeoutMs = 10000, opts = {}) {
   // A reasoning model spends this budget on hidden reasoning first. At 700 the planner
   // prompt sometimes came back with finish_reason "length" and an empty content, which
   // looked like "the model returned nothing usable".
-  const body = JSON.stringify({ model: (config() || {}).model || 'Auto', temperature: 0, max_tokens: 2500, messages: [{ role: 'user', content: prompt }] });
-  const parsed = await post(body, timeoutMs);
+  const base = { model: (config() || {}).model || 'Auto', temperature: 0, max_tokens: 2500, messages: [{ role: 'user', content: prompt }] };
+  // JSON mode keeps the answer short and stops the empty completions the planner hit.
+  // Not every OpenAI-compatible endpoint accepts it, so a 400 falls back to plain.
+  const body = opts.json ? JSON.stringify({ ...base, response_format: { type: 'json_object' } }) : JSON.stringify(base);
+  let parsed;
+  try { parsed = await post(body, timeoutMs); }
+  catch (e) {
+    if (opts.json && /llm 400/.test(String(e.message))) parsed = await post(JSON.stringify(base), timeoutMs);
+    else throw e;
+  }
   const choice = (parsed.choices || [])[0] || {};
   const text = String((choice.message || {}).content || '').trim();
   if (!text && choice.finish_reason === 'length') throw new Error('model ran out of tokens');
