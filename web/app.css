@@ -1288,8 +1288,14 @@ main.main { transition: margin-right .18s ease; }
 .search-status { margin-top: 8px; }
 .mode-tab { background: transparent; color: var(--fg-mute); border: 1px solid var(--line); transition: color .15s, background .15s, border-color .15s; }
 .mode-tab:hover { color: var(--fg-soft); border-color: var(--fg-mute); }
-.mode-tab.on { background: var(--bg-elev2); border-color: var(--line); color: var(--fg); box-shadow: inset 0 0 0 1px var(--line); }
+/* filters and sort are states, not actions: neutral, elevated, bold */
+.mode-tab.on { background: var(--bg-elev2); border-color: rgba(255,255,255,.22); color: var(--fg);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); font-weight: 700; }
 .mode-tab.on:hover { color: var(--fg); border-color: var(--fg-mute); }
+/* a mode switch is a setting, not a filter: its selection gets the accent, still as a
+   wash and a border, never a solid fill */
+.kind-switch .mode-tab.on { background: var(--acc-soft); border-color: var(--acc); box-shadow: none; }
+.kind-switch .mode-tab.on:hover { border-color: var(--acc); }
 .np-status { margin-top: 6px; justify-content: center; font-size: 11px; letter-spacing: 0; text-transform: none; }
 .status { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; line-height: 1.3; letter-spacing: 0; text-transform: none; color: var(--fg-mute); }
 .dots { display: inline-flex; align-items: center; gap: 3px; margin-left: 2px; }

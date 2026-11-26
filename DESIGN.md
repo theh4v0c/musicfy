@@ -52,10 +52,11 @@ Two consequences worth stating plainly:
 | `--ok` | `#3fc57d` | success, ready |
 | `--liked` | `#ff4d6d` | liked hearts only |
 
-Rules: one accent colour. Accent fills the primary action only. Filters, sort controls and
-segmented tabs are an elevated neutral surface (`--bg-elev2`) with `--fg`; they are states,
-not actions, and must not borrow the primary fill. On a touch screen every card play disc is
-neutral until it is tapped. Never two filled
+Rules: one accent colour. Accent fills the primary action only. Filters and sort controls are
+an elevated neutral surface (`--bg-elev2`) with `--fg`; they are states, not actions, and must
+not borrow the primary fill. A **mode** switch (Listener/DJ, DJ set/Listening) is a setting:
+its selection uses `--acc-soft` with an accent border, still never a solid fill. On a touch
+screen every card play disc is neutral until it is tapped. Never two filled
 actions in one row. A selected filter or sort chip is a state, not an action: it uses the
 `--acc-soft` wash with `--acc` text and the normal border, so a row can show its selection
 without competing with the button that does something. Text is `--fg`, `--fg-soft` or

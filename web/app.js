@@ -2759,8 +2759,8 @@ async function renderSettings() {
       <div class="set-mode-head">
         <h2>Mode</h2>
         <div class="kind-switch" id="set-tier" role="group" aria-label="Interface mode">
-          <button class="mode-tab${state.tier === 'listener' ? ' on' : ''}" data-tier="listener">Listener</button>
-          <button class="mode-tab${state.tier === 'dj' ? ' on' : ''}" data-tier="dj">DJ</button>
+          <button class="mode-tab${state.tier === 'listener' ? ' on' : ''}" data-tier="listener" aria-pressed="${state.tier === 'listener'}">Listener</button>
+          <button class="mode-tab${state.tier === 'dj' ? ' on' : ''}" data-tier="dj" aria-pressed="${state.tier === 'dj'}">DJ</button>
         </div>
       </div>
       <p class="set-note">Listener hides Prep, harmonic tools and DJ exports. DJ shows everything.</p>

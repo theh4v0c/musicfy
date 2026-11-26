@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.85 — 2026-11-26
+
+- **The selected mode is unmistakable.** A mode switch (Listener/DJ, DJ set/Listening) keeps
+  the accent as a soft wash with an accent border and bold text; it is a setting, not a
+  filter, and still not a solid fill. Filter and sort chips keep the neutral elevated surface
+  with a brighter border and weight. The Mode buttons also carry `aria-pressed`.
+
 ## 0.1.84 — 2026-11-26
 
 - **"Fresh in your library" now sorts by when the audio arrived**, not by when the track row
