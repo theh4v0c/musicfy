@@ -177,7 +177,7 @@ kicker: `never in picks`.
 | container | radius | padding | background | use |
 |---|---|---|---|---|
 | `.mast` hero | `--r-xl` 18px | 16/20 | `--bg-elev` + light bloom | home only |
-| `.prep-hero` | `--r-lg` 14px | 20/22 (13/15 on phone) | `--bg-elev` + right-edge texture | Prep only: the one page whose job needs a header with a meter |
+| `.page-hero` / `.prep-hero` | `--r-lg` 14px | 20/22 (13/15 on phone) | `--bg-elev` + right-edge texture | every main view: kicker, page name, one line |
 | `.pcard` / card | `--r-lg` | 12px | `--bg-elev` | playlists, albums, artists |
 | `.answer`, `.inline-panel`, `.set-card` | `--r-lg` | 14–16px | `--bg-elev` | blocks inside a page |
 | `.trow` row | `--r-sm` | 6px 12px | transparent, `--bg-elev` on hover | track list |

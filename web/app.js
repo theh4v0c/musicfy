@@ -1968,7 +1968,9 @@ async function renderLibrary() {
   setNav('library'); state.playlistId = null; renderSidebar();
   $('view-title').textContent = 'Playlists';
   const v = $('view');
-  v.innerHTML = `<h1 class="sr-only">Playlists</h1><div class="lib-actions">
+  v.innerHTML = `<h1 class="sr-only">Playlists</h1>
+    ${pageHero('PLAYLISTS', 'Playlists', 'Listening lists and DJ sets, ordered and ready to open.')}
+    <div class="lib-actions">
       <button class="btn btn-primary" id="lib-upload">Upload track</button>
       <button class="btn btn-ghost" id="lib-newpl">New playlist</button>
       <button class="btn btn-ghost" id="hist-import">Playlist from most-played</button>
@@ -2290,7 +2292,9 @@ async function renderSongs(push = true) {
   renderSidebar();
   $('view-title').textContent = 'Library';
   const v = $('view');
-  v.innerHTML = `<h1 class="sr-only">Library</h1><div class="songs-chips" id="songs-chips"></div>
+  v.innerHTML = `<h1 class="sr-only">Library</h1>
+    ${pageHero('LIBRARY', 'Library', 'Every track you own, with the audio state and the filters that matter.')}
+    <div class="songs-chips" id="songs-chips"></div>
     <div class="lib-actions songs-head">
       <input class="search" id="songs-q" placeholder="Filter by title, artist or album" autocomplete="off">
       <div class="mode-tabs" id="songs-filter">
@@ -2734,14 +2738,17 @@ async function renderSettings() {
   const s = d.settings || {};
   const l = d.llm || {};
   v.innerHTML = `<h1 class="sr-only">Settings</h1>
+    ${pageHero('SETTINGS', 'Settings', 'You, the library, the model endpoint and how downloads behave.')}
     <div class="set-wrap">
     <section class="set-card set-mode" data-tone="acc">
-      <h2>Mode</h2>
-      <p class="set-note">Listener hides Prep, harmonic tools and DJ exports. DJ shows everything.</p>
-      <div class="kind-switch" id="set-tier" role="group" aria-label="Interface mode">
-        <button class="mode-tab${state.tier === 'listener' ? ' on' : ''}" data-tier="listener">Listener</button>
-        <button class="mode-tab${state.tier === 'dj' ? ' on' : ''}" data-tier="dj">DJ</button>
+      <div class="set-mode-head">
+        <h2>Mode</h2>
+        <div class="kind-switch" id="set-tier" role="group" aria-label="Interface mode">
+          <button class="mode-tab${state.tier === 'listener' ? ' on' : ''}" data-tier="listener">Listener</button>
+          <button class="mode-tab${state.tier === 'dj' ? ' on' : ''}" data-tier="dj">DJ</button>
+        </div>
       </div>
+      <p class="set-note">Listener hides Prep, harmonic tools and DJ exports. DJ shows everything.</p>
     </section>
     <div class="set-grid">
       <section class="set-card" data-tone="acc">
@@ -3693,7 +3700,9 @@ async function renderAskAi() {
   const v = $('view');
   // Generic on purpose: a fresh install must show examples that make sense without the
   // owner's library, artists or taste. No real artist names, no library-derived prompts.
-  v.innerHTML = `<h1 class="sr-only">A&amp;R</h1><div class="search-wrap">
+  v.innerHTML = `<h1 class="sr-only">A&amp;R</h1>
+    ${pageHero('A&R', 'A&R', 'Describe what you want; it builds a draft before anything is saved.')}
+    <div class="search-wrap">
       <input class="search" id="ai-q" placeholder="Describe what you want: a playlist, a filter or a question" autocomplete="off">
       <div class="ask-hint">
         <button class="ask-ex" data-ask="create a playlist of 20 tracks">create a playlist of 20 tracks</button>
@@ -3734,6 +3743,7 @@ async function renderSearch() {
   $('view-title').textContent = 'Search';
   const v = $('view');
   v.innerHTML = `<h1 class="sr-only">Search</h1>
+    ${pageHero('SEARCH', 'Search', 'Your library and the open web, resolved before anything plays.')}
     <div class="search-wrap">
       <div class="search-field">
         <input class="search" id="q" placeholder="Search tracks, artists and albums" autocomplete="off">
@@ -4315,6 +4325,16 @@ function keyHueClass(key, scale) {
   const k = String(key || '').toUpperCase().replace('♯', '#');
   const cls = KEY_CLASS[k] || 'c';
   return `${cls}${scale === 'minor' ? '-m' : ''}`;
+}
+
+// The page header card, the same shape Prep has always used. The page name stays in the
+// top bar too; this is the visual header, not the document title.
+function pageHero(kicker, title, sub) {
+  return `<div class="page-hero">
+    <div class="prep-kicker">${esc(kicker)}</div>
+    <div class="prep-title">${esc(title)}</div>
+    <p class="prep-sub">${esc(sub)}</p>
+  </div>`;
 }
 
 function trow(t, i, list) {

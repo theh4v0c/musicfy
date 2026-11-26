@@ -39,10 +39,12 @@ const problems = [];
 // --- duplicate keys ------------------------------------------------------------------
 const seen = new Map();
 for (const line of i18n.split('\n')) {
-  const m = /^\s{4}'((?:[^'\\]|\\.)+)':/.exec(line);
-  if (!m) continue;
-  const key = m[1];
-  seen.set(key, (seen.get(key) || 0) + 1);
+  // a line may declare several keys; read every pair, not only the first
+  for (const m of line.matchAll(/'((?:[^'\\]|\\.)+)':/g)) {
+    const key = m[1];
+    if (!/^\s{4}/.test(line) && !/^\s{4}/.test(m[0])) continue;
+    seen.set(key, (seen.get(key) || 0) + 1);
+  }
 }
 for (const [key, n] of seen) if (n > 1) problems.push(`duplicate key: ${key} (${n} times)`);
 

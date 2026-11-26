@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.72 — 2026-11-26
+
+- Library, Playlists, Search, Settings and A&R start with the same header card Prep has:
+  gradient, texture, kicker, page name and one line. Prep keeps its meter inside it.
+- Mode is a normal card again: heading and switch on the first row, the note below at the
+  same left edge as every other card. The note no longer starts under the switch.
+- DESIGN.md records the page hero as the shared container.
+
 ## 0.1.70 — 2026-11-26
 
 - The interface follows its own rule: no em dashes. 60 occurrences in toasts, notes,
