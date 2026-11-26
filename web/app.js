@@ -3545,8 +3545,22 @@ async function runAssistant(text, out, stateEl, box) {
         if (!a.action) {
           const said = document.createElement('div');
           said.className = 'ai-said';
-          said.textContent = a.spoken || '';
+          // the capability answer comes back as `answer`, not as a spoken draft line
+          said.textContent = a.spoken || a.answer || '';
           out.appendChild(said);
+        }
+        if (Array.isArray(a.examples) && a.examples.length) {
+          const hint = document.createElement('div');
+          hint.className = 'ask-hint';
+          for (const ex of a.examples) {
+            const b = document.createElement('button');
+            b.className = 'ask-ex';
+            b.dataset.ask = ex;
+            b.textContent = tr(ex);
+            b.onclick = () => { box.value = b.textContent; run(ex); };
+            hint.appendChild(b);
+          }
+          out.appendChild(hint);
         }
         if (a.action) { renderActionCard(a, out, stateEl); return; }
         if (a.data && a.data.album) {

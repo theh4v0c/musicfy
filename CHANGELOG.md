@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.61 — 2026-11-26
+
+- "What can you do" renders its answer. The agent returns the capability text as `answer`,
+  and the A&R view only read `spoken`, so the chip looked like it did nothing. Its examples
+  are shown as clickable prompts.
+
 ## 0.1.60 — 2026-11-26
 
 - The draft reason no longer starts with ". ": an empty reason returned a lone period.
