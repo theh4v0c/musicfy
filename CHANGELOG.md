@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.80 — 2026-11-26
+
+- Saving one setting reports one setting. The form was compared against the stored
+  settings, where default booleans and selects are absent, so the first save of a time zone
+  said "6 settings". The baseline is now the form as rendered.
+
 ## 0.1.79 — 2026-11-26
 
 - The "Saved · field" line is built from translated parts, so "Saved · time zone" is

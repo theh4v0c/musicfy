@@ -3087,7 +3087,9 @@ async function renderSettings() {
     if (key) body.llm_api_key = key;
     return body;
   };
-  let baseline = { ...s };
+  // compare against what the form showed, not the raw settings: fields with defaults
+  // (booleans, selects) are absent from the stored object and looked like edits
+  let baseline = readForm();
   const same = (a, b) => {
     if (typeof a === 'boolean' || typeof b === 'boolean') return Boolean(a) === Boolean(b);
     if (typeof a === 'number' || typeof b === 'number') return Number(a ?? 0) === Number(b ?? 0);
