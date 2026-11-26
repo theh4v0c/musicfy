@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.66 — 2026-11-26
+
+- Listener mode no longer shows the SOURCE column (Local/YT/SC) or the player's rung badge.
+  The column is removed from the grid at every width that shows the table, so the remaining
+  columns keep their alignment.
+
 ## 0.1.65 — 2026-11-26
 
 - A read after a write cannot come from a cache. `nocache` requests set `cache: no-store`

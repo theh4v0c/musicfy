@@ -1404,3 +1404,35 @@ body.tier-listener #ctx [data-act="pl-zip"] { display: none !important; }
 .set-about b { color: var(--fg); font-weight: 600; }
 .set-about .set-note { margin: 0; flex: 1 1 260px; }
 @media (max-width: 760px) { .set-mode { align-items: flex-start; } .set-mode .kind-switch { margin-left: 0; } .set-grid { grid-template-columns: 1fr; } }
+
+/* Listener tier: the SOURCE column (Local/YT/SC) is technical. Remove the header, the
+   badge and its grid track so the remaining columns still line up. The <=760 layout already
+   hides the badge, so these rules start at the first width that shows the table. */
+@media (min-width: 761px) {
+  body.tier-listener .thead > div:nth-child(8),
+  body.tier-listener .trow > .trbadge { display: none !important; }
+  body.tier-listener .thead,
+  body.tier-listener .trow {
+    grid-template-columns: 34px 46px minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) 92px 34px 48px 34px !important;
+  }
+}
+@media (min-width: 1281px) and (max-width: 1600px) {
+  body.tier-listener .thead,
+  body.tier-listener .trow {
+    grid-template-columns: 34px 46px minmax(0,1.7fr) minmax(0,1fr) minmax(0,1fr) 34px 48px 34px !important;
+  }
+}
+@media (min-width: 921px) and (max-width: 1280px) {
+  body.tier-listener .thead,
+  body.tier-listener .trow {
+    grid-template-columns: 34px 46px 1.5fr 1fr 34px 48px 34px !important;
+  }
+}
+@media (min-width: 761px) and (max-width: 920px) {
+  body.tier-listener .thead,
+  body.tier-listener .trow {
+    grid-template-columns: 34px 44px minmax(0,1.6fr) minmax(0,1fr) 34px 52px 32px !important;
+  }
+}
+/* the rung badge in the player is the same information */
+body.tier-listener #pb-badge { display: none !important; }
