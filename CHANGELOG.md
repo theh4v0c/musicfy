@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.54 — 2026-11-26
+
+- The A&R view sends every sentence to the agent. Its client-side gate was an English verb
+  list, so a Portuguese request fell to the old keyword parser: "crie uma lista de 10
+  faixas de Natal" was answered with library tracks tagged Christmas by mistake (Death).
+- The Search box routes a request to A&R instead of searching its words. A sentence typed
+  there now produces the same draft.
+- Verified in the browser, in Portuguese: A&R and Search both return a 10-track Christmas
+  draft.
+
 ## 0.1.53 — 2026-11-25
 
 - The planner asks the endpoint for JSON (`response_format`) and falls back to a plain call

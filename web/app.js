@@ -3529,10 +3529,10 @@ async function runAssistant(text, out, stateEl, box) {
     out.innerHTML = '';
     // the sentence decides the destination, not a verb list: "10 electronic tracks I
     // don't have" and "outside my library" were going to the library filter
-    const agentish = /\b(create|make|build|download|find|search|show|list|playlist|crate|how many|how much|top rated|top \d)\b/i.test(text)
-      || /\b(i (?:do not|don't) have|not in (?:my|the) library|outside (?:my|the) library|i do not own|new to me|discover)\b/i.test(text)
-      || /\b(albums?|discography)\b/i.test(text)
-      || /^\s*\d{1,3}\s+\S+/i.test(text);
+    // This is the A&R view: the agent reads every sentence. A regex deciding which
+    // sentences "look like requests" is how a Portuguese sentence fell through to the
+    // keyword parser and answered with tracks tagged Christmas by mistake.
+    const agentish = true;
     try {
       if (agentish) {
         // the server can merge a short follow-up into the previous plan; only the client
@@ -3765,6 +3765,11 @@ async function renderSearch() {
   const submit = () => {
     const text = q.value.trim();
     if (!text) { if (disc) disc.hidden = false; draw(); return; }
+    // a sentence that asks for something is A&R's job; searching its words answers nothing
+    const requestish = /\b(create|make|build|download|find|search|show|list|playlist|crate|how many|how much)\b/i.test(text)
+      || /\b(crie|criar|cria|fa[cç]a|fazer|monte|montar|lista|playlist|baixar|baixe|quantas?|quantos?|procure|mostre)\b/i.test(text)
+      || /^\s*\d{1,3}\s+\S+/i.test(text);
+    if (requestish) { state.arPending = text; nav('askai'); return; }
     // a plain search ends the draft conversation; a short instruction continues it
     const followish = !!state.lastAgent && /^(more|fewer|less|another|add|remove|drop|make (?:it|them)|same|also|but|now|instead|plus|minus|swap|replace|darker|lighter|faster|slower|shorter|longer|no |without |only |just |and )/i.test(text);
     if (!followish) state.lastAgent = null;
