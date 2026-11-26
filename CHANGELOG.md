@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.67 — 2026-11-26
+
+- Settings: "Modo" sits on the same line as its note. The generic card rule gave every
+  heading a 12px bottom margin, and inside the Mode flex row that lifted the heading out of
+  line. The row aligns on the text baseline, the switch stays centred.
+- Every section marker is the same accent dot. The per-card colours (accent, green, grey)
+  read as a status when they were only decoration.
+
 ## 0.1.66 — 2026-11-26
 
 - Listener mode no longer shows the SOURCE column (Local/YT/SC) or the player's rung badge.
