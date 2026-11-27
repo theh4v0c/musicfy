@@ -248,7 +248,14 @@ under the wordmark, and the age band from setup sets the card size: up to 6 gets
 11 and over gets 170px. The gradient is the app's own, not a second palette.
 
 The page is a grid of the playlists marked for Kids mode; a tap plays one. **Leave** is the
-only other control, and it asks for the PIN when one is set. Settings → Kids edits the profile
+only other control, and it asks for the PIN when one is set.
+
+In the owner's interface those lists are not mixed into `PLAYLISTS`. They sit in a **named,
+collapsible group** under it, headed by the child's name and a count: the divider says they
+belong to another listener. The group is collapsed by default, remembers being open, and opens
+itself when a filter matches something inside. Counts — the sidebar pill, Home, the Playlists
+page — count only the owner's lists. The **Kids** nav entry is the other thing: it hands the
+device over. The group is management; the entry is use. Settings → Kids edits the profile
 and lists every playlist with a switch, so a list is moved in from there or from its context
 menu; the card is ordered profile, switches, PIN, because that is the order you come to it. Plays made here are written to
 their own table, so taste, rotation, history and A&R never see them. The PIN is a speed bump

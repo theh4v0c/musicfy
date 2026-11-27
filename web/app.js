@@ -943,10 +943,14 @@ function renderSidebar() {
 function renderSlibItems() {
   const el = $('slib');
   if (!el) return;
-  el.querySelectorAll('.slib-item').forEach((r) => r.remove());
+  el.innerHTML = '';
   const liked = { id: 'liked', name: 'Liked Songs', n: state.liked.size, liked: true };
-  const items = [liked, ...numberedPlaylists(state.playlists)].filter(matchesPlFilter);
-  for (const p of items) {
+  const all = numberedPlaylists(state.playlists).filter(matchesPlFilter);
+  const own = all.filter((p) => !p.kids);
+  const kids = all.filter((p) => p.kids);
+  renumber(own);
+  renumber(kids);
+  const addRow = (p) => {
     const row = document.createElement('div');
     row.className = 'slib-item' + (state.playlistId === p.id ? ' on' : '');
     row.innerHTML = p.liked
@@ -958,8 +962,6 @@ function renderSlibItems() {
     if (!p.liked) {
       row.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); openPlaylistMenu(p, e.clientX, e.clientY); };
       longPress(row, () => openPlaylistMenu(p, innerWidth / 2 - 110, innerHeight / 2 - 80));
-    }
-    if (!p.liked) {
       row.ondragover = (e) => { if (e.dataTransfer.types.includes('application/x-musicfy')) { e.preventDefault(); row.classList.add('drop'); } };
       row.ondragleave = () => row.classList.remove('drop');
       row.ondrop = async (e) => {
@@ -968,7 +970,35 @@ function renderSlibItems() {
         if (ids.length) { await addTracksToPlaylist(p.id, ids); clearSelection(); }
       };
     }
-    el.appendChild(row);
+    return row;
+  };
+  el.appendChild(addRow(liked));
+  for (const p of own) el.appendChild(addRow(p));
+
+  // A kid's lists are curated from here but belong to another listener: a named, collapsible
+  // group instead of a second colour in the same list. Hiding them entirely would make
+  // adding a track to her list impossible without handing over the device.
+  if (kids.length) {
+    let open = false;
+    try { open = localStorage.getItem('mf-kids-open') === '1'; } catch {}
+    if (plFilter()) open = true;
+    const head = document.createElement('button');
+    head.type = 'button';
+    head.className = 'slib-kids-head';
+    head.setAttribute('aria-expanded', String(open));
+    head.innerHTML = `<span class="slib-kids-dot"></span><span>${esc(kidsLabel())}</span><em>${kids.length}</em>
+      <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 3 5 5-5 5"/></svg>`;
+    const box = document.createElement('div');
+    box.className = 'slib-kids';
+    box.hidden = !open;
+    for (const p of kids) box.appendChild(addRow(p));
+    head.onclick = () => {
+      const next = box.hidden;
+      box.hidden = !next;
+      head.setAttribute('aria-expanded', String(next));
+      try { localStorage.setItem('mf-kids-open', next ? '1' : '0'); } catch {}
+    };
+    el.append(head, box);
   }
 }
 
@@ -1268,7 +1298,7 @@ async function renderHome() {
       <div class="mast-main">
         <div class="mast-copy">
           <h1 class="mast-greet" id="mast-greet">Good ${greetPart()}.</h1>
-          <p class="mast-note" id="mast-note"><span class="mast-fact">${state.playlists.length} playlist${state.playlists.length === 1 ? '' : 's'}, ready when you are.</span></p>
+          <p class="mast-note" id="mast-note"><span class="mast-fact">${ownerPlaylists().length} playlist${ownerPlaylists().length === 1 ? '' : 's'}, ready when you are.</span></p>
         </div>
         <div class="mast-side">
           <button class="flow-key beam" id="flow-btn" aria-label="Start Flow">
@@ -1288,7 +1318,7 @@ async function renderHome() {
       <div id="discover-home"></div>
       <div class="sec-title">Recently played <small id="recent-hint"></small></div>
       <div class="row-scroller" id="recent-row"></div>
-      <div class="sec-title">Your playlists <small>${Number(state.playlists.length).toLocaleString(LOC())} TOTAL</small></div>
+      <div class="sec-title">Your playlists <small>${Number(ownerPlaylists().length).toLocaleString(LOC())} TOTAL</small></div>
       <div class="pgrid" id="home-grid"></div>
     </div>`;
   // the masthead reports the session, not the weather: time, place, what was last on
@@ -1365,11 +1395,12 @@ async function renderHome() {
     drawRecents(rec);
     const grid = $('home-grid');
     if (grid) {
-      for (const p of state.playlists.slice(0, 12)) grid.appendChild(pcard(p));
-      if (state.playlists.length > 12) {
+      const ownPl = ownerPlaylists();
+      for (const p of ownPl.slice(0, 12)) grid.appendChild(pcard(p));
+      if (ownPl.length > 12) {
         const more = document.createElement('button');
         more.className = 'btn btn-ghost';
-        more.textContent = `All ${state.playlists.length} playlists`;
+        more.textContent = `All ${ownPl.length} playlists`;
         more.onclick = () => nav('library');
         grid.after(more);
       }
@@ -2033,6 +2064,11 @@ function sortedPlaylists(list) {
   return out;
 }
 
+const ownerPlaylists = () => (state.playlists || []).filter((p) => !p.kids);
+const kidPlaylists = () => (state.playlists || []).filter((p) => p.kids);
+const kidsLabel = () => (state.kids && state.kids.name) || tr('Kids');
+const renumber = (list) => list.forEach((p, i) => { p.idx = i + 1; });
+
 function matchesPlFilter(p) {
   const f = plFilter();
   return !f || String(p.name || '').toLowerCase().includes(f);
@@ -2067,15 +2103,33 @@ async function renderLibrary() {
       <button class="btn btn-ghost" id="lib-newpl">New playlist</button>
       <button class="btn btn-ghost" id="hist-import">Playlist from most-played</button>
     </div>
-    <div class="sec-title" style="margin-top:0">Playlists <small>${Number(state.playlists.length).toLocaleString(LOC())} TOTAL</small></div>
+    <div class="sec-title" style="margin-top:0">Playlists <small>${Number(ownerPlaylists().length).toLocaleString(LOC())} TOTAL</small></div>
     <div class="list-bar">${orderControls()}${viewSwitch('library', libView())}</div>
-    <div class="pgrid" id="lib-grid"></div>`;
+    <div class="pgrid" id="lib-grid"></div>
+    <div id="lib-kids"></div>`;
   const drawGrid = (view) => {
     const g = $('lib-grid');
     if (!g) return;
     g.className = view === 'list' ? 'plist' : view === 'compact' ? 'pgrid compact' : 'pgrid';
     g.innerHTML = '';
-    const rows = numberedPlaylists().filter(matchesPlFilter);
+    const allRows = numberedPlaylists().filter(matchesPlFilter);
+    const rows = allRows.filter((p) => !p.kids);
+    const kidRows = allRows.filter((p) => p.kids);
+    renumber(rows);
+    renumber(kidRows);
+    const kidsHost = $('lib-kids');
+    if (kidsHost) {
+      kidsHost.innerHTML = '';
+      if (kidRows.length) {
+        const h = document.createElement('div');
+        h.className = 'sec-title';
+        h.innerHTML = `${esc(kidsLabel())} <small>${kidRows.length}</small>`;
+        const kg = document.createElement('div');
+        kg.className = g.className;
+        for (const p of kidRows) kg.appendChild(view === 'list' ? plistRow(p) : pcard(p));
+        kidsHost.append(h, kg);
+      }
+    }
     if (view === 'list') {
       g.appendChild(plistRow({ id: '__liked', name: 'Liked Songs', n_tracks: state.liked.size, liked: true }));
       for (const p of rows) g.appendChild(plistRow(p));
@@ -7539,7 +7593,7 @@ async function renderKids() {
 /* ============ boot ============ */
 async function loadPlaylists() {
   state.playlists = await api('/api/playlists', { nocache: true });
-  $('pl-count').textContent = state.playlists.length;
+  $('pl-count').textContent = ownerPlaylists().length;
   renderSidebar();
 }
 (async () => {

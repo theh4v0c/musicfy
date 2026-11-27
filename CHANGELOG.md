@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.1 — 2026-11-27
+
+- **A kid's playlists no longer sit inside yours.** They move into a named, collapsible group
+  at the foot of the sidebar — headed by the child's name and a count — instead of a second
+  colour in the same `PLAYLISTS` list. Collapsed by default, it remembers being open and opens
+  itself when the filter matches something inside.
+- Counts follow the split: the sidebar pill, Home's "Your playlists" and the Playlists page
+  count only your lists. The Playlists page shows the kid's shelf as its own section.
+- The split is deliberate rather than hidden: a parent still has to add and remove tracks from
+  those lists, and hiding them would mean handing over the device to curate.
+- DESIGN records the two roles: the group is management, the **Kids** entry is use.
+
 ## 0.5.0 — 2026-11-27
 
 - **Every settings card saves itself.** The single Save at the bottom of the page is gone; the

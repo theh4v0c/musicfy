@@ -1643,3 +1643,16 @@ body.kids .pb-like, body.kids .pb-menu, body.kids .mini-like, body.kids .mini-me
 /* a save control belongs to the card it saves */
 .set-save { display: flex; align-items: center; gap: 10px; margin: 12px 0 2px; }
 .set-save .set-note { margin: 0; }
+
+/* a kid's playlists: a named, collapsible group in the owner's sidebar, not a second colour
+   mixed into the same list */
+.slib-kids-head { display: flex; align-items: center; gap: 8px; width: 100%; margin: 10px 0 2px;
+  padding: 4px 6px; background: none; border: 0; color: var(--fg-mute);
+  font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.slib-kids-head:hover { color: var(--fg-soft); }
+.slib-kids-head em { margin-left: auto; font-style: normal; }
+.slib-kids-head svg { transition: transform .15s ease; }
+.slib-kids-head[aria-expanded="true"] svg { transform: rotate(90deg); }
+.slib-kids-dot { width: 6px; height: 6px; border-radius: 50%; flex: none;
+  background: linear-gradient(135deg, #ff5c39, #b06bff); }
+.slib-kids[hidden] { display: none; }
