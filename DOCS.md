@@ -27,6 +27,62 @@ curl -s localhost:8710/api/health/rungs
 
 Web assets are versioned with `?v=N` in `web/index.html`. Bump it on every deploy or browsers keep the old bundle.
 
+## Desktop app (macOS)
+
+`desktop/` turns the same engine into `MUSICFY.app`: an Electron main process, one
+BrowserWindow, and `core/core.js` spawned as a Node child, the way `musicfy serve` does it.
+Nothing in `core/` knows the shell exists.
+
+- **Window**: `desktop/main.js`. Single instance, waits for `/health`, then loads the page.
+  Closing the window quits the app and stops the engine.
+- **Data root**: `~/Library/Application Support/MUSICFY`, passed as `MUSICFY_HOME`. Electron's
+  own cache goes to `electron/` inside it. Downloads go to `~/Music/MUSICFY`
+  (`MUSICFY_OWNED`); `MUSICFY_MUSIC_ROOTS` covers `~/Music` so a scan of a folder there is
+  allowed.
+- **Port**: the first free one in 8790–8809, bound to `127.0.0.1`. It is above the server's
+  8710 so a local tunnel to a server on 8710 does not collide with the app.
+- **Binaries**: `Contents/Resources/bin/{ffmpeg,ffprobe,yt-dlp}`, exposed as
+  `MUSICFY_FFMPEG`, `MUSICFY_FFPROBE` and `MUSICFY_YTDLP` and prepended to `PATH`. yt-dlp is
+  wrapped in `~/Library/Application Support/MUSICFY/bin/yt-dlp` so it gets a JavaScript
+  runtime (`--js-runtimes node:<shim>`), where the shim is the Electron binary with
+  `ELECTRON_RUN_AS_NODE=1`.
+- **Analyser**: not bundled. `MUSICFY_PYTHON` is therefore unset and the boot log says the
+  analyser is missing; every other feature works. The analyser is a Python + librosa
+  environment of a few hundred megabytes and does not belong in a download for listeners.
+- **Bridge**: `desktop/preload.js` exposes `musicfyDesktop.pickFolder()`,
+  `reveal()`, `setPlaying()` and `platform`/`version`. The page uses it for the native folder
+  picker in Settings and for keeping the Mac awake while a track plays. The renderer has no
+  Node access.
+- **Folder import**: **File → Add music folder…** (⌘O) opens NSOpenPanel, POSTs to
+  `/api/library/scan`, polls until the scan finishes, posts a notification and reloads the
+  window. Settings also gets a **Choose folder** button when the bridge is present.
+
+Build:
+
+```
+npm install                 # electron, ffmpeg-static, @ffprobe-installer/ffprobe
+node desktop/build.mjs      # binaries, icon, bundle, ad-hoc signature, DMG in dist/
+```
+
+`npm install` may print "install scripts not yet covered by allowScripts" and skip the
+downloads for `electron` and `ffmpeg-static`. Run their installers once
+(`node node_modules/electron/install.js`, `node node_modules/ffmpeg-static/install.js`,
+`chmod +x node_modules/@ffprobe-installer/darwin-arm64/ffprobe`) or approve them with
+`npm install-scripts`.
+
+The build is host-architecture only: Electron installs one architecture per `node_modules`,
+and the ffmpeg/ffprobe packages resolve per platform. Build on an arm64 Mac for arm64 and on
+an Intel Mac for x64. yt-dlp is pinned by version and SHA-256 in `desktop/build.mjs` and
+cached in `desktop/vendor/`.
+
+There is no notarization and no auto-update yet. An unsigned build opens after
+**System Settings → Privacy & Security → Open Anyway**; the app is ad-hoc signed, so the
+bundle is internally consistent but claims no identity.
+
+To run it from the tree without building: `npm run app` (uses `desktop/vendor/bin`, which
+`node desktop/build.mjs --vendor` fills). `MUSICFY_DEVTOOLS_PORT=9222 npm run app` opens a
+DevTools protocol port for the design and screenshot scripts.
+
 ## Data model
 
 - `tracks`: one row per artist and title. `dup_key = normalise(artist)|normalise(title)` with a UNIQUE index. Album, case, `feat` blocks, bracketed suffixes and hyphenated `- Remastered`/`- Single Version`/`- Radio Edit` suffixes are stripped before hashing; a parenthetical edition such as `(Remastered 2006)` stays part of the title, so an original and a remaster remain separate records.

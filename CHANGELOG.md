@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.0 — 2026-11-27
+
+- **MUSICFY for macOS.** `node desktop/build.mjs` builds `MUSICFY.app` and a DMG from this
+  tree: an Electron window around the same `core/core.js`, with ffmpeg, ffprobe and yt-dlp
+  inside the bundle. A friend downloads one file, drags it to Applications, and gets a
+  library without Node, Homebrew, Python or a service. First launch needs **Open Anyway**
+  in System Settings because the build is not notarized.
+- The app keeps its data in `~/Library/Application Support/MUSICFY` and downloads in
+  `~/Music/MUSICFY`; a scanned folder is read in place and nothing is uploaded. It listens
+  on the first free port in 8790–8809, so a tunnel or server on 8710 is unaffected.
+- **File → Add music folder…** (⌘O) opens the native picker, runs the existing folder scan,
+  reports the result and reloads. Settings shows a **Choose folder** button in the desktop
+  app only; a browser tab keeps the text field.
+- The app keeps the Mac awake while a track plays, and exposes no Node API to the page.
+- BPM/key analysis is the one component not bundled: the analyser needs a Python + librosa
+  environment. Library, playback, search, downloads, playlists and DJ export work without
+  it, and the terminal install still creates the analyser.
+- `npm run deploy:all` no longer copies `dist/` or `desktop/vendor/` to a host.
+- README, INSTALL, DOCS and THIRD_PARTY record the app, its data paths, the bundled
+  licenses and the missing analyser.
+
 ## 0.2.10 — 2026-11-27
 
 - The minimised player's heart reflects the current track. Starting a track painted only the

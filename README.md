@@ -13,11 +13,30 @@ Runs on 64-bit Linux and macOS. Windows works through Docker Desktop or WSL2. Se
 
 ## Install
 
-You need a terminal and about 10 minutes. MUSICFY runs on your computer; you use it in a
-browser. You do not need an account or a cloud service to run it; an OpenAI-compatible model
-endpoint is optional and only A&R uses it (see [Language model](#language-model-optional)).
+The server install needs a terminal and about 10 minutes. On a Mac, the app below needs
+neither. MUSICFY runs on your computer; you use it in a browser. You do not need an account
+or a cloud service to run it; an OpenAI-compatible model endpoint is optional and only A&R
+uses it (see [Language model](#language-model-optional)).
 A VPS or home server is a computer
 too: install it the same way, keep it on `127.0.0.1`, and reach it through SSH or a VPN.
+
+### macOS app (no terminal)
+
+On a Mac, skip the terminal: download the DMG from
+[Releases](https://github.com/theh4v0c/musicfy/releases/latest), open it and drag **MUSICFY**
+into Applications. The app is the same engine and the same interface, with ffmpeg, ffprobe
+and yt-dlp inside it:
+
+- data lives in `~/Library/Application Support/MUSICFY`, downloads in `~/Music/MUSICFY`;
+- **File → Add music folder…** (⌘O) imports a library in place — nothing is copied;
+- no account, no service, no Node install, and nothing is uploaded;
+- macOS blocks any app that is not notarized, so the first launch needs **System Settings →
+  Privacy & Security → Open Anyway**.
+
+BPM and key analysis needs the Python analyser, which the app does not bundle. Everything
+else — library, playback, search, downloads, playlists, DJ export — works out of the box.
+The server install below is for Linux, for an always-on machine, and for a Mac you want to
+reach from other devices.
 
 ### macOS
 

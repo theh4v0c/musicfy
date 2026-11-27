@@ -62,6 +62,31 @@ It does **not** install ffmpeg or Node. Those come from your operating system.
 
 ## 3. Mac
 
+### The app: no terminal
+
+If you do not want to use a terminal at all, install the app instead of following 3.1 to
+3.8. It is the same engine and the same interface, with everything it needs inside it.
+
+1. Download the DMG from
+   <https://github.com/theh4v0c/musicfy/releases/latest>.
+2. Open the DMG and drag **MUSICFY** into **Applications**.
+3. Open **MUSICFY** from Applications. macOS refuses any app that is not notarized: open
+   **System Settings → Privacy & Security**, scroll to the message about MUSICFY, and press
+   **Open Anyway**. You only do this once.
+4. Press **File → Add music folder…** and choose a folder you already have. The files stay
+   where they are; nothing is copied, moved or uploaded.
+5. Choose **I am a DJ** or **I am a listener**. Both can be changed later in Settings.
+
+The app keeps its database, covers, logs and downloads in
+`~/Library/Application Support/MUSICFY`; the audio it downloads goes to `~/Music/MUSICFY`.
+It needs no Node, no Homebrew and no service. To remove it, drag it to the Trash from
+Applications and delete that folder; your own music folder is untouched.
+
+BPM and key analysis is the one thing the app does not bundle, because the analyser is a
+Python and librosa environment of a few hundred megabytes. Library, playback, search,
+downloads, playlists and DJ export all work without it. If you want analysis too, use the
+terminal install below, which creates it.
+
 ### 3.1 Open Terminal
 
 Press `Command + Space`, type `Terminal`, and press Enter. A window with a prompt appears.

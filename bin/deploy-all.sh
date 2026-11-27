@@ -21,6 +21,7 @@ say "== MUSICFY $WANT -> $PI, $VPS"
 rsync -az \
   --exclude .git --exclude backups --exclude data --exclude logs --exclude owned \
   --exclude musicfy.env --exclude musicfy.pid --exclude node_modules \
+  --exclude dist --exclude desktop/vendor \
   "$HERE"/ "$PI:$PI_DIR"/
 ssh "$PI" 'sudo systemctl restart musicfy-core'
 say "   $PI: synced and restarted"

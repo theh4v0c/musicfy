@@ -174,6 +174,10 @@ the top. Cards in one row share the same top and bottom edge; the grid stretches
 card to its row instead of letting a masonry column start at a different height. One
 column on a phone. A note directly above a field or checkbox keeps 10px of separation.
 
+The Library folder card has one primary action, **Scan folder**. In the desktop app a ghost
+**Choose folder** sits before it and opens the native picker; a browser tab hides it because
+a page cannot open one, and it never takes the primary role.
+
 ### 5.2 Exclusion chips
 
 "Keep out of picks" is shown back as the terms the engine will use: pill chips,

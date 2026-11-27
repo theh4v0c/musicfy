@@ -2968,6 +2968,7 @@ async function renderSettings() {
         <p class="set-note">Point at a folder you already have. The files stay where they are: nothing is copied, moved or renamed. Playlists written by Traktor, rekordbox, M3U or PLS are imported with their order, and the BPM and key they already carry are kept.</p>
         <label>Folder or playlist file<input id="set-folder" placeholder="/path/to/music"></label>
         <div class="lib-actions">
+          <button class="btn btn-ghost" id="set-folder-pick" type="button" hidden>Choose folder</button>
           <button class="btn btn-primary" id="set-folder-scan" type="button">Scan folder</button>
           <span class="set-note" id="set-folder-out">Not scanned yet.</span>
         </div>
@@ -3318,6 +3319,18 @@ async function renderSettings() {
     try { folderField.value = localStorage.getItem('mf-folder') || ''; } catch {}
   }
   const setFolderScan = document.getElementById('set-folder-scan');
+  // the desktop shell can open the native folder picker; a browser tab cannot, so the
+  // text field stays the whole interface there
+  const folderPick = document.getElementById('set-folder-pick');
+  if (folderPick && window.musicfyDesktop) {
+    folderPick.hidden = false;
+    folderPick.onclick = async () => {
+      const picked = await window.musicfyDesktop.pickFolder();
+      if (!picked) return;
+      const field = document.getElementById('set-folder');
+      if (field) { field.value = picked; field.focus(); }
+    };
+  }
   if (setFolderScan) setFolderScan.onclick = async () => {
     const field = document.getElementById('set-folder');
     const out = document.getElementById('set-folder-out');
@@ -6073,6 +6086,7 @@ audio.addEventListener('error', async () => {
 
 audio.addEventListener('play', () => {
   state._wantPlaying = true; setPlayIcons(true); paintRows();
+  if (window.musicfyDesktop) window.musicfyDesktop.setPlaying(true);
   if (state._failed) state._failed.clear();
   logPlay('play', { id: state.current && state.current.id, hidden: document.hidden });
 });
@@ -6080,6 +6094,7 @@ audio.addEventListener('pause', () => {
   // A pause the system makes while the screen is off is not the listener's wish. Clearing
   // the intent there is what made a locked phone stay silent until it was unlocked.
   if (!audio.ended && (!document.hidden || state._userPaused)) state._wantPlaying = false;
+  if (window.musicfyDesktop) window.musicfyDesktop.setPlaying(false);
   logPlay('pause', {
     id: state.current && state.current.id, hidden: document.hidden, user: !!state._userPaused,
     ended: audio.ended, at: Math.round(audio.currentTime || 0),

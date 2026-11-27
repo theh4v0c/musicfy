@@ -393,6 +393,7 @@
       'Aponte para uma pasta que você já tem. Os arquivos ficam onde estão: nada é copiado, movido ou renomeado. Listas do Traktor, rekordbox, M3U ou PLS entram com a ordem, e o BPM e a tonalidade que elas já trazem são mantidos.',
     'Folder or playlist file': 'Pasta ou arquivo de lista',
     'Scan folder': 'Escanear pasta',
+    'Choose folder': 'Escolher pasta',
     'Not scanned yet.': 'Ainda não escaneada.',
     'A track removed from the library later leaves its file on disk. Nothing here writes to your files.':
       'Uma faixa removida da biblioteca depois deixa o arquivo no disco. Nada aqui grava nos seus arquivos.',

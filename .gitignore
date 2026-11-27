@@ -28,3 +28,7 @@ __pycache__/
 musicfy.env
 musicfy.pid
 musicfy-*.tgz
+
+# desktop build: binaries are fetched, the app is assembled under dist/
+dist/
+desktop/vendor/

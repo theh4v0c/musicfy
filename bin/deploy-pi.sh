@@ -14,6 +14,7 @@ WANT=$(node -p "require('$HERE/package.json').version" 2>/dev/null || node -p "r
 rsync -az \
   --exclude .git --exclude backups --exclude data --exclude logs --exclude owned \
   --exclude musicfy.env --exclude musicfy.pid --exclude node_modules \
+  --exclude dist --exclude desktop/vendor \
   "$HERE"/ "$HOST:$DEST"/
 
 GOT=$(ssh "$HOST" "node -p \"require('$DEST/package.json').version\"")
