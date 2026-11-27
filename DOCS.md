@@ -787,7 +787,7 @@ sidebar, outside the Studio group.
 
 Navigation is device- and mode-driven. The phone bottom bar is Home, Search, A&R, Library,
 Playlists and Settings; Prep is desktop-only in the Studio group, because A&R matters more on
-a phone. On desktop, A&R and Prep share the Studio group; Prep is hidden in Listener. Search is the single global
+a phone. In DJ mode the command palette reaches Prep on a phone. On desktop, A&R and Prep share the Studio group; Prep is hidden in Listener. Search is the single global
 field, with Scope (Both / This library / Web) and playlist hits; the Library field is labelled
 as a local filter and offers "Search everywhere" when nothing matches. The command palette
 (`⌘K` or the top-bar `⌘` button) jumps to views, tracks and playlists. Album and artist pages are not served from the

@@ -211,7 +211,8 @@ Menu rows use `.chip-menu-item` (30px, one label, no inline hint) so the Tools p
 reflow a row.
 
 Navigation follows the device and the mode. The phone bottom bar is Home, Search, A&R,
-Library, Playlists and Settings; Prep is desktop-only, inside the **Studio** group with A&R.
+Library, Playlists and Settings; Prep is desktop-only in the **Studio** group with A&R, and is
+reachable on a phone from the command palette in DJ mode.
 On desktop, A&R and Prep sit under Studio; Prep disappears entirely in Listener. Settings is
 separated at the foot of the sidebar, outside Studio. A&R is not hidden on a phone: it is a
 destination, not a Search sub-page.
