@@ -2886,9 +2886,26 @@ async function renderSettings() {
       <section class="set-card" data-tone="acc">
         <h2>Kids</h2>
         <p class="set-note">A separate shelf for a kid or a teenager. Plays made in Kids mode are recorded on their own and never reach your taste, your rotation, your play history or A&amp;R.</p>
-        <p class="set-note">${k.name || k.age ? `${esc(k.name || '')}${k.name && k.age ? ' · ' : ''}${esc(k.age || '')}. ` : ''}${k.playlists.length
-          ? `${k.playlists.length} playlist${k.playlists.length === 1 ? '' : 's'} in Kids mode.`
-          : 'No playlist is in Kids mode yet.'} Mark one with “Use in Kids Mode” from its menu, and the Kids entry appears in the sidebar.</p>
+        <div class="kids-profile">
+          <label>Name<input id="set-kids-name" type="text" maxlength="30" autocomplete="off" value="${esc(k.name || '')}" placeholder="${tr('Optional')}"></label>
+          <label>Age
+            <select id="set-kids-age">
+              <option value="">${tr('Not set')}</option>
+              ${[['0-6', 'Up to 6'], ['7-10', '7 to 10'], ['11-14', '11 to 14'], ['15+', '15 and up']]
+                .map(([v, label]) => `<option value="${v}"${k.age === v ? ' selected' : ''}>${tr(label)}</option>`).join('')}
+            </select>
+          </label>
+          <div class="lib-actions">
+            <button class="btn btn-ghost" id="set-kids-save" type="button">${tr('Save')}</button>
+            <span class="set-note" id="set-kids-saved"></span>
+          </div>
+        </div>
+        <p class="set-note">${tr('Playlists in Kids mode:')}</p>
+        <div class="kids-pls">
+          ${(state.playlists || []).length
+            ? state.playlists.map((p) => `<label class="set-check kids-pl"><input type="checkbox" data-pl="${esc(p.id)}"${p.kids ? ' checked' : ''}> <span>${esc(p.name)}</span><em>${Number(p.n_tracks) || 0}</em></label>`).join('')
+            : `<p class="set-note">${tr('No playlists yet.')}</p>`}
+        </div>
         <label>PIN to leave Kids mode<input id="set-kids-pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="${k.pin_set ? 'set - type a new one to change it' : 'not set'}"></label>
         <div class="lib-actions">
           <button class="btn btn-ghost" id="set-kids-pin-save" type="button">Save PIN</button>
@@ -3093,6 +3110,43 @@ async function renderSettings() {
       if (msg) { msg.dataset.tone = 'bad'; msg.textContent = e.message || 'Could not save'; }
     }
   };
+  // the profile and the playlist list live here too: moving an existing list into Kids mode
+  // should not require knowing that a playlist has a right-click menu
+  const kidsSaveProfile = document.getElementById('set-kids-save');
+  if (kidsSaveProfile) kidsSaveProfile.onclick = async () => {
+    const name = document.getElementById('set-kids-name').value.trim();
+    const age = document.getElementById('set-kids-age').value;
+    const msg = document.getElementById('set-kids-saved');
+    try {
+      await api('/api/settings', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ kids_name: name, kids_age: age }),
+      });
+      state.settings.kids_name = name;
+      state.settings.kids_age = age;
+      await syncKidsEntry();
+      if (msg) { msg.dataset.tone = 'ok'; msg.textContent = tr('Saved'); }
+    } catch {
+      if (msg) { msg.dataset.tone = 'bad'; msg.textContent = tr('Could not save'); }
+    }
+  };
+  document.querySelectorAll('.kids-pl input[data-pl]').forEach((cb) => {
+    cb.onchange = async () => {
+      const id = cb.dataset.pl;
+      const rec = (state.playlists || []).find((x) => x.id === id);
+      try {
+        await api(`/api/playlists/${encodeURIComponent(id)}`, {
+          method: 'PATCH', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ kids: cb.checked }),
+        });
+        if (rec) rec.kids = cb.checked ? 1 : 0;
+        await syncKidsEntry();
+      } catch {
+        cb.checked = !cb.checked;
+        toast('Could not change Kids mode', 4000);
+      }
+    };
+  });
   const kidsClear = document.getElementById('set-kids-pin-clear');
   if (kidsClear) kidsClear.onclick = async () => {
     try {

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.3 — 2026-11-27
+
+- Settings → **Kids** can now edit the kid's **name** and **age band** inline, without replaying
+  the setup.
+- The same card lists **every playlist with a switch**, so an existing list made for a child
+  moves into Kids mode with one click — no need to know that a playlist has a context menu.
+  The context menu (**Use in Kids Mode**) still works.
+- The card is ordered by what you come to do: profile, playlist switches, then the PIN.
+
 ## 0.4.2 — 2026-11-27
 
 - **Kids is a question in the first run.** The mode screen now asks **Anyone else?** — "Just

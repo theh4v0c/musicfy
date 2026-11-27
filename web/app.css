@@ -1626,3 +1626,14 @@ body.kids .pb-like, body.kids .pb-menu, body.kids .mini-like, body.kids .mini-me
 .kids-card .pcard-sub { display: inline-flex; align-items: center; gap: 6px; }
 .kids-card .pcard-sub::before { content: ""; width: 6px; height: 6px; border-radius: 50%;
   background: linear-gradient(135deg, #ff5c39, #ffd166 45%, #b06bff); flex: none; }
+
+/* kids card: the profile and the playlist switches, so an existing list can be moved in
+   without knowing that a playlist has a context menu */
+.kids-profile { display: grid; gap: 8px; margin: 10px 0 12px; }
+.kids-profile label { margin-bottom: 0; }
+.kids-profile .lib-actions { margin: 2px 0 0; }
+.kids-pls { display: grid; gap: 2px; max-height: 220px; overflow-y: auto; margin: 6px 0 12px; }
+.kids-pl { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--r-sm); }
+.kids-pl:hover { background: var(--bg-elev2); }
+.kids-pl span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kids-pl em { margin-left: auto; font-style: normal; font-size: 10.5px; color: var(--fg-mute); font-family: var(--mono); }

@@ -240,7 +240,9 @@ under the wordmark, and the age band from setup sets the card size: up to 6 gets
 11 and over gets 170px. The gradient is the app's own, not a second palette.
 
 The page is a grid of the playlists marked for Kids mode; a tap plays one. **Leave** is the
-only other control, and it asks for the PIN when one is set. Plays made here are written to
+only other control, and it asks for the PIN when one is set. Settings → Kids edits the profile
+and lists every playlist with a switch, so a list is moved in from there or from its context
+menu; the card is ordered profile, switches, PIN, because that is the order you come to it. Plays made here are written to
 their own table, so taste, rotation, history and A&R never see them. The PIN is a speed bump
 for a child and the copy says so.
 

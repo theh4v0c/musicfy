@@ -465,6 +465,8 @@
     'Their name': 'O nome',
     'Optional': 'Opcional',
     'Age': 'Idade',
+    'Not set': 'Não definida',
+    'No playlists yet.': 'Nenhuma lista ainda.',
     'Up to 6': 'Até 6',
     '7 to 10': '7 a 10',
     '11 to 14': '11 a 14',
