@@ -1593,9 +1593,10 @@ body.tier-listener #pb-badge { display: none !important; }
    skin: what changes is what is on screen and where a play is recorded. */
 body.kids #app { grid-template-columns: 1fr; grid-template-areas: "main" "player"; }
 body.kids .sidebar, body.kids .topbar, body.kids .bottomnav { display: none !important; }
-body.kids .main { width: 100%; }
+body.kids main.main { width: 100%; }
 body.kids .view { padding: 22px 26px 140px; }
-body.kids .pb-like, body.kids .pb-menu, body.kids .mini-like, body.kids .mini-menu { display: none !important; }
+body.kids .pb-like, body.kids .pb-menu, body.kids .mini-like, body.kids .mini-menu,
+body.kids .pb-badge, body.kids .np-add, body.kids .np-like, body.kids .np-badge { display: none !important; }
 .kids-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 6px; }
 .kids-brand { font-size: clamp(26px, 3vw, 34px); font-weight: 700; letter-spacing: -.02em;
   background: linear-gradient(90deg, #ff5c39 0%, #ffd166 22%, #3fc57d 45%, #4aa8ff 68%, #b06bff 100%);
@@ -1655,20 +1656,22 @@ body.kids .pb-like, body.kids .pb-menu, body.kids .mini-like, body.kids .mini-me
 /* kids: the same app, with bigger targets and no adult chrome */
 .kids-who { margin-top: 2px; font-size: 12.5px; color: var(--fg-soft); }
 .kids-tabs { display: flex; gap: 8px; margin: 6px 0 20px; flex-wrap: wrap; }
-.kids-tab { height: 40px; padding: 0 18px; border-radius: var(--r-pill); border: 1px solid var(--line);
-  background: var(--bg-elev); color: var(--fg-soft); font-size: 14px; font-weight: 600; }
+.kids-tab { height: 44px; padding: 0 20px; border-radius: var(--r-pill); border: 1px solid var(--line);
+  background: var(--bg-elev); color: var(--fg-soft); font-size: 15px; font-weight: 600; }
 .kids-tab[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: transparent; }
 .kids-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; margin: 4px 0 26px; }
-.kids-tile { text-align: left; min-width: 0; cursor: pointer; }
+.kids-tile { position: relative; text-align: left; min-width: 0; }
 .kids-tile-artwrap { position: relative; border-radius: var(--r-md); overflow: hidden; background: var(--bg-elev2); }
 .kids-tile-art { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
 .kids-tile-art.ph { display: grid; place-items: center; font-size: 44px; font-weight: 700; color: var(--fg-soft); }
-.kids-tile-play { position: absolute; right: 8px; bottom: 8px; width: 40px; height: 40px; border-radius: 50%;
+.kids-tile-play { position: absolute; right: 8px; bottom: 52px; z-index: 2; width: 44px; height: 44px; border-radius: 50%;
   border: 0; background: var(--acc); color: var(--on-acc); display: grid; place-items: center; }
+.kids-tile-open { position: absolute; inset: 0; z-index: 1; border: 0; border-radius: var(--r-lg); background: transparent; }
+.kids-tile-open:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
 .kids-tile-play svg { width: 16px; height: 16px; }
 .kids-tile-name { margin-top: 8px; font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kids-tile-sub { margin-top: 2px; font-size: 11.5px; color: var(--fg-mute); }
-.kids-rows { display: grid; gap: 6px; margin: 0 0 24px; }
+.kids-rows { display: grid; gap: 6px; margin: 0 0 24px; max-width: 980px; }
 .kids-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 6px 8px;
   border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-elev); color: var(--fg); text-align: left; }
 .kids-row:hover { background: var(--bg-elev2); }
@@ -1678,7 +1681,7 @@ body.kids .pb-like, body.kids .pb-menu, body.kids .mini-like, body.kids .mini-me
 .kids-row-main b { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kids-row-main i { font-style: normal; font-size: 11.5px; color: var(--fg-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kids-row-dur { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--fg-mute); }
-.kids-row-play { width: 34px; height: 34px; border-radius: 50%; background: var(--acc); color: var(--on-acc); display: grid; place-items: center; flex: none; }
+.kids-row-play { width: 40px; height: 40px; border-radius: 50%; background: var(--acc); color: var(--on-acc); display: grid; place-items: center; flex: none; }
 .kids-row-play svg { width: 13px; height: 13px; }
 .kids-detail { display: flex; gap: 18px; align-items: flex-end; margin: 6px 0 20px; }
 .kids-detail-art { width: 160px; height: 160px; border-radius: var(--r-lg); object-fit: cover; background: var(--bg-elev2); flex: none; }
@@ -1702,3 +1705,5 @@ body.kids .pb-like, body.kids .pb-menu, body.kids .mini-like, body.kids .mini-me
 /* a play button is a circle, never a pill: flex used to squeeze these when the bar was tight */
 .ctl { flex: none; }
 .ctl.main, .ctl.xl, .sm-main { aspect-ratio: 1; flex: none; }
+
+.kids-artist-art { font-size: 54px; font-weight: 700; letter-spacing: -.02em; }

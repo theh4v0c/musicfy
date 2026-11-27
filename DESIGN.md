@@ -257,6 +257,14 @@ Albums and lists keep their generated cover tiles. **Leave** asks for the PIN wh
 What is removed is adult work, not capability: no downloads, no A&R, no Prep, no settings, no
 delete, no drag-to-playlist, no context menu.
 
+Kids mode is a **boundary**, not a coat of paint. Entering clears the adult queue and stops
+playback, closes every overlay, and writes the mode to `localStorage` so an offline reload
+cannot fall back to the adult Home. The shared player and the Now Playing sheet are adult
+surfaces: their artist, album, add-to-playlist and like actions return immediately while kids
+mode is on, and the heart, the badge and the add button are not rendered. The PIN is owner-only:
+it cannot be changed or removed from inside the mode, changing it requires the current one, and
+a wrong exit is rate limited.
+
 In the owner's interface those lists are not mixed into `PLAYLISTS`. They sit in a **named,
 collapsible group** under it, headed by the child's name and a count: the divider says they
 belong to another listener. The group is collapsed by default, remembers being open, and opens

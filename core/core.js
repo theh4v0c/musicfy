@@ -1535,6 +1535,18 @@ function hashPin(pin) {
   const salt = randomBytes(16).toString('hex');
   return `${salt}:${scryptSync(String(pin), salt, 32).toString('hex')}`;
 }
+const kidsFails = new Map();
+function kidsBlocked(ip) {
+  const r = kidsFails.get(ip);
+  return !!r && r.until > Date.now();
+}
+function kidsFail(ip) {
+  const r = kidsFails.get(ip) || { n: 0, until: 0 };
+  r.n += 1;
+  if (r.n >= 10) { r.until = Date.now() + 10 * 60 * 1000; r.n = 0; }
+  kidsFails.set(ip, r);
+}
+
 function pinOk(pin, stored) {
   const [salt, want] = String(stored || '').split(':');
   if (!salt || !want) return false;
@@ -5241,16 +5253,27 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
     if (u.pathname === '/api/kids/exit' && req.method === 'POST') {
+      const ip = String(req.socket.remoteAddress || '');
+      if (kidsBlocked(ip)) return json(res, 429, { error: 'too many tries, wait ten minutes' });
       let b = {};
       try { b = JSON.parse(await readBody(req) || '{}'); } catch {}
       const stored = setting('kids_pin', '');
-      if (stored && !pinOk(b.pin, stored)) return json(res, 403, { error: 'wrong pin' });
+      if (stored && !pinOk(b.pin, stored)) {
+        kidsFail(ip);
+        return json(res, 403, { error: 'wrong pin' });
+      }
+      kidsFails.delete(ip);
       res.setHeader('set-cookie', kidsCookie(false));
       return json(res, 200, { ok: true });
     }
     if (u.pathname === '/api/kids/pin' && req.method === 'POST') {
+      // the PIN guards the way out: it cannot be changed or removed from inside the room it
+      // guards, and replacing it requires the current one
+      if (kidsOn(req)) return json(res, 403, { error: 'not available in Kids mode' });
       let b = {};
       try { b = JSON.parse(await readBody(req) || '{}'); } catch {}
+      const stored = setting('kids_pin', '');
+      if (stored && !pinOk(b.current, stored)) return json(res, 403, { error: 'current pin required' });
       const pin = String(b.pin || '').trim();
       if (!pin) { setSetting('kids_pin', ''); return json(res, 200, { ok: true, pin_set: false }); }
       if (!/^\d{4,8}$/.test(pin)) return json(res, 400, { error: 'four to eight digits' });

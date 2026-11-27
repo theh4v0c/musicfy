@@ -488,3 +488,29 @@ test('a kids play cannot reach the taste tables', () => {
   assert.doesNotMatch(fn.slice(0, fn.indexOf('if (kids)')), /INSERT INTO listens/,
     'the listens insert must not run before the kids branch');
 });
+
+test('kids mode cannot leak through the shared player or the layout css', () => {
+  const { readFileSync } = require('node:fs');
+  const css = readFileSync(new URL('../web/app.css', import.meta.url), 'utf8');
+  // the oval was `body.kids .main`, which matched the .ctl.main play button
+  assert.match(css, /body\.kids main\.main \{ width: 100%; \}/);
+  assert.doesNotMatch(css, /body\.kids \.main \{/);
+  assert.match(css, /body\.kids \.np-add, body\.kids \.np-like/);
+  const js = readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
+  assert.match(js, /function handOverToKids\(\)/, 'entering kids must be one hand-over path');
+  assert.match(js, /state\.queue = \[\];/, 'the adult queue must be cleared on entry');
+  assert.match(js, /function openNowPlaying\(\) \{ if \(state\.kidsOn/, 'now playing is adult surface');
+  assert.match(js, /async function renderArtist\(name, push = true\) \{\n  if \(state\.kidsOn\) return;/, 'artist page is adult surface');
+  assert.match(js, /async function renderAlbum\(name, push = true\) \{\n  if \(state\.kidsOn\) return;/, 'album page is adult surface');
+  assert.match(js, /localStorage\.getItem\('mf-kids'\)/, 'offline boot must know it is in kids mode');
+});
+
+test('the kids pin cannot be changed or removed from inside kids mode', () => {
+  const { readFileSync } = require('node:fs');
+  const src = readFileSync(new URL('../core/core.js', import.meta.url), 'utf8');
+  const pin = src.slice(src.indexOf("u.pathname === '/api/kids/pin'"), src.indexOf("u.pathname === '/api/kids/pin'") + 900);
+  assert.match(pin, /kidsOn\(req\)/, 'the pin endpoint must refuse in kids mode');
+  assert.match(pin, /pinOk\(b\.current/, 'changing or clearing needs the current pin');
+  const exit = src.slice(src.indexOf("u.pathname === '/api/kids/exit'"), src.indexOf("u.pathname === '/api/kids/exit'") + 900);
+  assert.match(exit, /kidsBlocked\(ip\)/, 'the exit must be rate limited');
+});

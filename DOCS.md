@@ -707,8 +707,16 @@ that the branch exists and that `/api/listen` takes the flag from the cookie rat
 request body. Kids plays also skip auto-download.
 
 In the interface the cookie hides the sidebar, top bar and bottom navigation and shows the
-kids page; `nav()` refuses any other view while it is set. The PIN is a speed bump, not a
-lock: anyone who can open Settings can clear it.
+kids page; `nav()` refuses any other view while it is set, the adult queue is cleared on entry,
+and the mode is mirrored in `localStorage` so an offline reload stays in Kids mode. The last
+kids payload is cached in `localStorage` for the same reason.
+
+The PIN is owner-only: `/api/kids/pin` refuses while the kids cookie is present and requires
+the current PIN to change or clear it, and `/api/kids/exit` allows ten wrong tries then blocks
+the address for ten minutes. Recovery for a forgotten PIN: stop the service and delete the
+`kids_pin` row from the `settings` table (or run a factory reset); there is no in-app bypass.
+It remains a speed bump for a child, not a security boundary against an adult with the file
+system.
 
 ## First run
 

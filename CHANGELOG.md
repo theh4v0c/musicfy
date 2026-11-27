@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.1 — 2026-11-27
+
+- **The play button oval is fixed.** `body.kids .main { width: 100% }` matched `.ctl.main` — the
+  play button — not only `<main class="main">`. It is `main.main` now. Every `.ctl` is
+  `flex: none` with `aspect-ratio: 1`; a unit test fails if the selector comes back.
+- **Kids mode is a boundary.** Entering stops playback, clears the adult queue, closes the Now
+  Playing sheet, the context menu, the drawers and the palette. The shared player's artist,
+  album, add-to-playlist and like actions are guarded; the heart, source badge and add button
+  are hidden.
+- **Offline no longer becomes the adult app.** The mode is written to `localStorage` and read
+  before the first render, and the last kids payload is cached, so an offline reload stays in
+  Kids with her shelf instead of the parent's Home.
+- **The PIN cannot be removed from inside the room it guards.** `/api/kids/pin` refuses in
+  Kids mode and requires the current PIN to change or clear; `/api/kids/exit` is rate limited
+  (10 tries, 10 minutes). Settings asks for the current PIN.
+- **A phone can enter Kids mode.** The Settings card has **Open Kids mode**; the sidebar entry
+  remains for desktop.
+- Kids Home renders every album (the header said 15, the grid showed 12).
+- Tiles are real buttons with an open overlay and a separate play button, so a list can be
+  opened with the keyboard; tabs are 44px and the tile play button is 44px.
+- The PIN prompt is a password field.
+
 ## 0.6.0 — 2026-11-27
 
 - **Kids mode is the app, not a cage.** Three tabs — Home, Lists, Search — with the player bar.

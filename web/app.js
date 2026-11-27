@@ -48,6 +48,7 @@ function askDialog(opts = {}) {
   msg.textContent = opts.message || '';
   msg.hidden = !opts.message;
   input.hidden = !isPrompt;
+  input.type = opts.password ? 'password' : 'text';
   input.value = isPrompt ? String(opts.value ?? '') : '';
   ok.textContent = opts.confirm || (isPrompt ? tr('Save') : tr('Confirm'));
   cancel.textContent = opts.cancel || tr('Cancel');
@@ -800,6 +801,7 @@ function paintLike(t) {
 
 const likeInFlight = new Set();
 async function toggleLike(t) {
+  if (state.kidsOn) return;
   if (!t || t.id == null || likeInFlight.has(t.id)) return;
   likeInFlight.add(t.id);
   const wasLiked = isLiked(t);
@@ -2953,6 +2955,9 @@ async function renderSettings() {
       <section class="set-card" data-tone="acc">
         <h2>Kids</h2>
         <p class="set-note">A separate shelf for a kid or a teenager. Plays made in Kids mode are recorded on their own and never reach your taste, your rotation, your play history or A&amp;R.</p>
+        <div class="lib-actions">
+          <button class="btn btn-ghost" id="set-kids-open" type="button">Open Kids mode</button>
+        </div>
         <div class="kids-profile">
           <label>Name<input id="set-kids-name" type="text" maxlength="30" autocomplete="off" value="${esc(k.name || '')}" placeholder="${tr('Optional')}"></label>
           <label>Age
@@ -2973,6 +2978,7 @@ async function renderSettings() {
             ? state.playlists.map((p) => `<label class="set-check kids-pl"><input type="checkbox" data-pl="${esc(p.id)}"${p.kids ? ' checked' : ''}> <span>${esc(p.name)}</span><em>${Number(p.n_tracks) || 0}</em></label>`).join('')
             : `<p class="set-note">${tr('No playlists yet.')}</p>`}
         </div>
+        ${k.pin_set ? `<label>Current PIN<input id="set-kids-pin-current" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="${tr('required to change or clear')}"></label>` : ''}
         <label>PIN to leave Kids mode<input id="set-kids-pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="${k.pin_set ? 'set - type a new one to change it' : 'not set'}"></label>
         <div class="lib-actions">
           <button class="btn btn-ghost" id="set-kids-pin-save" type="button">Save PIN</button>
@@ -3176,14 +3182,17 @@ async function renderSettings() {
   if (avoidInput) { avoidInput.addEventListener('input', paintAvoid); paintAvoid(); }
 
   // kids PIN: a speed bump, so it is deliberately easy to set and to clear
+  const kidsOpen = document.getElementById('set-kids-open');
+  if (kidsOpen) kidsOpen.onclick = () => enterKids();
   const kidsSave = document.getElementById('set-kids-pin-save');
   if (kidsSave) kidsSave.onclick = async () => {
     const input = document.getElementById('set-kids-pin');
+    const current = document.getElementById('set-kids-pin-current');
     const msg = document.getElementById('set-kids-msg');
     try {
       const r = await api('/api/kids/pin', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ pin: input.value.trim() }),
+        body: JSON.stringify({ pin: input.value.trim(), current: current ? current.value.trim() : '' }),
       });
       if (msg) { msg.dataset.tone = 'ok'; msg.textContent = r.pin_set ? 'PIN set' : 'PIN cleared'; }
       input.value = '';
@@ -3232,11 +3241,18 @@ async function renderSettings() {
   });
   const kidsClear = document.getElementById('set-kids-pin-clear');
   if (kidsClear) kidsClear.onclick = async () => {
+    const current = document.getElementById('set-kids-pin-current');
+    const msg = document.getElementById('set-kids-msg');
     try {
-      await api('/api/kids/pin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: '' }) });
+      await api('/api/kids/pin', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ pin: '', current: current ? current.value.trim() : '' }),
+      });
       await syncKidsEntry();
       renderSettings();
-    } catch {}
+    } catch (e) {
+      if (msg) { msg.dataset.tone = 'bad'; msg.textContent = e.message || tr('Could not save'); }
+    }
   };
   // setup is repeatable: the flow edits the same fields this page does, so the button is a
   // shortcut, not a second source of truth
@@ -5197,6 +5213,7 @@ async function pollJob(jobId, onTick, tries = 150) {
 
 /* artist page: all owned tracks for one artist */
 async function renderArtist(name, push = true) {
+  if (state.kidsOn) return;
   if (push) state.history.push({ v: state.view, pid: state.playlistId, name: state.artistName || state.albumName });
   state.artistName = name; state.albumName = null;
   setNav('library'); state.view = 'artist'; paintBack(); state.playlistId = null; renderSidebar();
@@ -5292,6 +5309,7 @@ async function renderArtist(name, push = true) {
 
 /* album page: all owned tracks for one album */
 async function renderAlbum(name, push = true) {
+  if (state.kidsOn) return;
   if (push) state.history.push({ v: state.view, pid: state.playlistId, name: state.artistName || state.albumName });
   state.albumName = name; state.artistName = null;
   setNav('library'); state.view = 'album'; paintBack(); state.playlistId = null; renderSidebar();
@@ -6633,7 +6651,7 @@ $('pb-menu').onclick = (e) => {
 $('pb-title').onclick = (e) => { e.stopPropagation(); openNowPlaying(); };
 // the player bar is not a context-menu target: right click and the dots button open
 // the menu, a plain click expands the now playing view
-function openNowPlaying() { if (!state.current) return; $('np').hidden = false; setTimeout(fitNowPlaying, 30); }
+function openNowPlaying() { if (state.kidsOn || !state.current) return; $('np').hidden = false; setTimeout(fitNowPlaying, 30); }
 $('pb-art').addEventListener('click', () => setTimeout(fitNowPlaying, 30), true);
 document.querySelector('.pb-left').oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); currentCtx(e.clientX, e.clientY); };
 document.querySelector('.pb-left').onclick = (e) => {
@@ -6782,6 +6800,7 @@ async function openAlbumCoverPicker(album, artist) {
 
 /* add many tracks to a playlist, with a picker */
 function openAddPlIds(ids) {
+  if (state.kidsOn) return;
   markCtxOpen();
   const m = $('ctx');
   m.innerHTML = `<div class="ctx-title">Add ${ids.length} to playlist</div>` +
@@ -6900,6 +6919,9 @@ function paletteActions() {
   if (state.tier === 'dj') acts.push({ label: 'Prep', hint: 'Go', run: () => nav('djexport') });
   acts.push({ label: 'A&R', hint: 'Go', run: () => nav('askai') });
   acts.push({ label: 'Settings', hint: 'Go', run: () => nav('settings') });
+  if (state.kids && (state.kids.pin_set || state.kids.name || (state.kids.playlists || []).length)) {
+    acts.push({ label: 'Open Kids mode', hint: 'Hand over', run: () => enterKids() });
+  }
   if (state.view === 'playlist' && state.playlistId) {
     const pid = state.playlistId;
     const name = (state.playlists.find((p) => p.id === pid) || {}).name || '';
@@ -7495,19 +7517,42 @@ async function syncKidsEntry() {
   return k;
 }
 
+function handOverToKids() {
+  // the child gets a clean device: no adult queue, no overlay left open, nothing playing
+  try { audio.pause(); } catch {}
+  try { audio.removeAttribute('src'); audio.load(); } catch {}
+  state.current = null;
+  state.kidsList = null;
+  state.kidsAlbum = null;
+  state.kidsArtist = null;
+  state.queue = [];
+  state.qi = -1;
+  state._wantPlaying = false;
+  state.selected = null;
+  try { state.selectedIds.clear(); } catch {}
+  for (const id of ['np', 'queue-drawer', 'dl-drawer', 'ctx', 'ctx-bg', 'selbar']) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = true;
+  }
+  try { closePalette(); } catch {}
+  try { closeCtx(true); } catch {}
+  try { localStorage.setItem('mf-kids', '1'); } catch {}
+  kidsMode(true);
+  renderKids('home');
+}
+
 async function enterKids() {
   try {
     await api('/api/kids/enter', { method: 'POST' });
   } catch { toast(tr('Could not open Kids mode'), 4000); return; }
-  kidsMode(true);
-  renderKids();
+  handOverToKids();
 }
 
 async function leaveKids() {
   const st = state.kids || await api('/api/kids', { nocache: true }).catch(() => null);
   let pin = '';
   if (st && st.pin_set) {
-    pin = await uiPrompt(tr('PIN to leave Kids mode'));
+    pin = await uiPrompt(tr('PIN to leave Kids mode'), '', { password: true });
     if (pin == null) return;
   }
   try {
@@ -7516,6 +7561,7 @@ async function leaveKids() {
     toast(tr('That PIN is not right.'), 4000);
     return;
   }
+  try { localStorage.removeItem('mf-kids'); } catch {}
   kidsMode(false);
   await syncKidsEntry();
   state.view = 'home';
@@ -7531,7 +7577,13 @@ async function renderKids(tab) {
   $('view-title').textContent = tr('Kids');
   const v = $('view');
   let data = { playlists: [], tracks: [], recent: [], name: '', age: '' };
-  try { data = await api('/api/kids', { nocache: true }); } catch {}
+  try {
+    data = await api('/api/kids', { nocache: true });
+    try { localStorage.setItem('mf-kids-data', JSON.stringify(data)); } catch {}
+  } catch {
+    // offline: the child stays in Kids mode with the last known shelf, never the adult app
+    try { const raw = localStorage.getItem('mf-kids-data'); if (raw) data = JSON.parse(raw); } catch {}
+  }
   state.kids = data;
   const tracks = data.tracks || [];
   const fold = (x) => String(x || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
@@ -7562,8 +7614,9 @@ async function renderKids(tab) {
     card.className = 'kids-tile';
     card.innerHTML = `<div class="kids-tile-artwrap">
         <img class="kids-tile-art" src="${img}" alt="" loading="lazy">
-        <button class="kids-tile-play" aria-label="${esc(tr('Play'))}">${IC.play}</button>
       </div>
+      <button class="kids-tile-open" type="button" aria-label="${esc(tr('Open'))} ${esc(name)}"></button>
+      ${play ? `<button class="kids-tile-play" type="button" aria-label="${esc(tr('Play'))} ${esc(name)}">${IC.play}</button>` : ''}
       <div class="kids-tile-name">${esc(name)}</div>
       <div class="kids-tile-sub">${esc(sub || '')}</div>`;
     const image = card.querySelector('img');
@@ -7573,10 +7626,9 @@ async function renderKids(tab) {
       phEl.textContent = String(name || '?').charAt(0).toUpperCase();
       image.replaceWith(phEl);
     };
-    card.onclick = open;
+    card.querySelector('.kids-tile-open').onclick = open;
     const playBtn = card.querySelector('.kids-tile-play');
-    if (play) playBtn.onclick = (e) => { e.stopPropagation(); play(); };
-    else playBtn.remove();
+    if (play && playBtn) playBtn.onclick = () => play();
     return card;
   };
 
@@ -7594,7 +7646,7 @@ async function renderKids(tab) {
     <div id="kids-body"></div>`;
   $('kids-leave').onclick = leaveKids;
   v.querySelectorAll('[data-ktab]').forEach((b) => {
-    b.onclick = () => { state.kidsList = null; state.kidsAlbum = null; renderKids(b.dataset.ktab); };
+    b.onclick = () => { state.kidsList = null; state.kidsAlbum = null; state.kidsArtist = null; renderKids(b.dataset.ktab); };
   });
   const body = $('kids-body');
 
@@ -7646,6 +7698,29 @@ async function renderKids(tab) {
       </div>
       <div class="kids-rows" id="kids-rows"></div>`;
     $('kids-back').onclick = () => { state.kidsAlbum = null; renderKids('home'); };
+    $('kids-play').onclick = () => { if (list.length) playList(list, 0); };
+    $('kids-shuffle').onclick = () => { if (list.length) playList(list, 0, true); };
+    const host = $('kids-rows');
+    for (const t of list) host.appendChild(rowFor(t, list));
+    return;
+  }
+
+  if (state.kidsArtist) {
+    const list = tracks.filter((t) => t.artist === state.kidsArtist);
+    body.innerHTML = `<button class="kids-back" id="kids-back" type="button">&#8592; ${tr('Artists')}</button>
+      <div class="kids-detail">
+        <div class="kids-detail-art ph kids-artist-art" style="background:${artistGrad(state.kidsArtist)};color:rgba(255,255,255,.92)">${esc(String(state.kidsArtist).charAt(0).toUpperCase())}</div>
+        <div class="kids-detail-main">
+          <b>${esc(state.kidsArtist)}</b>
+          <span>${list.length} ${tr(list.length === 1 ? 'track' : 'tracks')}</span>
+          <div class="kids-actions">
+            <button class="btn btn-primary" id="kids-play" type="button">${IC.play} ${tr('Play all')}</button>
+            <button class="btn btn-ghost" id="kids-shuffle" type="button">${tr('Shuffle')}</button>
+          </div>
+        </div>
+      </div>
+      <div class="kids-rows" id="kids-rows"></div>`;
+    $('kids-back').onclick = () => { state.kidsArtist = null; renderKids('home'); };
     $('kids-play').onclick = () => { if (list.length) playList(list, 0); };
     $('kids-shuffle').onclick = () => { if (list.length) playList(list, 0, true); };
     const host = $('kids-rows');
@@ -7708,8 +7783,26 @@ async function renderKids(tab) {
 
   const recent = (data.recent || []).map((r) => tracks.find((t) => t.id === r.id)).filter(Boolean).slice(0, 8);
   const albums = [...new Set(tracks.map((t) => t.album).filter(Boolean))];
+  const artists = [...new Set(tracks.map((t) => t.artist).filter(Boolean))];
+  const artistTile = (a) => {
+    const n = tracks.filter((t) => t.artist === a).length;
+    const card = document.createElement('div');
+    card.className = 'kids-tile';
+    card.innerHTML = `<div class="kids-tile-artwrap">
+        <div class="kids-tile-art ph kids-artist-art" style="background:${artistGrad(a)};color:rgba(255,255,255,.92)">${esc(String(a).charAt(0).toUpperCase())}</div>
+      </div>
+      <button class="kids-tile-open" type="button" aria-label="${esc(tr('Open'))} ${esc(a)}"></button>
+      <button class="kids-tile-play" type="button" aria-label="${esc(tr('Play'))} ${esc(a)}">${IC.play}</button>
+      <div class="kids-tile-name">${esc(a)}</div>
+      <div class="kids-tile-sub">${n} ${tr(n === 1 ? 'track' : 'tracks')}</div>`;
+    card.querySelector('.kids-tile-open').onclick = () => { state.kidsArtist = a; renderKids('home'); };
+    card.querySelector('.kids-tile-play').onclick = () => { const list = tracks.filter((t) => t.artist === a); if (list.length) playList(list, 0); };
+    return card;
+  };
   body.innerHTML = `
     ${recent.length ? `<div class="sec-title">${tr('Recently played')}</div><div class="kids-rows" id="kids-recent"></div>` : ''}
+    <div class="sec-title">${tr('Artists')} <small>${artists.length}</small></div>
+    <div class="kids-grid" id="kids-artists" data-age="${esc(data.age || '')}"></div>
     <div class="sec-title">${tr('Albums')} <small>${albums.length}</small></div>
     <div class="kids-grid" id="kids-albums" data-age="${esc(data.age || '')}"></div>
     <div class="sec-title">${tr('Lists')} <small>${data.playlists.length}</small></div>
@@ -7718,7 +7811,8 @@ async function renderKids(tab) {
     const host = $('kids-recent');
     for (const t of recent) host.appendChild(rowFor(t, recent));
   }
-  for (const al of albums.slice(0, 12)) {
+  for (const a of artists) $('kids-artists').appendChild(artistTile(a));
+  for (const al of albums) {
     const n = tracks.filter((t) => t.album === al).length;
     $('kids-albums').appendChild(tile({
       img: `/api/cover-album/${encodeURIComponent(al)}?v=${state.artV || 0}`,
@@ -7746,6 +7840,8 @@ async function loadPlaylists() {
 }
 (async () => {
   const bootView = state.view; // capture before any await so an early nav wins
+  // read the mode before anything else: an offline boot must not fall through to the adult app
+  try { if (localStorage.getItem('mf-kids') === '1') state.kidsOn = true; } catch {}
   try {
     try { primeFromCache(); } catch {}
     try { restoreQueue(); } catch {}
@@ -7762,7 +7858,7 @@ async function loadPlaylists() {
     paintPill();
     try { await syncKidsEntry(); } catch {}
     // do not stomp a view the user opened while boot was loading playlists
-    if (state.kids && state.kids.kids) renderKids();
+    if (state.kidsOn) { kidsMode(true); renderKids('home'); }
     else if (state.view === bootView) renderHome();
     if (state.needsOnboarding) openOnboarding(Number(state.settings.onboarding_step) || 0);
     try { watchDownloads(); } catch {}
