@@ -962,6 +962,8 @@ function folderChoices(local) {
     for (const entry of entries) {
       if (n >= 120) break;
       if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      // the app's own buckets are not a music collection to pick: playlist-*, upload, web
+      if (/^(playlist|upload|web)(-|$)/i.test(entry.name)) continue;
       add(path.join(base, entry.name));
       n += 1;
     }
