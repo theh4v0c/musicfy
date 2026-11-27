@@ -198,9 +198,16 @@ async function fetchArtistTags(artist) {
   return c[key];
 }
 
+// The selection used to be "the first N untagged artists" with no cursor, so a batch that
+// found nothing on MusicBrainz was picked again on the next pass, for ever: 25 lookups every
+// five minutes and a remaining count that never moved. The cursor walks the alphabet; when
+// it runs out it starts over, which is a full sweep.
+let artistCursor = '';
 async function fillTracks(db, { limit = 100, onProgress = null } = {}) {
   const rows = db.prepare(`SELECT DISTINCT artist FROM tracks
-    WHERE (genre IS NULL OR genre = '') AND artist IS NOT NULL AND artist != '' LIMIT ?`).all(limit);
+    WHERE (genre IS NULL OR genre = '') AND artist IS NOT NULL AND artist != '' AND artist > ?
+    ORDER BY artist LIMIT ?`).all(artistCursor, limit);
+  artistCursor = rows.length ? rows[rows.length - 1].artist : '';
   let tagged = 0, families = 0, looked = 0;
   for (const row of rows) {
     looked += 1;

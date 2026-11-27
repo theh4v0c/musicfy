@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.3 — 2026-11-27
+
+- **The automatic genre tagger moves forward.** It asked MusicBrainz about the same first 25
+  untagged artists on every five-minute pass, so a batch that found nothing was retried for
+  ever and the remaining count never changed (25 lookups, `tagged: 0`, `remainingArtists: 571`
+  on every line). The selection now walks the alphabet with a cursor and starts over when it
+  runs out, and a pass that looks at nothing ends the sweep instead of repeating it.
+- **The app log no longer prints git's `fatal: not a git repository`.** A bundled app has no
+  `.git`, so that check exits 128 by design; its stderr is now captured instead of inherited.
+
 ## 0.8.2 — 2026-11-27
 
 - **Connecting the Mac to another MUSICFY names the port instead of saying "unreachable".**

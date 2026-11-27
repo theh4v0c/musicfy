@@ -94,7 +94,9 @@ async function updateInfo(check = false) {
     pending_restart: release.compare(onDisk, APP_VERSION) > 0,
   };
   try {
-    out.git = execFileSync('git', ['-C', APP_ROOT, 'rev-parse', '--is-inside-work-tree'], { timeout: 5000 }).toString().trim() === 'true';
+    // 'pipe': a bundle install has no .git, and git's "fatal:" on stderr is not an error
+    // the owner should read in the app log
+    out.git = execFileSync('git', ['-C', APP_ROOT, 'rev-parse', '--is-inside-work-tree'], { timeout: 5000, stdio: 'pipe' }).toString().trim() === 'true';
   } catch {}
   if (!out.git) {
     // a bundle install still has releases to compare against
@@ -4364,7 +4366,7 @@ const server = http.createServer(async (req, res) => {
           Object.assign(genreJob, { passes: genreJob.passes + 1, last: r, checked: base.checked + (r.artistsChecked || 0), tagged: base.tagged + (r.tagged || 0), families: base.families + (r.families || 0) });
           console.log('[genre]', JSON.stringify(r));
           guard += 1;
-          if (!loop || !r.remainingArtists || guard > 40) break;
+          if (!loop || !r.remainingArtists || !r.artistsChecked || guard > 40) break;
           await new Promise((res2) => setTimeout(res2, 2000));
         }
       })().catch((e) => { genreJob.error = String(e.message || e).slice(0, 140); console.error('[genre]', e.message); })
