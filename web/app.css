@@ -502,11 +502,11 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .tt { font-size: var(--fs-row); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ta { font-size: 12px; color: var(--fg-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
 /* ladder row play affordance */
-/* ladder results are trow.lrow and keep their floating orange button; a playlist
-   row is plain .lrow and uses the same outlined button as a track row */
+/* ladder results are trow.lrow and use the row's gutter control like every other row;
+   a playlist row is plain .lrow and keeps its outlined button in the flow */
 .trow.lrow { position: relative; }
 .trow.lrow .lrow-play { position: absolute; left: 40px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--acc); color: var(--on-acc); opacity: 0; transition: opacity .14s ease; display: flex; align-items: center; justify-content: center; }
-.trow.lrow:hover .lrow-play, .trow.lrow:focus-within .lrow-play { opacity: 1; }@media (hover: none){ .trow.lrow .lrow-play { opacity: 1; } }
+.trow.lrow:hover .lrow-play, .trow.lrow:focus-within .lrow-play { opacity: 1; }
 .trow.lrow .lrow-play svg { width: 13px; height: 13px; }
 
 /* keyboard focus and search skeletons */
@@ -730,10 +730,19 @@ main.main { transition: margin-right .18s ease; }
 .ctx-title { font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; color: var(--fg-mute); padding: 8px 12px 4px; }
 .ctx-sep { height: 1px; background: var(--line); margin: 5px 4px; }
 .tcard .tcard-play { position: absolute; right: 10px; bottom: 32px; width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--acc); color: var(--on-acc); box-shadow: 0 8px 24px rgba(0,0,0,.5); opacity: 0; transform: translateY(4px); transition: opacity .14s ease, transform .14s ease; }
-.tcard:hover .tcard-play, .tcard:focus-within .tcard-play { opacity: 1; transform: none; }@media (hover: none){
-  .tcard .tcard-play { opacity: 1; transform: none; background: var(--bg-elev2); border: 1px solid var(--line); color: var(--fg); box-shadow: 0 8px 24px rgba(0,0,0,.45); }
-  .pcard .pcard-play { opacity: 1; transform: none; background: var(--bg-elev2); border: 1px solid var(--line); color: var(--fg); box-shadow: 0 8px 24px rgba(0,0,0,.45); }
-  .trow.lrow .lrow-play { background: var(--bg-elev2); border: 1px solid var(--line); color: var(--fg); }
+.tcard:hover .tcard-play, .tcard:focus-within .tcard-play { opacity: 1; transform: none; }
+/* a cover is a cover. The play disc is a pointer affordance, so it must not sit on
+   artwork on a phone, and it must not swallow the tap while it is invisible. */
+.pcard-play, .tcard-play, .kids-tile-play { pointer-events: none; }
+.pcard:hover .pcard-play, .pcard:focus-within .pcard-play,
+.tcard:hover .tcard-play, .tcard:focus-within .tcard-play,
+.kids-tile:hover .kids-tile-play, .kids-tile:focus-within .kids-tile-play { pointer-events: auto; }
+@media (hover: none){
+  .pcard .pcard-play, .tcard .tcard-play, .kids-tile .kids-tile-play { display: none; }
+  /* rows keep one control, in the gutter where the index was, never over the art */
+  .trow .tno-num { display: none; }
+  .trow .tno-play { display: inline-flex; border-color: var(--line); }
+  .trow.lrow .lrow-play { display: none; }
 }
 .pb-menu { flex: none; }
 .pb-left, .mini, .tcard { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
@@ -1800,3 +1809,29 @@ body.kids .kids-title-tab { display: inline; }
 @media (prefers-reduced-motion: reduce) {
   .like.pop, .pb-like.pop, .np-like.pop, .mini-like.pop { animation: none; }
 }
+
+/* ---- press ----------------------------------------------------------------
+   The tap highlight is off, so without this a press looks like nothing happened.
+   One rule: the control dips, the surface gives. 90ms, so it feels like the finger
+   and not like a transition. Animation itself is optional; the dip is not motion
+   sickness, it is contact. */
+.btn, .ctl, .icon-btn, .mode-tab, .view-switch .vw, .action-chip, .genrechip, .keychip,
+.rail-link, .bn-btn, .snav-btn, .alink, .set-about-link, .ctx button, .pb-like, .mini button,
+.pcard, .tcard, .kids-tile, .trow, .lrow, .topresult, .crate, .mtile, .flow-key,
+.tno-play, .lrow-play, .pcard-play, .tcard-play, .kids-tile-play {
+  transition: transform 90ms ease, background-color 120ms ease, border-color 120ms ease,
+              color 120ms ease, box-shadow 120ms ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .btn:active, .ctl:active, .icon-btn:active, .mode-tab:active, .view-switch .vw:active,
+  .action-chip:active, .genrechip:active, .keychip:active, .ctx button:active,
+  .rail-link:active, .bn-btn:active, .snav-btn:active, .set-about-link:active,
+  .pb-like:active, .mini button:active { transform: scale(.95); }
+  .tno-play:active, .lrow-play:active, .pcard-play:active, .tcard-play:active,
+  .kids-tile-play:active { transform: scale(.9); }
+  .pcard:active, .tcard:active, .kids-tile:active, .topresult:active, .crate:active,
+  .mtile:active, .flow-key:active { transform: scale(.975); }
+  .trow:active, .lrow:active { transform: scale(.995); }
+}
+.trow:active, .lrow:active { background: var(--bg-elev2); }
+.pcard:active { background: var(--bg-elev2); }

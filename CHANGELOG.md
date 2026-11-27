@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.1 — 2026-11-27
+
+- **Covers are covers again.** On a touch screen the play disc is removed from album,
+  playlist, track and kids cards instead of being pinned to the artwork. It stays a hover
+  and focus affordance on a pointer. A track card plays when pressed; a playlist or album
+  card opens.
+- **In a list on touch, one control in the gutter**: the row's play button takes the index
+  column, and the floating disc that sat over the artwork in ladder rows is gone. The
+  numbers are hidden on touch, where they were never the point.
+- **A hidden control no longer takes a tap.** The cover discs had `opacity: 0` but stayed
+  clickable, so an invisible 44px target sat on every kids tile.
+- **Every press answers.** The tap highlight was off and only the Flow key had an active
+  state, so a click looked like nothing. Every control now dips in 90ms (0.95 control,
+  0.975 card, 0.9 play disc) and a row washes to the raised colour. Reduced motion keeps
+  the wash and drops the scale.
+
 ## 0.8.0 — 2026-11-28
 
 - **Settings is one system.** A heading (14/600), a note (12/1.5), a label (11/600), a micro

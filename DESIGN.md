@@ -140,7 +140,7 @@ States:
 | state | treatment |
 |---|---|
 | hover (pointer) | `--bg-elev2` for ghosts and icons; accent brightens for filled; border to `--fg-mute` |
-| active | `transform: translateY(1px)` (see `.pressed`) |
+| active | the control dips: `scale(.95)` small controls, `.975` cards, `.9` play discs; a row washes to `--bg-elev2` |
 | focus-visible | 2px accent outline, never removed |
 | hover / selected pill | 2px outer ring, so hovering never reflows the row |
 | focus-within | a reveal or hover state also appears when a child has keyboard focus |
@@ -148,8 +148,14 @@ States:
 | playing | accent text + `--acc-soft` row wash |
 
 Touch: on `(pointer: coarse)`, icon controls grow to 44×44 (top bar, player controls) and
-small targets (row play discs, like, more, card play) get a 44×44 hit area from an
-absolutely positioned pseudo-element. The visible disc keeps its designed size.
+small targets (row play, like, more) get a 44×44 hit area from an absolutely positioned
+pseudo-element. The visible control keeps its designed size.
+
+A cover is a cover. The play disc over artwork is a pointer affordance: it appears on hover
+or focus, and on `(hover: none)` it is removed rather than pinned. A card is pressed to act
+(a track card plays, an album or playlist card opens). In a list on touch the one play
+control is the row's gutter button, where the index number was; nothing floats over the
+artwork, and a hidden control never receives a tap.
 
 ### 5.3 Sliders
 
@@ -408,7 +414,9 @@ Gaps between sections: 22–30px. Anything larger is a deliberate hero.
 ## 9. Motion
 
 Fast 120ms, base 160ms, slow 240ms; `ease` unless a transform needs
-`cubic-bezier(.2,.8,.2,1)`. Hover lifts 1px, press pushes 1px, card hover lifts 2px.
+`cubic-bezier(.2,.8,.2,1)`. Hover lifts 1px and a card lifts 2px. Press dips in 90ms, on
+every control: 0.95 for a control, 0.975 for a card or tile, 0.9 for a play disc, and a row
+washes instead of shrinking. A press that looks like nothing happened is a bug.
 Nothing animates on load. The mast glow is static and there is no beam animation; the
 thinking orb exists only while a request is in flight. `prefers-reduced-motion` turns the
 remaining motion off.
