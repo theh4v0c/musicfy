@@ -248,8 +248,11 @@ under the wordmark, and the age band from setup sets the card size: up to 6 gets
 11 and over gets 170px. The gradient is the app's own, not a second palette.
 
 Kids mode is the same shell, one size up: the adult rail and topbar stay, with a 240px rail
-that carries the profile (duotone initial, name, age band) and three destinations — Home,
-Lists, Search — and **Grown-ups** with the lock at the bottom. On a phone the rail becomes the
+that carries her **name as a mark** — a five-stop gradient, a soft glow, a slow sheen across
+the letters and an aurora behind it — and three destinations: Home, Lists, Search, with
+**Grown-ups** and the lock at the bottom. No age, no initials, no label next to it: the name
+is the identity. On a phone the same mark replaces the tab title in the topbar. Both
+animations stop under `prefers-reduced-motion`. On a phone the rail becomes the
 three-item bottom navigation and the lock moves to the topbar. There is no second brand, no
 white pills, no separate page header; content is capped at 1,400px and padded 32.
 
@@ -302,6 +305,10 @@ for a child and the copy says so.
 
 Cards are 150px wide in a rail on desktop, 128px on a phone, with the artwork square
 and the title under it. A rail scrolls sideways; it does not wrap.
+
+A section with nothing under it is removed, not shown with a hint. Two headings over a void
+read as a broken page; the empty state block is the only thing that speaks for an empty
+library.
 
 An empty page is not a sentence in the gap. `.hollow` is a block: a mark, a one-line title,
 one sentence saying what the content would come from, and where the action lives — `⌘O` in

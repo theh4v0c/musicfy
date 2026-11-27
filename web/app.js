@@ -1329,10 +1329,14 @@ async function renderHome() {
     </div>
     <div id="home-lazy">
       <div id="discover-home"></div>
-      <div class="sec-title">Recently played <small id="recent-hint"></small></div>
-      <div class="row-scroller" id="recent-row"></div>
-      <div class="sec-title">Your playlists <small>${Number(ownerPlaylists().length).toLocaleString(LOC())} TOTAL</small></div>
-      <div class="pgrid" id="home-grid"></div>
+      <div id="recent-sec">
+        <div class="sec-title">Recently played <small id="recent-hint"></small></div>
+        <div class="row-scroller" id="recent-row"></div>
+      </div>
+      <div id="pl-sec">
+        <div class="sec-title">Your playlists <small>${Number(ownerPlaylists().length).toLocaleString(LOC())} TOTAL</small></div>
+        <div class="pgrid" id="home-grid"></div>
+      </div>
     </div>`;
   // the masthead reports the session, not the weather: time, place, what was last on
   const paintClock = () => {
@@ -1406,10 +1410,13 @@ async function renderHome() {
   const paintKnown = () => {
     if (lazy.dataset.known) return;
     lazy.dataset.known = '1';
+    // a heading with nothing under it is a hole, not a section
+    if (!rec.length) { const s = document.getElementById('recent-sec'); if (s) s.remove(); }
     drawRecents(rec);
     const grid = $('home-grid');
     if (grid) {
       const ownPl = ownerPlaylists();
+      if (!ownPl.length) { const s = document.getElementById('pl-sec'); if (s) s.remove(); }
       for (const p of ownPl.slice(0, 12)) grid.appendChild(pcard(p));
       if (ownPl.length > 12) {
         const more = document.createElement('button');
@@ -7637,16 +7644,14 @@ async function renderKids(tab) {
   const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
   const atRoot = !state.kidsList && !state.kidsAlbum && !state.kidsArtist && !state.kidsSee;
 
-  // the rail carries the profile; the page title carries the tab
-  $('view-title').textContent = tr(which === 'home' ? 'Home' : which === 'lists' ? 'Lists' : 'Search');
+  // the rail is the kid's name, drawn as a mark: gradient, glow and a slow sheen. No age,
+  // no initials, no label. On a phone the same mark replaces the tab title in the topbar.
+  const tabName = tr(which === 'home' ? 'Home' : which === 'lists' ? 'Lists' : 'Search');
+  $('view-title').innerHTML = `<span class="kids-name-art kids-name-top">${esc(name || tr('Kids'))}</span><span class="kids-title-tab">${esc(tabName)}</span>`;
   const railName = document.getElementById('kids-prof-name');
-  if (railName) railName.textContent = name || tr('Kids');
-  const railAge = document.getElementById('kids-prof-age');
-  if (railAge) railAge.textContent = data.age || '';
-  const railArt = document.getElementById('kids-prof-art');
-  if (railArt) {
-    railArt.textContent = String(name || 'K').charAt(0).toUpperCase();
-    railArt.style.background = artistGrad(name || 'Kids');
+  if (railName) {
+    railName.textContent = name || tr('Kids');
+    railName.style.fontSize = String(name || '').length > 10 ? '21px' : '';
   }
   document.querySelectorAll('[data-ktab]').forEach((b) => b.classList.toggle('on', atRoot && b.dataset.ktab === which));
 

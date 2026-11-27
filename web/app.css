@@ -1610,12 +1610,36 @@ body.kids .bottomnav:not(.kids-bottomnav) { display: none !important; }
 body.kids .view { padding: 24px 32px 150px; max-width: 1400px; margin: 0 auto; width: 100%; }
 body.kids .pb-like, body.kids .pb-menu, body.kids .mini-like, body.kids .mini-menu,
 body.kids .pb-badge, body.kids .np-add, body.kids .np-like, body.kids .np-badge { display: none !important; }
-.kids-prof { display: flex; align-items: center; gap: 10px; padding: 6px 10px 14px; }
-.kids-prof-art { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
-  font-weight: 700; color: rgba(255,255,255,.92); flex: none; }
-.kids-prof-meta { min-width: 0; display: grid; }
-.kids-prof-meta b { font-size: 13px; }
-.kids-prof-meta small { font-size: 10.5px; color: var(--fg-mute); }
+.kids-prof { position: relative; padding: 22px 14px 24px; overflow: hidden; }
+.kids-aurora { position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(120px 90px at 36px 52%, rgba(255,92,57,.26), transparent 72%),
+    radial-gradient(120px 90px at 150px 46%, rgba(176,107,255,.22), transparent 74%);
+  filter: blur(18px); animation: kids-drift 11s ease-in-out infinite alternate; }
+@keyframes kids-drift {
+  0% { transform: translate3d(-7%, -5%, 0) scale(1); }
+  100% { transform: translate3d(7%, 6%, 0) scale(1.18); }
+}
+.kids-name-art { position: relative; display: block; max-width: 100%; white-space: nowrap; overflow: hidden;
+  font-size: 28px; font-weight: 700; letter-spacing: -.03em; line-height: 1.05;
+  background: linear-gradient(100deg, #ff5c39 0%, #ffd166 26%, #3fc57d 50%, #4aa8ff 74%, #b06bff 100%);
+  background-size: 240% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 16px rgba(255,92,57,.30));
+  animation: kids-sheen 8s linear infinite; }
+@keyframes kids-sheen { from { background-position: 0% 0; } to { background-position: 240% 0; } }
+.kids-name-top { display: none; font-size: 22px; }
+.kids-title-tab { display: none; }
+@media (max-width: 760px) {
+  body.kids .kids-name-top { display: block; }
+}
+body.kids .kids-title-tab { display: inline; }
+@media (max-width: 760px) {
+  body.kids .kids-title-tab { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kids-aurora, .kids-name-art { animation: none; }
+}
 @media (max-width: 760px) {
   body.kids .view { padding: 16px 16px 140px; }
   body.kids #kids-bottomnav { display: flex; }

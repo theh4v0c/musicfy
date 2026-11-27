@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.1 — 2026-11-27
+
+- **The kid's name is the identity mark, not a label.** The rail shows her name in a five-stop
+  gradient with a soft glow, a slow sheen and a drifting aurora behind it; the age line and the
+  initial avatar are gone. On a phone the same mark replaces the tab title in the topbar. Both
+  animations stop under reduced motion.
+- **Empty sections are removed.** "Recently played" and "Your playlists" no longer print a
+  heading with nothing under it; on an empty library the page is the mast, the Flow key and
+  the empty-state card, nothing else.
+- Verified the narrow mast at 720: the Flow key is present and 56px, the mast 172px, no orphan
+  headings.
+
 ## 0.7.0 — 2026-11-27
 
 - **The Mac app can be a window to another MUSICFY.** Settings → This app takes an address; the
