@@ -67,8 +67,9 @@ It does **not** install ffmpeg or Node. Those come from your operating system.
 If you do not want to use a terminal at all, install the app instead of following 3.1 to
 3.8. It is the same engine and the same interface, with everything it needs inside it.
 
-1. Download the DMG from
-   <https://github.com/theh4v0c/musicfy/releases/latest>.
+1. Download the DMG for Apple Silicon from
+   <https://github.com/theh4v0c/musicfy/releases/latest>. An Intel Mac uses the terminal
+   install below; there is no Intel build yet.
 2. Open the DMG and drag **MUSICFY** into **Applications**.
 3. Open **MUSICFY** from Applications. macOS refuses any app that is not notarized: open
    **System Settings → Privacy & Security**, scroll to the message about MUSICFY, and press

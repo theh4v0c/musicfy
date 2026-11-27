@@ -2,9 +2,9 @@
 
 ## 0.3.0 — 2026-11-27
 
-- **MUSICFY for macOS.** `node desktop/build.mjs` builds `MUSICFY.app` and a DMG from this
-  tree: an Electron window around the same `core/core.js`, with ffmpeg, ffprobe and yt-dlp
-  inside the bundle. A friend downloads one file, drags it to Applications, and gets a
+- **MUSICFY for macOS (Apple Silicon).** `node desktop/build.mjs` builds `MUSICFY.app` and
+  a DMG from this tree: an Electron window around the same `core/core.js`, with ffmpeg,
+  ffprobe and yt-dlp inside the bundle. A friend downloads one file, drags it to Applications, and gets a
   library without Node, Homebrew, Python or a service. First launch needs **Open Anyway**
   in System Settings because the build is not notarized.
 - The app keeps its data in `~/Library/Application Support/MUSICFY` and downloads in

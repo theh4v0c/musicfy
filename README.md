@@ -24,8 +24,9 @@ too: install it the same way, keep it on `127.0.0.1`, and reach it through SSH o
 
 On a Mac, skip the terminal: download the DMG from
 [Releases](https://github.com/theh4v0c/musicfy/releases/latest), open it and drag **MUSICFY**
-into Applications. The app is the same engine and the same interface, with ffmpeg, ffprobe
-and yt-dlp inside it:
+into Applications. The build is Apple Silicon (M1 and later); an Intel Mac still uses the
+server install below. The app is the same engine and the same interface, with ffmpeg,
+ffprobe and yt-dlp inside it:
 
 - data lives in `~/Library/Application Support/MUSICFY`, downloads in `~/Music/MUSICFY`;
 - **File → Add music folder…** (⌘O) imports a library in place — nothing is copied;
