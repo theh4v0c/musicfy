@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.6 — 2026-11-27
+
+- **Menus work again after Kids mode.** The hand-over hides every overlay with the `hidden`
+  attribute, and `[hidden] { display: none !important }` outranks `.ctx.open`. Opening the
+  sheet never cleared it, so after Kids mode the playlist menu (right-click or ⋯) rendered
+  into a hidden element and left its full-screen backdrop up: the menu looked dead, and the
+  backdrop then swallowed clicks. The sheet now clears `hidden` when it opens.
+- A unit assertion holds the opener to that, so a future hand-over cannot reintroduce it.
+
 ## 0.8.5 — 2026-11-27
 
 - **Client mode opens a window instead of deciding whether it can.** The window was created

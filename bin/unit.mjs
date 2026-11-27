@@ -503,6 +503,9 @@ test('kids mode cannot leak through the shared player or the layout css', () => 
   assert.match(js, /async function renderArtist\(name, push = true\) \{\n  if \(state\.kidsOn\) return;/, 'artist page is adult surface');
   assert.match(js, /async function renderAlbum\(name, push = true\) \{\n  if \(state\.kidsOn\) return;/, 'album page is adult surface');
   assert.match(js, /localStorage\.getItem\('mf-kids'\)/, 'offline boot must know it is in kids mode');
+  // the hand-over hides every overlay with `hidden`, which outranks `.open`; an opener that
+  // does not clear it renders into a hidden sheet and leaves its backdrop up
+  assert.match(js, /function markCtxOpen\(\) \{[^}]*if \(m\) m\.hidden = false;/, 'opening a sheet must clear hidden');
 });
 
 test('the kids pin cannot be changed or removed from inside kids mode', () => {

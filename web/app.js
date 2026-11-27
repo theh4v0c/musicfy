@@ -387,6 +387,11 @@ let ctxOpenedByTouch = false;
 function markCtxOpen() {
   ctxOpenedAt = Date.now();
   ctxOpenedByTouch = Date.now() - lastTouchAt < 1500;
+  // Kids mode hides every overlay on the way in, and `hidden` beats `.open` (it is
+  // display:none !important). Without this the sheet kept rendering into a hidden element
+  // and left its backdrop up: every menu after Kids mode looked dead.
+  const m = $('ctx');
+  if (m) m.hidden = false;
   const bg = $('ctx-bg');
   if (bg) bg.hidden = false;
 }
