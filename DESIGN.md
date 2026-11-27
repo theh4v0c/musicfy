@@ -207,6 +207,19 @@ It is a dialog: focus is trapped, Enter advances from a field, Escape goes back,
 are buttons rather than a carousel. On a phone it fills the screen and the action sits at the
 bottom. Skipping marks setup done; Settings, under You, replays it.
 
+The language switch (EN / PT) is the first control in the dialog, before Skip: the copy is
+the product here, and it has to be readable before anything is asked. The browser language
+still decides the first value. Switching saves the current screen and the fields already
+typed, then reloads into the same step.
+
+### 5.4 Voice
+
+Copy is deadpan and specific. It names the thing — files, disk, folder, UTC, bank statement —
+instead of the feeling, and any joke aims at the industry this app is refusing to be, never at
+the person. Banned: "Let's get started", "Welcome aboard", "You're all set", "Oops",
+exclamation marks, "seamless", "delight". A screen that can be skipped says so. A promise with
+an exception names the exception: the city is geocoded once, and the copy says exactly that.
+
 ## 6. Containers
 | container | radius | padding | background | use |
 |---|---|---|---|---|

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.5 — 2026-11-27
+
+- **The first-run copy was rewritten.** Deadpan instead of pleasant: "Your music. Not a
+  rental."; a name left empty is addressed "like a bank statement"; the city can be skipped
+  and you can "live in UTC like a server"; a folder is read in place, not "uploaded to a
+  service that will lose interest in two years"; the last screen has "no account to cancel".
+  Portuguese was written natively, not translated word for word.
+- **Language is the first control.** EN / PT sits in the dialog header, before Skip, on every
+  screen. The browser language still decides the first value. Switching saves the screen and
+  anything typed, then reloads into the same step.
+- The primary button on the first screen is **Come in**, not "Get started".
+- `DESIGN.md` gains 5.4 Voice: deadpan, specific, jokes aimed at the industry and never at the
+  person, and a banned list of onboarding clichés.
+
 ## 0.3.4 — 2026-11-27
 
 - **A guided first run.** Five screens, one question each: the promise (your files, your

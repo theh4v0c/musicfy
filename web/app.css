@@ -123,6 +123,10 @@ main.main { grid-area: main; display: flex; flex-direction: column; overflow: hi
 .onb-count { font-family: var(--mono); font-size: 10px; letter-spacing: .18em; color: var(--fg-mute); }
 .onb-skip { border: 0; background: none; color: var(--fg-soft); font-size: 12px; padding: 6px 2px; }
 .onb-skip:hover { color: var(--fg); }
+.onb-top-right { display: flex; align-items: center; gap: 10px; }
+.onb-lang { display: flex; border: 1px solid var(--line); border-radius: var(--r-pill); overflow: hidden; }
+.onb-lang button { border: 0; background: none; color: var(--fg-mute); font-family: var(--mono); font-size: 10px; letter-spacing: .06em; padding: 5px 9px; }
+.onb-lang button[aria-pressed="true"] { background: var(--bg-elev2); color: var(--fg); }
 .onb-track { height: 2px; background: var(--line); }
 .onb-track i { display: block; height: 100%; width: 0; background: var(--acc); transition: width .3s ease; }
 .onb-body { padding: 24px 28px 6px; overflow-y: auto; flex: 1 1 auto; }

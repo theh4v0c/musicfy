@@ -6868,7 +6868,13 @@ function openOnboarding(start = 0) {
     <div class="onb-card" role="dialog" aria-modal="true" aria-labelledby="onb-title">
       <div class="onb-top">
         <span class="onb-count" id="onb-count"></span>
-        <button class="onb-skip" id="onb-skip" type="button">${tr('Skip setup')}</button>
+        <div class="onb-top-right">
+          <div class="onb-lang" role="group" aria-label="${tr('Language')}">
+            <button type="button" data-lang="en" aria-pressed="${(window.I18N ? window.I18N.lang : 'en') === 'en'}">EN</button>
+            <button type="button" data-lang="pt-BR" aria-pressed="${(window.I18N ? window.I18N.lang : 'en') === 'pt-BR'}">PT</button>
+          </div>
+          <button class="onb-skip" id="onb-skip" type="button">${tr('Skip setup')}</button>
+        </div>
       </div>
       <div class="onb-track" aria-hidden="true"><i id="onb-fill"></i></div>
       <div class="onb-body" id="onb-body"></div>
@@ -6893,6 +6899,7 @@ function openOnboarding(start = 0) {
     busy: false,
   };
   el.querySelector('#onb-skip').onclick = () => onbSkip();
+  el.querySelectorAll('.onb-lang button').forEach((b) => { b.onclick = () => onbSwitchLang(b.dataset.lang); });
   el.querySelector('#onb-back').onclick = () => onbGo(onb.step - 1);
   el.querySelector('#onb-next').onclick = () => onbNext();
   el.addEventListener('keydown', onbKeys);
@@ -6911,7 +6918,7 @@ function onbRender() {
   document.getElementById('onb-skip').hidden = done;
   document.getElementById('onb-back').hidden = step === 0 || done;
   const next = document.getElementById('onb-next');
-  next.textContent = done ? tr('Open my library') : step === 0 ? tr('Get started') : tr('Continue');
+  next.textContent = done ? tr('Open my library') : step === 0 ? tr('Come in') : tr('Continue');
 
   if (done) {
     const bits = [onb.mode === 'listener' ? tr('Listener') : tr('DJ')];
@@ -6920,9 +6927,9 @@ function onbRender() {
     body.innerHTML = `
       <p class="onb-kicker">${tr('READY')}</p>
       <h2 class="onb-title" id="onb-title">${esc(ready)}</h2>
-      <p class="onb-copy">${tr('Everything you see from here is stored on this computer. There is no account to keep, and nothing is uploaded.')}</p>
+      <p class="onb-copy">${tr('Everything you just told it lives on this computer, in a folder you could delete if you changed your mind. There is no account to cancel.')}</p>
       <ul class="onb-facts">${bits.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>
-      <p class="onb-note">${tr('Run this again any time from Settings, under You.')}</p>`;
+      <p class="onb-note">${tr('Repeatable: Settings → You → Run setup again.')}</p>`;
     onbFocus();
     return;
   }
@@ -6930,12 +6937,12 @@ function onbRender() {
   if (step === 0) {
     body.innerHTML = `
       <p class="onb-kicker">MUSICFY</p>
-      <h2 class="onb-title" id="onb-title">${tr('A library you own.')}</h2>
-      <p class="onb-copy">${tr('Your files, your disk, no account. This takes a minute, and every step can be skipped.')}</p>
+      <h2 class="onb-title" id="onb-title">${tr('Your music. Not a rental.')}</h2>
+      <p class="onb-copy">${tr('No account, no cloud, no “Sign in with Google”. It runs on this computer, from files that are already on it. Skip whatever you like: none of this is a contract.')}</p>
       <ul class="onb-facts">
-        <li>${tr('Plays straight from the folders you already have')}</li>
-        <li>${tr('Settings and listening history stay on this computer')}</li>
-        <li>${tr('Nothing is uploaded; a download happens only when you ask for a track')}</li>
+        <li>${tr('Reads the folders you already have. It does not reorganise them.')}</li>
+        <li>${tr('Settings, plays and history stay on this computer.')}</li>
+        <li>${tr('Nothing is uploaded. A download happens when you ask for one, which is the whole idea.')}</li>
       </ul>
       <p class="onb-note" id="onb-path"></p>`;
     if (window.musicfyDesktop && window.musicfyDesktop.info) {
@@ -6952,8 +6959,8 @@ function onbRender() {
     body.innerHTML = `
       <p class="onb-kicker">${tr('YOU')}</p>
       <h2 class="onb-title" id="onb-title">${tr('What should I call you?')}</h2>
-      <p class="onb-copy">${tr('Only the greeting uses it. Leave it empty if you would rather not.')}</p>
-      <label class="onb-field">${tr('Your name')}<input id="onb-name" type="text" maxlength="40" autocomplete="given-name" value="${esc(onb.name)}" placeholder="${tr('Your name')}"></label>
+      <p class="onb-copy">${tr('The greeting uses it, and nothing else does. Leave it empty and it will address you like a bank statement.')}</p>
+      <label class="onb-field">${tr('Your name')}<input id="onb-name" type="text" maxlength="40" autocomplete="given-name" value="${esc(onb.name)}" placeholder="${tr('A name, or nothing')}"></label>
       <p class="onb-preview" id="onb-preview"></p>`;
     const input = document.getElementById('onb-name');
     input.addEventListener('input', () => { onb.name = input.value; onbPaintPreview(); });
@@ -6965,8 +6972,8 @@ function onbRender() {
   if (step === 2) {
     body.innerHTML = `
       <p class="onb-kicker">${tr('PLACE')}</p>
-      <h2 class="onb-title" id="onb-title">${tr('Where are you?')}</h2>
-      <p class="onb-copy">${tr('It says good evening at the right hour. The city is looked up once, now, to get its coordinates and time zone; the result stays on this computer.')}</p>
+      <h2 class="onb-title" id="onb-title">${tr('Where are you, roughly?')}</h2>
+      <p class="onb-copy">${tr('So it says good evening at the right hour. The city is looked up once, right now, for coordinates and time zone, and then it stays here. Leave it blank and live in UTC like a server.')}</p>
       <label class="onb-field">${tr('City')}<input id="onb-city" type="text" maxlength="60" autocomplete="address-level2" value="${esc(onb.city)}" placeholder="Brasília"></label>
       <p class="onb-note" id="onb-resolved">${onb.city ? esc(onb.city) : ''}</p>`;
     const input = document.getElementById('onb-city');
@@ -6982,13 +6989,13 @@ function onbRender() {
     body.innerHTML = `
       <p class="onb-kicker">${tr('MODE')}</p>
       <h2 class="onb-title" id="onb-title">${tr('How do you listen?')}</h2>
-      <p class="onb-copy">${tr('This changes the whole app. You can switch it any time in Settings.')}</p>
+      <p class="onb-copy">${tr('This changes the whole app, not a theme. Switch it later if you change your mind.')}</p>
       <div class="onb-modes" role="group" aria-label="${tr('Mode')}">
         <button class="onb-mode" data-mode="dj" type="button" aria-pressed="${onb.mode === 'dj'}">
-          <b>${tr('DJ')}</b><span>${tr('Prep, BPM and key, harmonic tools and exports for CDJs.')}</span>
+          <b>${tr('DJ')}</b><span>${tr('Prep, BPM and key, harmonic mixing, CDJ exports. For sets that have to hold together.')}</span>
         </button>
         <button class="onb-mode" data-mode="listener" type="button" aria-pressed="${onb.mode === 'listener'}">
-          <b>${tr('Listener')}</b><span>${tr('Library, playlists and playback. Prep stays out of the way.')}</span>
+          <b>${tr('Listener')}</b><span>${tr('Library, playlists, playback. Prep and analysis stay out of sight, along with the homework.')}</span>
         </button>
       </div>`;
     body.querySelectorAll('.onb-mode').forEach((b) => {
@@ -7003,8 +7010,8 @@ function onbRender() {
 
   body.innerHTML = `
     <p class="onb-kicker">${tr('MUSIC')}</p>
-    <h2 class="onb-title" id="onb-title">${tr('Where is your music?')}</h2>
-    <p class="onb-copy">${tr('Point at a folder you already have. The files stay where they are; nothing is copied or uploaded.')}</p>
+    <h2 class="onb-title" id="onb-title">${tr('Where does the music live?')}</h2>
+    <p class="onb-copy">${tr('Point at a folder. The files stay where they are; this reads them in place. Nothing is copied, and nothing is uploaded to a service that will lose interest in two years.')}</p>
     <div id="onb-folder"></div>
     <p class="onb-scan" id="onb-scan"></p>`;
   onbFolders();
@@ -7035,7 +7042,7 @@ async function onbFolders() {
   if (!host) return;
   if (window.musicfyDesktop) {
     host.innerHTML = `<button class="btn btn-ghost" id="onb-pick" type="button">${tr('Choose folder')}</button>
-      <p class="onb-note">${tr('A folder inside your Music folder works best.')}</p>`;
+      <p class="onb-note">${tr('A folder inside Music works best. Nothing is moved.')}</p>`;
     document.getElementById('onb-pick').onclick = async () => {
       const picked = await window.musicfyDesktop.pickFolder();
       if (picked) onbScan(picked);
@@ -7045,7 +7052,7 @@ async function onbFolders() {
   let folders = [];
   try { folders = (await api('/api/library/folders', { nocache: true })).folders || []; } catch {}
   if (!folders.length) {
-    host.innerHTML = `<p class="onb-note">${tr('No folder is available to this server. Add one later in Settings.')}</p>`;
+    host.innerHTML = `<p class="onb-note">${tr('This server has no folder to offer. Add one later in Settings.')}</p>`;
     return;
   }
   host.innerHTML = `<label class="onb-field">${tr('Music folder')}<select id="onb-folder-select"><option value="">${tr('Choose a folder…')}</option>${folders
@@ -7128,6 +7135,19 @@ async function onbResolveCity() {
     el.dataset.tone = 'bad';
     el.textContent = tr('Could not find that city. The hour will use this computer’s time zone.');
   }
+}
+
+async function onbSwitchLang(lang) {
+  if (!onb || (window.I18N && window.I18N.lang === lang)) return;
+  // switching language reloads the page so the chrome translates too; save the screen and
+  // whatever is already typed, and the overlay resumes exactly where it was
+  const patch = { onboarding_step: onb.step };
+  const name = document.getElementById('onb-name');
+  if (name) patch.display_name = name.value.trim();
+  const city = document.getElementById('onb-city');
+  if (city) patch.city = city.value.trim();
+  await onbPost(patch);
+  if (window.I18N) window.I18N.set(lang);
 }
 
 async function onbNext() {  if (!onb || onb.busy) return;

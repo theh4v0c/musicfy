@@ -401,7 +401,7 @@
     // first run
     'Skip setup': 'Pular configuração',
     'Continue': 'Continuar',
-    'Get started': 'Começar',
+    'Come in': 'Pode entrar',
     'Open my library': 'Abrir minha biblioteca',
     'Ready': 'Pronto',
     'READY': 'PRONTO',
@@ -409,46 +409,48 @@
     'Run setup again': 'Refazer a configuração',
     'Name, place, mode and music folder, in five steps.': 'Nome, lugar, modo e pasta de músicas, em cinco passos.',
     'Stays on this computer. No account, no upload.': 'Fica neste computador. Sem conta, sem envio.',
-    'A library you own.': 'Uma biblioteca sua.',
-    'Your files, your disk, no account. This takes a minute, and every step can be skipped.':
-      'Seus arquivos, seu disco, sem conta. Leva um minuto, e dá para pular qualquer passo.',
-    'Plays straight from the folders you already have': 'Toca direto das pastas que você já tem',
-    'Settings and listening history stay on this computer': 'Ajustes e histórico de audição ficam neste computador',
-    'Nothing is uploaded; a download happens only when you ask for a track':
-      'Nada é enviado; um download só acontece quando você pede uma faixa',
+    'Your music. Not a rental.': 'Sua música. Não é aluguel.',
+    'No account, no cloud, no “Sign in with Google”. It runs on this computer, from files that are already on it. Skip whatever you like: none of this is a contract.':
+      'Sem conta, sem nuvem, sem “Entrar com Google”. Roda neste computador, com arquivos que já estão nele. Pule o que quiser: nada aqui é contrato.',
+    'Reads the folders you already have. It does not reorganise them.':
+      'Lê as pastas que você já tem. Não reorganiza nada.',
+    'Settings, plays and history stay on this computer.': 'Ajustes, reproduções e histórico ficam neste computador.',
+    'Nothing is uploaded. A download happens when you ask for one, which is the whole idea.':
+      'Nada é enviado. Download só acontece quando você pede, que é justamente a ideia.',
     'Your data lives in': 'Seus dados ficam em',
     'YOU': 'VOCÊ',
     'What should I call you?': 'Como devo te chamar?',
-    'Only the greeting uses it. Leave it empty if you would rather not.':
-      'Só a saudação usa isso. Deixe em branco se preferir.',
+    'The greeting uses it, and nothing else does. Leave it empty and it will address you like a bank statement.':
+      'A saudação usa isso, e mais nada. Deixe em branco e ele vai te tratar como extrato bancário.',
     'Your name': 'Seu nome',
+    'A name, or nothing': 'Um nome, ou nada',
     'PLACE': 'LUGAR',
-    'Where are you?': 'Onde você está?',
-    'It says good evening at the right hour. The city is looked up once, now, to get its coordinates and time zone; the result stays on this computer.':
-      'O app dá boa noite na hora certa. A cidade é consultada uma vez, agora, para obter coordenadas e fuso; o resultado fica neste computador.',
+    'Where are you, roughly?': 'Onde você está, mais ou menos?',
+    'So it says good evening at the right hour. The city is looked up once, right now, for coordinates and time zone, and then it stays here. Leave it blank and live in UTC like a server.':
+      'Para dar boa noite na hora certa. A cidade é consultada uma vez, agora, para coordenadas e fuso, e depois fica aqui. Deixe em branco e viva em UTC como um servidor.',
     'MODE': 'MODO',
     'How do you listen?': 'Como você ouve?',
-    'This changes the whole app. You can switch it any time in Settings.':
-      'Isso muda o app inteiro. Você pode trocar quando quiser em Ajustes.',
-    'Prep, BPM and key, harmonic tools and exports for CDJs.':
-      'Preparação, BPM e tonalidade, ferramentas harmônicas e exportação para CDJs.',
-    'Library, playlists and playback. Prep stays out of the way.':
-      'Biblioteca, listas e reprodução. A preparação fica fora do caminho.',
+    'This changes the whole app, not a theme. Switch it later if you change your mind.':
+      'Isso muda o app inteiro, não é tema. Dá para trocar depois, se mudar de ideia.',
+    'Prep, BPM and key, harmonic mixing, CDJ exports. For sets that have to hold together.':
+      'Preparação, BPM e tonalidade, mixagem harmônica, exportação para CDJ. Para sets que precisam se sustentar.',
+    'Library, playlists, playback. Prep and analysis stay out of sight, along with the homework.':
+      'Biblioteca, listas e reprodução. Preparação e análise ficam fora de vista, junto com o dever de casa.',
     'MUSIC': 'MÚSICA',
-    'Where is your music?': 'Onde estão suas músicas?',
-    'Point at a folder you already have. The files stay where they are; nothing is copied or uploaded.':
-      'Aponte para uma pasta que você já tem. Os arquivos ficam onde estão; nada é copiado nem enviado.',
-    'A folder inside your Music folder works best.': 'Uma pasta dentro da sua pasta Músicas funciona melhor.',
-    'No folder is available to this server. Add one later in Settings.':
-      'Nenhuma pasta está disponível para este servidor. Adicione uma depois em Ajustes.',
+    'Where does the music live?': 'Onde a música mora?',
+    'Point at a folder. The files stay where they are; this reads them in place. Nothing is copied, and nothing is uploaded to a service that will lose interest in two years.':
+      'Aponte para uma pasta. Os arquivos ficam onde estão; isto lê no lugar. Nada é copiado, nem enviado para um serviço que vai perder o interesse em dois anos.',
+    'A folder inside Music works best. Nothing is moved.': 'Uma pasta dentro de Músicas funciona melhor. Nada é movido.',
+    'This server has no folder to offer. Add one later in Settings.':
+      'Este servidor não tem pasta para oferecer. Adicione uma depois em Ajustes.',
     'Reading the folder…': 'Lendo a pasta…',
     'Looking up the city…': 'Procurando a cidade…',
     'Could not find that city. The hour will use this computer’s time zone.':
       'Não encontrei essa cidade. A hora usa o fuso deste computador.',
     'Could not read that folder:': 'Não foi possível ler essa pasta:',
-    'Everything you see from here is stored on this computer. There is no account to keep, and nothing is uploaded.':
-      'Tudo o que você vê daqui em diante fica neste computador. Não há conta para manter, e nada é enviado.',
-    'Run this again any time from Settings, under You.': 'Você pode refazer isto em Ajustes, em Você.',
+    'Everything you just told it lives on this computer, in a folder you could delete if you changed your mind. There is no account to cancel.':
+      'Tudo o que você acabou de dizer fica neste computador, numa pasta que você poderia apagar se mudasse de ideia. Não existe conta para cancelar.',
+    'Repeatable: Settings → You → Run setup again.': 'Dá para repetir: Ajustes → Você → Refazer a configuração.',
     'Load models': 'Carregar modelos',
     'Loading…': 'Carregando…',
     'Models listed. Pick one from the field, or keep typing.':
