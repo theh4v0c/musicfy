@@ -394,6 +394,18 @@
     'Folder or playlist file': 'Pasta ou arquivo de lista',
     'Scan folder': 'Escanear pasta',
     'Choose folder': 'Escolher pasta',
+    'Music folder': 'Pasta de músicas',
+    'Choose a folder…': 'Escolher uma pasta…',
+    'Other folder…': 'Outra pasta…',
+    'Choose a folder first.': 'Escolha uma pasta primeiro.',
+    'Load models': 'Carregar modelos',
+    'Loading…': 'Carregando…',
+    'Models listed. Pick one from the field, or keep typing.':
+      'Modelos listados. Escolha um no campo ou continue digitando.',
+    'This endpoint does not list models:': 'Este endpoint não lista modelos:',
+    'This endpoint does not list models. Type the name.':
+      'Este endpoint não lista modelos. Digite o nome.',
+    'Could not list models:': 'Não foi possível listar os modelos:',
     'Not scanned yet.': 'Ainda não escaneada.',
     'A track removed from the library later leaves its file on disk. Nothing here writes to your files.':
       'Uma faixa removida da biblioteca depois deixa o arquivo no disco. Nada aqui grava nos seus arquivos.',

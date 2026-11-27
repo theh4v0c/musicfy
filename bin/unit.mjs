@@ -465,3 +465,12 @@ test('a model base URL keeps its path', () => {
   assert.equal(LLM.endpoint('https://host').url.href, 'https://host/v1/chat/completions');
   assert.equal(LLM.endpoint('https://host/v1/chat/completions').url.href, 'https://host/v1/chat/completions');
 });
+
+test('the model picker asks the same base, without the chat path', () => {
+  // the picker must not invent a second URL shape: whatever /chat/completions resolved to,
+  // /models sits next to it
+  assert.equal(LLM.modelsUrl('https://openrouter.ai/api/v1').url.href, 'https://openrouter.ai/api/v1/models');
+  assert.equal(LLM.modelsUrl('https://host').url.href, 'https://host/v1/models');
+  assert.equal(LLM.modelsUrl('https://host/v1/chat/completions').url.href, 'https://host/v1/models');
+  assert.throws(() => LLM.modelsUrl('http://metadata.google.internal/v1'), /not a model endpoint/);
+});

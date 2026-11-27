@@ -934,6 +934,42 @@ function withinMusicRoots(target) {
   return { real, roots, ok: roots.some((r) => real === r || real.startsWith(r + path.sep)) };
 }
 
+/* Places the Settings picker can offer without a dialog. A remote browser gets the
+ * configured roots only, so a page cannot ask what is in the home directory. */
+function folderChoices(local) {
+  const seen = new Set();
+  const out = [];
+  const add = (dir) => {
+    if (!dir) return;
+    let real;
+    try { real = folderLib.realish(dir); } catch { return; }
+    if (seen.has(real)) return;
+    try { if (!fs.statSync(real).isDirectory()) return; } catch { return; }
+    seen.add(real);
+    out.push(real);
+  };
+  const roots = musicRoots();
+  add(OWNED);
+  for (const root of roots) add(root);
+  const music = path.join(os.homedir(), 'Music');
+  if (local) add(music);
+  // one level under each place above: "Music/Albums" is the usual case, a full recursive
+  // tree is not, and it would be a filesystem listing rather than a picker
+  for (const base of [OWNED, ...roots, ...(local ? [music] : [])]) {
+    let entries = [];
+    try { entries = fs.readdirSync(base, { withFileTypes: true }); } catch { continue; }
+    let n = 0;
+    for (const entry of entries) {
+      if (n >= 120) break;
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      add(path.join(base, entry.name));
+      n += 1;
+    }
+  }
+  const home = os.homedir();
+  return out.map((p) => ({ path: p, label: p.startsWith(home) ? `~${p.slice(home.length)}` : p }));
+}
+
 function rememberPath(map, file, trackId) {
   map.set(path.normalize(file), trackId);
   map.set(path.resolve(file), trackId);
@@ -3559,6 +3595,9 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === '/api/llm/status' && req.method === 'GET') {
       return json(res, 200, await llm.probe());
     }
+    if (u.pathname === '/api/llm/models' && req.method === 'GET') {
+      return json(res, 200, await llm.listModels());
+    }
 
     if (u.pathname === '/api/update/status' && req.method === 'GET') {
       return json(res, 200, await updateInfo(u.searchParams.get('check') === '1'));
@@ -4860,6 +4899,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     // adopt a folder, or a playlist file, without copying anything
+    if (u.pathname === '/api/library/folders' && req.method === 'GET') {
+      const local = localRequest(req);
+      return json(res, 200, { local, roots: musicRoots(), folders: folderChoices(local) });
+    }
     if (u.pathname === '/api/library/scan') {
       if (req.method === 'GET') return json(res, 200, { ...adoptState, local: localRequest(req), roots: musicRoots() });
       if (req.method !== 'POST') return json(res, 405, { error: 'method not allowed' });

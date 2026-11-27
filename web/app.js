@@ -2907,10 +2907,17 @@ async function renderSettings() {
         <p class="set-note">A language model turns one sentence into a structured request: key, BPM, year, genre, plays, count and order. MUSICFY sends the sentence and nothing else - never your library, your files or your listening history.</p>
         <p class="set-note">Two callers only. A&amp;R uses it when the request is a brief: a person, an age, an occasion, several likes ("a birthday set for a 7 year old who loves dinosaurs"). Ask uses it when the question is fuzzy ("something darker", "less vocals"). Everything else - genres, keys, tempo, years, counts - is parsed by the built-in rules, without a network call.</p>
         <p class="set-note">Without an endpoint both fall back to those rules, which cover the explicit requests and miss the conversational ones. Covers, metadata, search inside your library, downloads and playback never use it.</p>
-        <p class="set-note llm-status" id="set-llm-status"><span class="llm-dot" data-state="idle"></span> <span>Checking...</span></p>
-        <button class="btn btn-ghost" id="set-llm-test" type="button">Test connection</button>
+        <div class="llm-row">
+          <p class="set-note llm-status" id="set-llm-status" data-tone="idle"><span class="llm-dot" data-state="idle"></span> <span>Checking...</span></p>
+          <div class="llm-actions">
+            <button class="btn btn-ghost" id="set-llm-test" type="button">Test connection</button>
+            <button class="btn btn-ghost" id="set-llm-list" type="button">Load models</button>
+          </div>
+        </div>
         <label>Base URL<input id="set-llm-url" value="${esc(s.llm_base_url || l.base_url || '')}" placeholder="https://host/v1"></label>
-        <label>Model<input id="set-llm-model" value="${esc(s.llm_model || l.model || '')}" placeholder="model name"></label>
+        <label>Model<input id="set-llm-model" list="set-llm-models" autocomplete="off" value="${esc(s.llm_model || l.model || '')}" placeholder="model name"></label>
+        <datalist id="set-llm-models"></datalist>
+        <p class="set-note" id="set-llm-models-note" hidden></p>
         <label>API key<input id="set-llm-key" type="password" placeholder="${l.has_key ? 'stored, leave blank to keep' : 'not set'}"></label>
       </section>
       <section class="set-card">
@@ -2966,7 +2973,8 @@ async function renderSettings() {
       <section class="set-card" data-tone="ok">
         <h2>Library folder</h2>
         <p class="set-note">Point at a folder you already have. The files stay where they are: nothing is copied, moved or renamed. Playlists written by Traktor, rekordbox, M3U or PLS are imported with their order, and the BPM and key they already carry are kept.</p>
-        <label>Folder or playlist file<input id="set-folder" placeholder="/path/to/music"></label>
+        <label>Music folder<select id="set-folder-select"><option value="">Choose a folder…</option></select></label>
+        <label id="set-folder-path-row" hidden>Folder or playlist file<input id="set-folder" placeholder="/path/to/music"></label>
         <div class="lib-actions">
           <button class="btn btn-ghost" id="set-folder-pick" type="button" hidden>Choose folder</button>
           <button class="btn btn-primary" id="set-folder-scan" type="button">Scan folder</button>
@@ -3043,27 +3051,74 @@ async function renderSettings() {
     if (!llmStatus) return;
     const dot = llmStatus.querySelector('.llm-dot');
     const text = llmStatus.querySelector('span:last-child');
+    const tone = (v) => { llmStatus.dataset.tone = v; };
     if (!l.configured) {
       if (dot) dot.dataset.state = 'off';
+      tone('off');
       if (text) text.textContent = 'Not configured. A&R and Ask use the local planner.';
       return;
     }
     if (dot) dot.dataset.state = 'wait';
+    tone('wait');
     if (text) text.textContent = 'Checking the endpoint...';
     try {
       const r = await api('/api/llm/status', { nocache: true });
       if (dot) dot.dataset.state = r.ok ? 'ok' : 'bad';
+      tone(r.ok ? 'ok' : 'bad');
       if (text) text.textContent = r.ok
         ? `Connected · ${r.model || 'model'} · ${r.ms} ms`
         : `No answer: ${r.error || 'unknown error'}`;
     } catch (e) {
       if (dot) dot.dataset.state = 'bad';
+      tone('bad');
       if (text) text.textContent = `No answer: ${e.message || 'unknown error'}`;
     }
   };
   const llmTest = document.getElementById('set-llm-test');
   if (llmTest) llmTest.onclick = () => paintLlm();
   paintLlm();
+
+  // Once the base URL and key are stored, the endpoint can say which models it serves.
+  // A gateway without /models answers 404: the field stays free text.
+  const llmList = document.getElementById('set-llm-list');
+  const llmModelList = document.getElementById('set-llm-models');
+  const llmModelNote = document.getElementById('set-llm-models-note');
+  const loadModels = async () => {
+    if (!llmList || !llmModelList) return;
+    const label = llmList.textContent;
+    llmList.disabled = true;
+    llmList.textContent = tr('Loading…');
+    try {
+      const r = await api('/api/llm/models', { nocache: true });
+      if (r.ok && r.models.length) {
+        llmModelList.innerHTML = r.models.map((m) => `<option value="${esc(m)}"></option>`).join('');
+        if (llmModelNote) {
+          llmModelNote.hidden = false;
+          llmModelNote.textContent = tr('Models listed. Pick one from the field, or keep typing.');
+        }
+      } else if (llmModelNote) {
+        llmModelNote.hidden = false;
+        llmModelNote.textContent = r.error
+          ? `${tr('This endpoint does not list models:')} ${r.error}`
+          : tr('This endpoint does not list models. Type the name.');
+      }
+    } catch (e) {
+      if (llmModelNote) {
+        llmModelNote.hidden = false;
+        llmModelNote.textContent = `${tr('Could not list models:')} ${e.message || 'unknown error'}`;
+      }
+    } finally {
+      llmList.disabled = false;
+      llmList.textContent = label;
+    }
+  };
+  if (llmList) {
+    llmList.onclick = loadModels;
+    // the picker only makes sense once there is an endpoint and a key to ask; after a save
+    // that sets them it appears, without leaving the page
+    llmList.hidden = !(l && l.configured);
+    if (l && l.configured) loadModels();
+  }
   document.querySelectorAll('#set-tier .mode-tab').forEach((b) => {
     b.onclick = async () => {
       if (b.dataset.tier === state.tier) return;
@@ -3251,6 +3306,11 @@ async function renderSettings() {
         saveMsg.dataset.tone = 'ok';
       }
       baseline = { ...baseline, ...body };
+      if (['llm_base_url', 'llm_model', 'llm_api_key'].some((k) => changed.includes(k))) {
+        if (llmList) llmList.hidden = false;
+        paintLlm();
+        loadModels();
+      }
       paintAvoid();
       state.settings = { ...(state.settings || {}), ...body, ...saved };
       applyLoudnessGain(state.current);
@@ -3315,20 +3375,55 @@ async function renderSettings() {
     setRepair.disabled = false;
   };
   const folderField = document.getElementById('set-folder');
+  const folderRow = document.getElementById('set-folder-path-row');
+  const folderSelect = document.getElementById('set-folder-select');
+  const showFolderPath = (show) => { if (folderRow) folderRow.hidden = !show; };
   if (folderField) {
     try { folderField.value = localStorage.getItem('mf-folder') || ''; } catch {}
   }
+  // The picker lists places this install may already scan, so the common case is a choice
+  // instead of a path typed from memory. "Other folder…" brings the field back, which is
+  // the only way a browser on another machine can name a folder.
+  if (folderSelect && folderField) {
+    const choose = async () => {
+      let folders = [];
+      try { folders = (await api('/api/library/folders', { nocache: true })).folders || []; } catch {}
+      const chosen = folderField.value.trim();
+      const matched = folders.some((f) => f.path === chosen);
+      const options = [`<option value=""${chosen ? '' : ' selected'}>${esc(tr('Choose a folder…'))}</option>`];
+      for (const f of folders) {
+        options.push(`<option value="${esc(f.path)}"${f.path === chosen ? ' selected' : ''}>${esc(f.label)}</option>`);
+      }
+      options.push(`<option value="__other"${chosen && !matched ? ' selected' : ''}>${esc(tr('Other folder…'))}</option>`);
+      folderSelect.innerHTML = options.join('');
+      showFolderPath(!!chosen && !matched);
+    };
+    folderSelect.onchange = () => {
+      const v = folderSelect.value;
+      if (v === '__other') {
+        folderField.value = '';
+        showFolderPath(true);
+        folderField.focus();
+        return;
+      }
+      if (!v) return;
+      folderField.value = v;
+      showFolderPath(false);
+    };
+    choose();
+  }
   const setFolderScan = document.getElementById('set-folder-scan');
-  // the desktop shell can open the native folder picker; a browser tab cannot, so the
-  // text field stays the whole interface there
+  // the desktop shell can open the native folder picker; a browser tab cannot
   const folderPick = document.getElementById('set-folder-pick');
   if (folderPick && window.musicfyDesktop) {
     folderPick.hidden = false;
     folderPick.onclick = async () => {
       const picked = await window.musicfyDesktop.pickFolder();
       if (!picked) return;
-      const field = document.getElementById('set-folder');
-      if (field) { field.value = picked; field.focus(); }
+      folderField.value = picked;
+      showFolderPath(true);
+      if (folderSelect) folderSelect.value = '__other';
+      folderField.focus();
     };
   }
   if (setFolderScan) setFolderScan.onclick = async () => {
@@ -3337,7 +3432,7 @@ async function renderSettings() {
     const tr = (x) => (window.I18N ? window.I18N.t(x) : x);
     const target = (field.value || '').trim();
     if (!target) {
-      out.textContent = tr('Type a folder or a playlist file first.');
+      out.textContent = tr('Choose a folder first.');
       out.dataset.tone = 'bad';
       field.focus();
       return;

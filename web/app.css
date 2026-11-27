@@ -395,7 +395,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .set-tools .btn { width: 100%; justify-content: flex-start; text-align: left; }
 .set-card .set-note + .set-note { margin-top: 4px; }
 .set-card label { display: flex; flex-direction: column; gap: 5px; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-mute); margin-bottom: 10px; }
-.set-card input, .set-card select { font-family: inherit; font-size: 13px; padding: 8px 10px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--bg-elev2); color: var(--fg); }
+.set-card input, .set-card select { font-family: inherit; font-size: 13px; padding: 8px 10px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--bg-elev2); color: var(--fg); max-width: 100%; min-width: 0; }
 .set-note { font-size: 11px; color: var(--fg-mute); }
 .set-list { margin: 8px 0 10px; padding-left: 15px; display: grid; gap: 4px; }
 .set-list li { list-style: disc; }
@@ -1463,8 +1463,16 @@ body.tier-listener #ctx [data-act="pl-tags"],
 body.tier-listener #ctx [data-act="pl-zip"] { display: none !important; }
 
 /* model endpoint state: a dot is the answer, the sentence is the detail */
+.llm-row { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin: 12px 0 2px; }
+.llm-row .llm-status { margin: 0; flex: 1 1 260px; }
+.llm-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+@media (max-width: 760px) { .llm-actions { margin-left: 0; } }
 .llm-status { display: flex; align-items: center; gap: 8px; }
+.llm-status[data-tone="ok"] { color: var(--ok); }
+.llm-status[data-tone="bad"] { color: var(--liked); }
+.llm-status[data-tone="off"], .llm-status[data-tone="wait"] { color: var(--fg-mute); }
 .llm-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--fg-mute); }
+.set-card .llm-row + label { margin-top: 12px; }
 .llm-dot[data-state="ok"] { background: var(--ok); box-shadow: 0 0 0 3px rgba(63,197,125,.12); }
 .llm-dot[data-state="bad"] { background: var(--liked); box-shadow: 0 0 0 3px rgba(255,77,109,.12); }
 .llm-dot[data-state="wait"] { background: var(--acc); animation: llm-pulse 1s ease-in-out infinite; }
@@ -1474,7 +1482,7 @@ body.tier-listener #ctx [data-act="pl-zip"] { display: none !important; }
 .set-about { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 10px; color: var(--fg-soft); font-size: 12px; }
 .set-about b { color: var(--fg); font-weight: 600; }
 .set-about .set-note { margin: 0; flex: 1 1 260px; }
-@media (max-width: 760px) { .set-grid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .set-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* Listener tier: the SOURCE column (Local/YT/SC) is technical. Remove the header, the
    badge and its grid track so the remaining columns still line up. The <=760 layout already

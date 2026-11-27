@@ -174,9 +174,18 @@ the top. Cards in one row share the same top and bottom edge; the grid stretches
 card to its row instead of letting a masonry column start at a different height. One
 column on a phone. A note directly above a field or checkbox keeps 10px of separation.
 
-The Library folder card has one primary action, **Scan folder**. In the desktop app a ghost
-**Choose folder** sits before it and opens the native picker; a browser tab hides it because
-a page cannot open one, and it never takes the primary role.
+The Library folder card has one primary action, **Scan folder**. The folder itself is a
+select of places this install may scan — the download folder, the configured roots and one
+level under each — with **Other folder…** revealing the path field, which is the only way a
+browser on another machine can name one. In the desktop app a ghost **Choose folder** sits
+before the scan and opens the native picker; a browser tab hides it, and it never takes the
+primary role.
+
+The model endpoint card puts its state on one row: the sentence on the left, **Test
+connection** and **Load models** on the right, 10px of air and wrapping on an even card. The
+sentence carries the tone token — green when connected, red on an error, muted otherwise —
+so the dot and the words agree. Model names are a datalist filled from the endpoint; when it
+does not list them, the field stays free text and says so.
 
 ### 5.2 Exclusion chips
 

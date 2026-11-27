@@ -660,11 +660,11 @@ Rekordbox and Traktor both open `.mp3`, `.m4a` (AAC), `.wav`, `.aiff` and `.flac
 
 Web: `GET/POST /login` (shared-secret login page, when `MUSICFY_TOKEN` is set).
 
-Library: `GET/POST /api/playlists`, `GET/PATCH/DELETE /api/playlists/:id`, `POST /api/playlists/:id/tracks`, `DELETE /api/playlists/:id/tracks/:trackId`, `GET /api/playlists/:id/export.m3u`, `GET /api/playlists/:id/zip`, `POST /api/playlists/:id/download`, `GET/POST/DELETE /api/tracks`, `POST /api/tracks/:id/download`, `GET /api/tracks/:id/file`, `POST /api/tracks/:id/cover`, `GET /api/cover/:id`, `GET /api/group/:type/:name`.
+Library: `GET/POST /api/playlists`, `GET/PATCH/DELETE /api/playlists/:id`, `POST /api/playlists/:id/tracks`, `DELETE /api/playlists/:id/tracks/:trackId`, `GET /api/playlists/:id/export.m3u`, `GET /api/playlists/:id/zip`, `POST /api/playlists/:id/download`, `GET/POST/DELETE /api/tracks`, `POST /api/tracks/:id/download`, `GET /api/tracks/:id/file`, `POST /api/tracks/:id/cover`, `GET /api/cover/:id`, `GET /api/group/:type/:name`. `GET /api/library/folders` lists the places a scan may read: the download folder, the configured roots and one level under each, for a browser; a remote caller gets the roots only. `POST /api/library/scan` walks one of them in place.
 
 Discovery: `GET /api/search/ladder?q=`, `GET /api/ladder/stream/{youtube,soundcloud,generic}`, `GET /api/prewarm/:id`, `POST /api/ladder/download`, `GET /api/jobs/:id`, `GET /api/downloads`, `POST /api/downloads/:id/retry`, `POST /api/downloads/:id/cancel`, `POST /api/downloads/retry-failed`, `POST /api/downloads/cancel-all`, `POST /api/downloads/clear-failed`, `GET /api/health/rungs`.
 
-Maintenance: `POST /api/mirror/spotify`, `POST /api/mirror/track`, `POST /api/history/scan`, `POST /api/history/materialize`, `POST /api/maintenance/repair`, `GET /api/maintenance/duplicates`, `POST /api/maintenance/dedupe`, `POST /api/maintenance/dedupe-files`, `POST /api/tracks/:id/unlock`, `POST /api/covers/fill`, `GET/POST /api/settings`, `GET /api/llm/status`, `GET /api/update/status`, `POST /api/update`,  `GET/POST /api/soundcloud/token`, `GET /api/docs` (generated list), `GET /api/stats`.
+Maintenance: `POST /api/mirror/spotify`, `POST /api/mirror/track`, `POST /api/history/scan`, `POST /api/history/materialize`, `POST /api/maintenance/repair`, `GET /api/maintenance/duplicates`, `POST /api/maintenance/dedupe`, `POST /api/maintenance/dedupe-files`, `POST /api/tracks/:id/unlock`, `POST /api/covers/fill`, `GET/POST /api/settings`, `GET /api/llm/status`, `GET /api/llm/models`, `GET /api/update/status`, `POST /api/update`,  `GET/POST /api/soundcloud/token`, `GET /api/docs` (generated list), `GET /api/stats`.
 
 ## Web app notes
 

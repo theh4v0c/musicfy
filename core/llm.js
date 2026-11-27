@@ -150,8 +150,7 @@ async function askRaw(prompt, timeoutMs = 10000, opts = {}) {
 }
 
 // A tiny completion, used by Settings to show whether the endpoint actually answers.
-async function probe(timeoutMs = 8000) {
-  const c = config();
+async function probe(timeoutMs = 8000) {  const c = config();
   if (!c) return { configured: false, ok: false, error: 'not configured', model: null, ms: 0 };
   try {
     const started = Date.now();
@@ -174,6 +173,61 @@ async function probe(timeoutMs = 8000) {
   }
 }
 
+/* The picker in Settings asks the endpoint what it serves. A gateway without /models
+ * answers 404; that means "type the name", never "the endpoint is broken". */
+function modelsUrl(baseUrl) {
+  const target = endpoint(baseUrl);
+  const url = new URL(target.url.toString());
+  url.pathname = url.pathname.replace(/\/chat\/completions$/, '/models');
+  return { url, mod: target.mod };
+}
+
+function getJson(url, mod, key, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const req = mod.request(url, {
+      method: 'GET', timeout: timeoutMs,
+      headers: { authorization: `Bearer ${key}`, accept: 'application/json' },
+    }, (res) => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => {
+        data += chunk;
+        if (data.length > 1024 * 1024) req.destroy(new Error('model list too large'));
+      });
+      res.on('end', () => {
+        if (res.statusCode >= 400) {
+          let detail = '';
+          try {
+            const j = JSON.parse(data);
+            detail = String((j.error && (j.error.message || j.error.code)) || j.message || '').trim();
+          } catch {}
+          return reject(new Error(`model endpoint ${res.statusCode}${detail ? `: ${detail}` : ''}`));
+        }
+        try { resolve(JSON.parse(data)); } catch { reject(new Error('model endpoint returned unparsable json')); }
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('llm timeout')));
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+async function listModels(timeoutMs = 8000) {
+  const c = config();
+  if (!c) return { configured: false, ok: false, models: [], error: 'not configured' };
+  try {
+    const { url, mod } = modelsUrl(c.base_url);
+    const body = await getJson(url, mod, c.api_key, timeoutMs);
+    const list = Array.isArray(body) ? body : (body.data || body.models || []);
+    const models = [...new Set(list.map((m) => (typeof m === 'string' ? m : ((m && (m.id || m.name)) || ''))).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b));
+    if (!models.length) throw new Error('the endpoint listed no models');
+    return { configured: true, ok: true, models, error: null };
+  } catch (e) {
+    return { configured: true, ok: false, models: [], error: String((e && e.message) || e).slice(0, 160) };
+  }
+}
+
 // write the model endpoint from the Settings page
 function saveConfig(patch) {
   const file = CONFIG;
@@ -189,4 +243,4 @@ function saveConfig(patch) {
   return c;
 }
 
-module.exports = { endpoint, ask, askRaw, probe, available, config, saveConfig, endpoint, CONFIG };
+module.exports = { endpoint, modelsUrl, ask, askRaw, probe, listModels, available, config, saveConfig, CONFIG };

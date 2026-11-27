@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.1 — 2026-11-27
+
+- The library folder is a **select**, not a path to type: the download folder, the
+  configured roots and one level under each, with **Other folder…** for anything else. The
+  desktop app keeps **Choose folder** (Finder) as the primary way in.
+- The model endpoint has a **model picker**. Once a base URL and key are stored, **Load
+  models** asks the endpoint's `/models` and fills a datalist on the field; a gateway that
+  does not list models keeps the field free text and says why.
+- The endpoint state reads in colour: green when connected, red on an error, muted when
+  unconfigured. The sentence and its two actions are one row with 10px of space, so the
+  button no longer sits on the text.
+- The mobile Settings grid uses `minmax(0, 1fr)`. A single `1fr` column grew to the widest
+  child, so a long select option pushed the whole page sideways on a phone.
+- `GET /api/library/folders` and `GET /api/llm/models` are the two new endpoints; both are
+  documented in DOCS.md.
+
 ## 0.3.0 — 2026-11-27
 
 - **MUSICFY for macOS (Apple Silicon).** `node desktop/build.mjs` builds `MUSICFY.app` and
