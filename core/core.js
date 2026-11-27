@@ -5222,7 +5222,9 @@ const server = http.createServer(async (req, res) => {
       const urls = [];
       const seen = new Set();
       const push = (v) => { if (v && !seen.has(v)) { seen.add(v); urls.push(v); } };
-      for (const list of Object.values(os.networkInterfaces())) {
+      for (const [name, list] of Object.entries(os.networkInterfaces())) {
+        // docker0, br-*, veth and the like are not addresses a phone can reach
+        if (/^(lo|docker|br-|veth|virbr|tun|tap)/i.test(name)) continue;
         for (const i of list || []) {
           if (i.family === 'IPv4' && !i.internal) push(`http://${i.address}:${PORT}`);
         }

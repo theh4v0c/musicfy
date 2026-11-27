@@ -38,7 +38,7 @@ const ROLES = [
   ['menu', '.chip-menu-item'],
   ['tab', '.mode-tab, .view-switch'],
   ['icon', '.icon-btn'],
-  ['field', '.set-card input, .set-card select, .set-card .set-check'],
+  ['field', '.set-card input:not([type="checkbox"]), .set-card select'],
 ];
 const TEXT = [
   ['section', '.sec-title'],

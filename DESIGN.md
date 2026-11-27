@@ -175,7 +175,15 @@ card to its row instead of letting a masonry column start at a different height.
 column on a phone. A note directly above a field or checkbox keeps 10px of separation.
 Each card that holds fields saves itself, with the button at the foot of that card. There is
 no page-level Save: the one at the bottom of a long page is the one place nobody looks after
-editing a field at the top. A card's message names only the fields that changed on it.
+editing a field at the top. A card's message names only the fields that changed on it, and
+only those fields are posted. The button is quiet when the card is clean, accent when dirty,
+"Saving…" while it posts, and a green check with "Saved" for 1.6s after. The width does not
+move.
+
+Settings uses four type roles, not six: heading 14/600, note 12/1.5, label 11/600, micro 10.5.
+Fields are 36px with 14px text. A card's actions sit in `.set-row`, never the page toolbar
+class. Reset is a full-width danger card: red dot, red border, red ghost action, two
+confirmations. The update action is a text link, not a second primary.
 
 The footer is two groups: the version and the update state on one line, the actions on the
 right (below on a phone), then one credit line, 10px, muted and flush left with the version

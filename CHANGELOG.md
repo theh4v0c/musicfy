@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.8.0 — 2026-11-28
+
+- **Settings is one system.** A heading (14/600), a note (12/1.5), a label (11/600), a micro
+  line (10.5), and 36px fields with 14px text. Cards use their own action row instead of the
+  page toolbar class, so the 22px void under every card is gone.
+- **Saving is per card and visible.** A clean card has a quiet Save; editing turns it into an
+  accent **Save changes**; saving shows **Saving…**; success shows a green check, **Saved** and
+  the changed field, then returns to quiet. Only that card's fields are posted, so saving a
+  name no longer re-geocodes the city. The button has a fixed width and `aria-live`.
+- **Reset is a danger card**, full width, red dot and border, red ghost action, two
+  confirmations. It no longer reads as another normal card with an accent dot.
+- **The footer is a footer.** Version and state on one line, a text action for updates, and
+  the 10.5px credit under it.
+- **The Settings icon is sliders**, not the eight-spoke glyph that read as brightness.
+- **The heart pops.** A 260ms scale on the button when a like lands, and row hearts are
+  visible on touch devices instead of hover-only.
+- **Connect a device** appears in Settings when the page is opened on the server: the LAN
+  addresses, a `.local` name, click to copy, and the line that the library stays there.
+- **Desktop client hardening:** navigation compares origins (a `startsWith` prefix check let
+  `https://host.evil.com` pass), and a non-private address must use `https://`.
+- The design audit now measures the settings heading, label, note and field roles.
+
 ## 0.7.1 — 2026-11-27
 
 - **The kid's name is the identity mark, not a label.** The rail shows her name in a five-stop
