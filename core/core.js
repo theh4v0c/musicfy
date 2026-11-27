@@ -3629,7 +3629,10 @@ const server = http.createServer(async (req, res) => {
         try { s = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
         const cfg = llm.config() || {};
         return json(res, 200, {
-          settings: { ...s, ui_tier: s.ui_tier === 'listener' ? 'listener' : 'dj', auto_download_plays: Number(setting('auto_download_plays', '2')) },
+          settings: { ...s, ui_tier: s.ui_tier === 'listener' ? 'listener' : 'dj',
+            // a fresh install has no choice yet; the client asks once instead of guessing
+            ui_tier_set: s.ui_tier === 'listener' || s.ui_tier === 'dj',
+            auto_download_plays: Number(setting('auto_download_plays', '2')) },
           version: APP_VERSION,
           storefront: storefront.current(),
           storefront_country: s.storefront_country || '',

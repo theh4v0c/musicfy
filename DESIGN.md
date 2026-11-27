@@ -212,7 +212,7 @@ reflow a row.
 
 Navigation follows the device and the mode. The phone bottom bar is Home, Search, A&R,
 Library, Playlists and Settings; Prep is desktop-only in the **Studio** group with A&R, and is
-reachable on a phone from the command palette in DJ mode.
+reachable on a phone from the Home mast (DJ mode) or the command palette.
 On desktop, A&R and Prep sit under Studio; Prep disappears entirely in Listener. Settings is
 separated at the foot of the sidebar, outside Studio. A&R is not hidden on a phone: it is a
 destination, not a Search sub-page.
@@ -223,7 +223,9 @@ is a local filter, labelled as one, and when nothing matches it hands the query 
 ("Search everywhere").
 
 The command palette (`⌘K` / `Ctrl-K`, and the top-bar `⌘` button) jumps to a view, track or
-playlist, or runs Play library shuffled and Scan a folder. A&R opens with **For you now**, a preloaded set of local picks from the
+playlist, or runs Play library shuffled and Scan a folder. On a playlist it also offers Play,
+Shuffle, the Rekordbox and Traktor exports, and a mode switch. A fresh install opens with a
+first-run card: I am a DJ / I am a listener; the choice is stored on the server. A&R opens with **For you now**, a preloaded set of local picks from the
 recommender, refreshed in the background every five minutes and by the refresh button; a
 search replaces it. With no picks, the three-step explainer is the starter instead. Every confirmation and prompt is
 the in-app `.ask-dialog` (message, optional field, Cancel, accent action); no native

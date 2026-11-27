@@ -172,6 +172,15 @@
     'Removed from playlist': 'Removida da lista', 'Deleted': 'Excluída',
     'Could not save those changes': 'Não foi possível salvar as alterações',
     'Command palette': 'Paleta de comandos',
+    'How do you use MUSICFY?': 'Como você usa o MUSICFY?',
+    'DJ shows Prep, analysis, BPM and key. Listener keeps the library and playback only.':
+      'DJ mostra Preparar, análise, BPM e tonalidade. Ouvinte mantém só a biblioteca e a reprodução.',
+    'I am a DJ': 'Sou DJ', 'I am a listener': 'Sou ouvinte',
+    'Switch to Listener mode': 'Mudar para o modo Ouvinte', 'Switch to DJ mode': 'Mudar para o modo DJ',
+    'Export this playlist for Rekordbox': 'Exportar esta lista para o Rekordbox',
+    'Export this playlist for Traktor': 'Exportar esta lista para o Traktor',
+    'Could not save the mode': 'Não foi possível salvar o modo',
+
     'For you now': 'Para você agora', 'UPDATED IN THE BACKGROUND': 'ATUALIZADO EM SEGUNDO PLANO',
     'New picks': 'Novas sugestões', 'Choosing picks…': 'Escolhendo sugestões…',
  'Command palette (⌘K)': 'Paleta de comandos (⌘K)',
@@ -524,6 +533,9 @@
     [/^All (\d+) playlists$/, (m) => `Todas as ${m[1]} listas`],
     [/^You left off on /, () => 'Você parou em '],
     [/^more from (.+)$/, (m) => `mais de ${m[1]}`],
+    [/^Play “(.+)”$/, (m) => `Tocar “${m[1]}”`],
+    [/^Shuffle “(.+)”$/, (m) => `Aleatório “${m[1]}”`],
+
     [/^(\d+) tracks? · listening$/, (m) => `${m[1]} ${m[1] === '1' ? 'faixa' : 'faixas'} · em audição`],
     [/^(\d+) tracks? · listening only$/, (m) => `${m[1]} ${m[1] === '1' ? 'faixa' : 'faixas'} · só para audição`],
 

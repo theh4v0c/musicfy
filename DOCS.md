@@ -787,10 +787,12 @@ sidebar, outside the Studio group.
 
 Navigation is device- and mode-driven. The phone bottom bar is Home, Search, A&R, Library,
 Playlists and Settings; Prep is desktop-only in the Studio group, because A&R matters more on
-a phone. In DJ mode the command palette reaches Prep on a phone. On desktop, A&R and Prep share the Studio group; Prep is hidden in Listener. Search is the single global
+a phone. In DJ mode the Home mast also links to Prep, and the command palette reaches it everywhere. On desktop, A&R and Prep share the Studio group; Prep is hidden in Listener. Search is the single global
 field, with Scope (Both / This library / Web) and playlist hits; the Library field is labelled
 as a local filter and offers "Search everywhere" when nothing matches. The command palette
-(`⌘K` or the top-bar `⌘` button) jumps to views, tracks and playlists. Album and artist pages are not served from the
+(`⌘K` or the top-bar `⌘` button) jumps to views, tracks and playlists. On a playlist it adds Play, Shuffle and the
+Rekordbox/Traktor exports, plus a mode switch. A fresh install asks DJ or Listener once and
+stores the answer. Album and artist pages are not served from the
 client cache, so a delete is visible the next time the page opens; A&R's album cards offer
 Download for a missing or partial album and Open only when every track is here. Pills under the pointer use a 2px outer ring (no layout shift); focused fields use a 2px accent border. A collapsed sidebar hides every label, including the Studio group. A&R opens with a preloaded "For you now" row from the local
 recommender; it refreshes in the background every five minutes, has a refresh button, and is

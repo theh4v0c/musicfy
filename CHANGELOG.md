@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.9 — 2026-11-26
+
+- A fresh install asks once: **I am a DJ** / **I am a listener**, stored on the server. The
+  store and the Pi already have explicit choices, so they do not see the card.
+- A DJ gets a **Prep** link in the Home mast, so the prepared sets are one tap away on a
+  phone instead of only through the palette.
+- The command palette is context-aware on a playlist: Play, Shuffle, Export for Rekordbox,
+  Export for Traktor, plus a Listener/DJ switch. Labels use the playlist name.
+- INSTALL, README, DESIGN and DOCS record the first-run choice, the Prep link and the
+  context actions.
+
 ## 0.2.8 — 2026-11-26
 
 - The design gate is green again: Tools rows are their own `.chip-menu-item` role (30px,

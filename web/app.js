@@ -1245,6 +1245,13 @@ async function renderHome() {
   $('view-title').innerHTML = `<span class="wordmark">MUSICFY</span><span class="view-name">${tr('Home')}</span>`;
   const v = $('view');
   v.innerHTML = `
+    ${state.tierUnset ? `<div class="first-run" id="first-run">
+      <div><b>${tr('How do you use MUSICFY?')}</b><span>${tr('DJ shows Prep, analysis, BPM and key. Listener keeps the library and playback only.')}</span></div>
+      <div class="first-run-actions">
+        <button class="btn btn-primary" data-tier="dj" type="button">${tr('I am a DJ')}</button>
+        <button class="btn btn-ghost" data-tier="listener" type="button">${tr('I am a listener')}</button>
+      </div>
+    </div>` : ''}
     <section class="mast">
       <div class="mast-glow" id="mast-glow"></div>
       <div class="mast-meta"><span id="mast-clock"></span><span class="mast-flex"></span></div>
@@ -1259,6 +1266,7 @@ async function renderHome() {
             <span class="flow-key-t"><b>Flow</b><i>endless mix from what you play</i></span>
           </button>
           <button class="mast-resume" id="mast-resume" hidden></button>
+          ${state.tier === 'dj' ? `<button class="btn btn-ghost mast-prep" id="mast-prep" type="button">${tr('Prep')}</button>` : ''}
         </div>
       </div>
     </section>
@@ -1274,6 +1282,22 @@ async function renderHome() {
       <div class="sec-title">Your playlists <small>${Number(state.playlists.length).toLocaleString(LOC())} TOTAL</small></div>
       <div class="pgrid" id="home-grid"></div>
     </div>`;
+  const firstRun = $('first-run');
+  if (firstRun) {
+    firstRun.querySelectorAll('[data-tier]').forEach((b) => {
+      b.onclick = async () => {
+        b.disabled = true;
+        try {
+          await api('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ui_tier: b.dataset.tier }) });
+          state.tierUnset = false;
+          applyTier(b.dataset.tier);
+          location.reload();
+        } catch { b.disabled = false; toast('Could not save the mode', 4000); }
+      };
+    });
+  }
+  const prepLink = $('mast-prep');
+  if (prepLink) prepLink.onclick = () => nav('djexport');
   // the masthead reports the session, not the weather: time, place, what was last on
   const paintClock = () => {
     const clock = document.getElementById('mast-clock');
@@ -6521,6 +6545,22 @@ function paletteActions() {
   if (state.tier === 'dj') acts.push({ label: 'Prep', hint: 'Go', run: () => nav('djexport') });
   acts.push({ label: 'A&R', hint: 'Go', run: () => nav('askai') });
   acts.push({ label: 'Settings', hint: 'Go', run: () => nav('settings') });
+  if (state.view === 'playlist' && state.playlistId) {
+    const pid = state.playlistId;
+    const name = (state.playlists.find((p) => p.id === pid) || {}).name || '';
+    acts.unshift({ label: `Play “${name}”`, hint: 'Playlist', run: () => playPlaylist(pid) });
+    acts.unshift({ label: `Shuffle “${name}”`, hint: 'Playlist', run: () => playPlaylist(pid, true) });
+    acts.push({ label: 'Export this playlist for Rekordbox', hint: 'Download', run: () => { window.location.href = `/api/playlists/${encodeURIComponent(pid)}/export/rekordbox.xml`; } });
+    acts.push({ label: 'Export this playlist for Traktor', hint: 'Download', run: () => { window.location.href = `/api/playlists/${encodeURIComponent(pid)}/export/traktor.nml`; } });
+  }
+  acts.push({
+    label: state.tier === 'dj' ? 'Switch to Listener mode' : 'Switch to DJ mode',
+    hint: 'Mode',
+    run: async () => {
+      await api('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ui_tier: state.tier === 'dj' ? 'listener' : 'dj' }) });
+      location.reload();
+    },
+  });
   acts.push({
     label: 'Play library shuffled', hint: 'Play',
     run: async () => { const all = state.allTracks || await api('/api/tracks'); playList(all || [], 0, true, 'Library'); },
@@ -6669,7 +6709,13 @@ async function loadPlaylists() {
   try {
     try { primeFromCache(); } catch {}
     try { restoreQueue(); } catch {}
-    try { const s = await api('/api/settings', { nocache: true }); state.settings = s.settings || {}; applyTier(state.settings.ui_tier || 'dj'); } catch { state.settings = {}; applyTier(state.tier); }
+    try {
+      const s = await api('/api/settings', { nocache: true });
+      state.settings = s.settings || {};
+      state.tierUnset = !state.settings.ui_tier_set;
+      applyTier(state.settings.ui_tier || 'dj');
+      if (state.tierUnset && state.view === 'home') renderHome();
+    } catch { state.settings = {}; applyTier(state.tier); }
     await loadPlaylists();
     try { await syncLikes(); } catch {}
     paintPill();
