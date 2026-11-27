@@ -233,7 +233,7 @@ column.
 
 Navigation follows the device and the mode. The phone bottom bar is Home, Search, A&R,
 Library, Playlists and Settings; Prep is desktop-only in the **Studio** group with A&R, and is
-reachable on a phone from the Home mast (DJ mode) or the command palette.
+reachable on a phone from the command palette.
 On desktop, A&R and Prep sit under Studio; Prep disappears entirely in Listener. Settings is
 separated at the foot of the sidebar, outside Studio. A&R is not hidden on a phone: it is a
 destination, not a Search sub-page.

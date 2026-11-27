@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3 — 2026-11-27
+
+- The **Prep** pill under Resume is gone. The home mast is the greeting, the session report,
+  Flow and Resume; nothing else. On a phone Prep is reachable from the command palette, as
+  `DESIGN.md` now says.
+
 ## 0.3.2 — 2026-11-27
 
 - **Artist pages have artwork.** The 192px square with an initial is now a mosaic of up to

@@ -1266,7 +1266,6 @@ async function renderHome() {
             <span class="flow-key-t"><b>Flow</b><i>endless mix from what you play</i></span>
           </button>
           <button class="mast-resume" id="mast-resume" hidden></button>
-          ${state.tier === 'dj' ? `<button class="btn btn-ghost mast-prep" id="mast-prep" type="button">${tr('Prep')}</button>` : ''}
         </div>
       </div>
     </section>
@@ -1296,8 +1295,6 @@ async function renderHome() {
       };
     });
   }
-  const prepLink = $('mast-prep');
-  if (prepLink) prepLink.onclick = () => nav('djexport');
   // the masthead reports the session, not the weather: time, place, what was last on
   const paintClock = () => {
     const clock = document.getElementById('mast-clock');
