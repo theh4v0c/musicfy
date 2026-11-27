@@ -2874,6 +2874,7 @@ async function renderSettings() {
           </select>
         </label>
         <p class="set-note">The interface language for this browser. Names of tracks, artists and playlists are never translated.</p>
+        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg></span></div>
       </section>
       <section class="set-card" data-tone="acc">
         <h2>Location</h2>
@@ -2882,6 +2883,7 @@ async function renderSettings() {
         <div class="set-facts" id="set-geo">${s.latitude && s.longitude
           ? `<div><b>${esc(s.city || '')}</b>${s.country ? ` · ${esc(s.country)}` : ''}</div><div>${Number(s.latitude).toFixed(3)}, ${Number(s.longitude).toFixed(3)}</div><div>${esc(s.timezone || '')}</div>`
           : '<div>No city set</div>'}</div>
+        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg></span></div>
       </section>
       <section class="set-card" data-tone="acc">
         <h2>Kids</h2>
@@ -2925,6 +2927,7 @@ async function renderSettings() {
         <p class="set-note">Commas. "no" and "non" are ignored, so "non pop" means pop. Matched against genre, family, artist, album and title.</p>
         <label class="set-check"><input type="checkbox" id="set-taste-children"${s.taste_include_children ? ' checked' : ''}> Let children's music shape recommendations</label>
         <p class="set-note">Off: children's plays stay in your history but do not move your top genres, tempo, key, picks or rotation.</p>
+        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg></span></div>
       </section>
       <section class="set-card" data-tone="mute">
         <h2>Maintenance</h2>
@@ -2966,6 +2969,7 @@ async function renderSettings() {
         <datalist id="set-llm-models"></datalist>
         <p class="set-note" id="set-llm-models-note" hidden></p>
         <label>API key<input id="set-llm-key" type="password" placeholder="${l.has_key ? 'stored, leave blank to keep' : 'not set'}"></label>
+        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg></span></div>
       </section>
       <section class="set-card">
         <h2>Downloads</h2>
@@ -2979,6 +2983,7 @@ async function renderSettings() {
         <p class="set-note">Applies to downloads from streaming sources only. "Keep the original" stores what the source serves without re-encoding. m4a and mp3 convert only when the source uses a different codec; when the source already serves AAC, m4a is a container fix with no re-encode. Files you upload are stored byte for byte, and lossless files are never converted.</p>
         <label>Catalogue country<input id="set-storefront" value="${esc(s.storefront_country || '')}" placeholder="" maxlength="2"></label>
         <p class="set-note">Two letters. The catalogue differs by country: a release in Brazil can be missing from the US store. Empty follows the country of the city above. Set it while travelling when you want another storefront; Deezer is queried too, so the answer does not depend on one store.</p>
+        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg></span></div>
       </section>
       <section class="set-card">
         <h2>Playback</h2>
@@ -3011,6 +3016,7 @@ async function renderSettings() {
         <div class="lib-actions"><button class="btn btn-ghost" id="set-clearbuf" type="button">Clear buffer</button><span class="set-note">Frees preloaded audio and cached pages</span></div>
         <div class="lib-actions"><button class="btn btn-ghost" id="set-copylog" type="button">Copy playback log</button><span class="set-note">For a stop in the car: what the phone and the server saw</span></div>
         <p class="set-note" id="set-playlog"></p>
+        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg></span></div>
       </section>
       <section class="set-card">
         <h2>Library</h2>
@@ -3028,15 +3034,27 @@ async function renderSettings() {
           <span class="set-note" id="set-folder-out">Not scanned yet.</span>
         </div>
         <p class="set-note">A track removed from the library later leaves its file on disk. Nothing here writes to your files.</p>
+        <p class="set-note">A scan adds to the library. It does not forget the folders you scanned before.</p>
+      </section>
+      <section class="set-card" data-tone="mute">
+        <h2>Reset</h2>
+        <p class="set-note">Clears settings and the library index: tracks, files, playlists, plays, likes, jobs and covers. Audio on disk is kept, and so is the login.</p>
+        <div class="lib-actions">
+          <button class="btn btn-ghost" id="set-reset" type="button">Factory reset</button>
+          <span class="set-note" id="set-reset-msg"></span>
+        </div>
       </section>
     </div>
-    <div class="set-actions"><button class="btn btn-primary" id="set-save">Save settings</button><span id="set-msg" class="set-note"></span></div>
     <div class="set-about">
-      <span>MUSICFY <b id="set-version">v${esc(d.version || '')}</b></span>
-      <span id="set-update-msg" class="set-note">Checking for updates...</span>
-      <button class="btn btn-ghost" id="set-check-update" type="button">Check for updates</button>
-      <button class="btn btn-ghost" id="set-update" type="button" hidden>Update now</button>
-      <button class="btn btn-ghost" id="set-restart" type="button" hidden>Restart now</button>
+      <div class="set-about-line">
+        <span>MUSICFY <b id="set-version">v${esc(d.version || '')}</b></span>
+        <span id="set-update-msg" class="set-note">Checking for updates...</span>
+      </div>
+      <div class="set-about-actions">
+        <button class="btn btn-ghost" id="set-check-update" type="button">Check for updates</button>
+        <button class="btn btn-ghost" id="set-update" type="button" hidden>Update now</button>
+        <button class="btn btn-ghost" id="set-restart" type="button" hidden>Restart now</button>
+      </div>
     </div>
     <p class="set-credit">Developed by Roger Lima · WNL</p>
     </div>`;
@@ -3328,12 +3346,9 @@ async function renderSettings() {
   };
   checkUpdate();
 
-  const saveBtn = document.getElementById('set-save');
-  const saveMsg = document.getElementById('set-msg');
-
-  /* The save button covers everything on the page, so the message has to be about what
-     actually changed. It used to say "picks updated" whenever the exclusion field was
-     non-empty, which is a sentence about a setting nobody touched. */
+  /* Each card saves itself. The button used to exist only at the bottom of the page, which is
+     the one place nobody looks after editing a field at the top. The whole form is still
+     posted (the server merges); the message on the card names only what changed there. */
   const readForm = () => {
     const body = {
       display_name: document.getElementById('set-name').value.trim(),
@@ -3366,7 +3381,6 @@ async function renderSettings() {
     if (typeof a === 'number' || typeof b === 'number') return Number(a ?? 0) === Number(b ?? 0);
     return String(a ?? '') === String(b ?? '');
   };
-  const changedKeys = () => Object.keys(readForm()).filter((k) => !same(readForm()[k], baseline[k]));
   const LABELS = {
     display_name: 'name', timezone: 'time zone', city: 'city',
     llm_base_url: 'model endpoint', llm_model: 'model', llm_api_key: 'API key',
@@ -3376,26 +3390,12 @@ async function renderSettings() {
     taste_genres: 'genres', taste_artists: 'artists', taste_context: 'listening context',
     taste_avoid: 'pick exclusions', taste_include_children: 'children in taste',
   };
-  const paintDirty = () => {
-    if (!saveBtn) return;
-    const n = changedKeys().length;
-    saveBtn.classList.toggle('dirty', n > 0);
-    // a green "Saved" must not sit there while the form has unsaved edits
-    if (n > 0) { saveBtn.classList.remove('saved'); saveBtn.textContent = 'Save settings'; }
-    if (saveMsg) {
-      saveMsg.textContent = n ? 'Unsaved changes' : '';
-      saveMsg.dataset.tone = n ? 'warn' : '';
-    }
-  };
-  v.querySelectorAll('input, select, textarea').forEach((el) => {
-    el.addEventListener('input', paintDirty);
-    el.addEventListener('change', paintDirty);
-  });
-  paintDirty();
-
-  document.getElementById('set-save').onclick = async () => {
+  const saveSettings = async (btn) => {
     const body = readForm();
     const changed = Object.keys(body).filter((k) => !same(body[k], baseline[k]));
+    const row = btn ? btn.closest('.set-save') : null;
+    const msg = row ? row.querySelector('[data-save-msg]') : null;
+    if (btn) btn.disabled = true;
     try {
       const r = await api('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       const saved = r.settings || {};
@@ -3409,27 +3409,19 @@ async function renderSettings() {
           : '<div>No city set</div>';
       }
       const notFound = saved.city && !saved.latitude;
-      if (saveBtn) {
-        saveBtn.classList.remove('dirty');
-        saveBtn.classList.add('saved');
-        saveBtn.textContent = notFound ? 'Saved' : (!changed.length ? 'No changes' : 'Saved');
-        setTimeout(() => {
-          if (!saveBtn) return;
-          saveBtn.classList.remove('saved');
-          saveBtn.textContent = 'Save settings';
-        }, 2800);
-      }
-      if (saveMsg) {
-        // build the sentence from translated parts: the dictionary matches whole strings,
-        // so "Saved · time zone" never reached the label "time zone"
-        const tr = (x) => (window.I18N ? window.I18N.t(x) : x);
+      if (msg) {
         const labelOf = (k) => tr(LABELS[k] || k);
-        if (notFound) saveMsg.textContent = 'Saved, but that city was not found';
-        else if (!changed.length) saveMsg.textContent = 'Nothing changed';
-        else if (changed.length === 1) saveMsg.textContent = `${tr('Saved')} · ${labelOf(changed[0])}`;
-        else if (changed.length <= 3) saveMsg.textContent = `${tr('Saved')} · ${changed.map(labelOf).join(', ')}`;
-        else saveMsg.textContent = `${tr('Saved')} · ${changed.length} ${tr('settings')}`;
-        saveMsg.dataset.tone = 'ok';
+        if (notFound) msg.textContent = tr('Saved, but that city was not found');
+        else if (!changed.length) msg.textContent = tr('Nothing changed');
+        else if (changed.length === 1) msg.textContent = `${tr('Saved')} · ${labelOf(changed[0])}`;
+        else if (changed.length <= 3) msg.textContent = `${tr('Saved')} · ${changed.map(labelOf).join(', ')}`;
+        else msg.textContent = `${tr('Saved')} · ${changed.length} ${tr('settings')}`;
+        msg.dataset.tone = changed.length || notFound ? 'ok' : '';
+      }
+      if (btn) {
+        const label = btn.textContent;
+        btn.textContent = tr('Saved');
+        setTimeout(() => { btn.textContent = label; }, 1800);
       }
       baseline = { ...baseline, ...body };
       if (['llm_base_url', 'llm_model', 'llm_api_key'].some((k) => changed.includes(k))) {
@@ -3442,8 +3434,31 @@ async function renderSettings() {
       applyLoudnessGain(state.current);
       if (body.display_name) state.profileName = body.display_name;
     } catch {
-      if (saveBtn) { saveBtn.classList.remove('saved'); saveBtn.textContent = 'Save settings'; }
-      if (saveMsg) { saveMsg.textContent = 'Could not save'; saveMsg.dataset.tone = 'bad'; }
+      if (msg) { msg.textContent = tr('Could not save'); msg.dataset.tone = 'bad'; }
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  };
+  v.querySelectorAll('[data-save]').forEach((b) => { b.onclick = () => saveSettings(b); });
+
+  // factory reset: two confirmations and an explicit word in the body, because it deletes
+  // the index and the settings and there is no undo
+  const resetBtn = document.getElementById('set-reset');
+  if (resetBtn) resetBtn.onclick = async () => {
+    const msg = document.getElementById('set-reset-msg');
+    if (!(await uiConfirm(tr('Factory reset? Settings, playlists and the library index are cleared. Audio files on disk are kept.')))) return;
+    if (!(await uiConfirm(tr('This cannot be undone. Reset now?')))) return;
+    resetBtn.disabled = true;
+    try {
+      await api('/api/factory-reset', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ confirm: 'RESET' }),
+      });
+      if (msg) { msg.dataset.tone = 'ok'; msg.textContent = tr('Reset. Reloading…'); }
+      setTimeout(() => { try { location.reload(); } catch {} }, 600);
+    } catch (e) {
+      resetBtn.disabled = false;
+      if (msg) { msg.dataset.tone = 'bad'; msg.textContent = `${tr('Could not reset:')} ${e.message || ''}`; }
     }
   };
   const cb = document.getElementById('set-clearbuf');

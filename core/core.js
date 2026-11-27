@@ -5178,6 +5178,31 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, rows);
     }
 
+    // ---------- factory reset ----------
+    // Clears the index and the settings. It never deletes audio: the files are the owner's
+    // and a reset is about the app not knowing them any more.
+    if (u.pathname === '/api/factory-reset' && req.method === 'POST') {
+      let b = {};
+      try { b = JSON.parse(await readBody(req) || '{}'); } catch {}
+      if (b.confirm !== 'RESET') return json(res, 400, { error: 'send { "confirm": "RESET" }' });
+      const tables = ['playlist_tracks', 'playlists', 'listens', 'kids_listens', 'likes', 'jobs',
+        'files', 'resolutions', 'taste_tracks', 'taste_artists', 'play_edges', 'spotify_plays',
+        'history_files', 'tracks'];
+      db.exec('BEGIN');
+      try {
+        for (const t of tables) { try { db.exec(`DELETE FROM ${t}`); } catch {} }
+        db.exec('DELETE FROM settings');
+        db.exec('COMMIT');
+      } catch (e) {
+        try { db.exec('ROLLBACK'); } catch {}
+        return json(res, 500, { error: String(e.message || e) });
+      }
+      try { fs.writeFileSync(SETTINGS_FILE, '{}'); } catch {}
+      try { for (const f of fs.readdirSync(COVER_DIR)) fs.rmSync(path.join(COVER_DIR, f), { force: true }); } catch {}
+      picksCache = { at: 0, data: null };
+      return json(res, 200, { ok: true });
+    }
+
     // ---------- kids mode ----------
     // The catalog is the playlists marked kids. A track can be in both worlds; the play
     // context decides where the listen is recorded.

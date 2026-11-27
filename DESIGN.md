@@ -173,11 +173,19 @@ Settings is two columns on a wide screen, at most 1100px wide, with the mode ban
 the top. Cards in one row share the same top and bottom edge; the grid stretches a short
 card to its row instead of letting a masonry column start at a different height. One
 column on a phone. A note directly above a field or checkbox keeps 10px of separation.
-The page ends with one credit line, 10px, muted and flush left with the version row:
-`Developed by Roger Lima · WNL`. It is a signature, not a footer bar: no border, no links, no
-second row. The version line reports the update state in colour: `--ok` when current, `--warn`
-when an update is available or a restart is pending, `--liked` when the check fails. The
-wordmark on that line is 700; the state sentence stays regular.
+Each card that holds fields saves itself, with the button at the foot of that card. There is
+no page-level Save: the one at the bottom of a long page is the one place nobody looks after
+editing a field at the top. A card's message names only the fields that changed on it.
+
+The footer is two groups: the version and the update state on one line, the actions on the
+right (below on a phone), then one credit line, 10px, muted and flush left with the version
+row: `Developed by Roger Lima · WNL`. It is a signature, not a footer bar: no border, no links,
+no second row. The version line reports the update state in colour: `--ok` when current,
+`--warn` when an update is available or a restart is pending, `--liked` when the check fails.
+The wordmark on that line is 700; the state sentence stays regular.
+
+**Reset** is a mute card at the end of the page: it says what it clears (settings and the
+library index) and what it keeps (audio on disk, the login), and it asks twice.
 
 The Library folder card has one primary action, **Scan folder**. The folder itself is a
 select of places this install may scan — the download folder, the configured roots and one

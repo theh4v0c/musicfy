@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0 — 2026-11-27
+
+- **Every settings card saves itself.** The single Save at the bottom of the page is gone; the
+  button sits at the foot of the card whose fields you just edited, and its message names only
+  what changed there ("Saved · name").
+- **Factory reset.** Settings → Reset clears the library index, playlists, plays, likes, jobs,
+  covers and the settings, with two confirmations. Audio files on disk, the login and the app
+  stay. The first-run flow appears again after the reload.
+- The Library folder card says it plainly: a scan **adds**; it does not forget the folders you
+  scanned before. That is why changing the folder left the old tracks in place.
+- **Mobile footer fixed.** Version and update state share a line, the actions sit beside them
+  (below on a phone), and the credit follows at 10px. No more four stacked elements of three
+  different sizes.
+
 ## 0.4.3 — 2026-11-27
 
 - Settings → **Kids** can now edit the kid's **name** and **age band** inline, without replaying

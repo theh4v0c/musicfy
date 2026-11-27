@@ -468,7 +468,6 @@ html, body { overflow-x: hidden; max-width: 100%; }
 .set-list { margin: 8px 0 10px; padding-left: 15px; display: grid; gap: 4px; }
 .set-list li { list-style: disc; }
 .set-card .set-note + label, .set-card .set-note + .set-check { margin-top: 10px; }
-.set-actions { display: flex; gap: 12px; align-items: center; }
 .set-facts { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--fg-soft); }
 /* the play control has to be hittable with a thumb */
 @media (max-width: 760px) {
@@ -1550,9 +1549,12 @@ body.tier-listener #ctx [data-act="pl-zip"] { display: none !important; }
 @keyframes llm-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .llm-dot[data-state="wait"] { animation: none; } }
 
-.set-about { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 10px; color: var(--fg-soft); font-size: 12px; }
+.set-about { display: flex; align-items: center; gap: 10px 18px; flex-wrap: wrap; margin: 12px 0 6px; color: var(--fg-soft); font-size: 12px; }
 .set-about b { color: var(--fg); font-weight: 600; }
-.set-about .set-note { margin: 0; flex: 1 1 260px; }
+.set-about-line { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.set-about .set-note { margin: 0; flex: none; }
+.set-about-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+@media (max-width: 560px) { .set-about { align-items: flex-start; } .set-about-actions { margin-left: 0; } }
 @media (max-width: 760px) { .set-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* Listener tier: the SOURCE column (Local/YT/SC) is technical. Remove the header, the
@@ -1637,3 +1639,7 @@ body.kids .pb-like, body.kids .pb-menu, body.kids .mini-like, body.kids .mini-me
 .kids-pl:hover { background: var(--bg-elev2); }
 .kids-pl span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kids-pl em { margin-left: auto; font-style: normal; font-size: 10.5px; color: var(--fg-mute); font-family: var(--mono); }
+
+/* a save control belongs to the card it saves */
+.set-save { display: flex; align-items: center; gap: 10px; margin: 12px 0 2px; }
+.set-save .set-note { margin: 0; }

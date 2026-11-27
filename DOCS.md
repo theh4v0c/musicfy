@@ -679,6 +679,19 @@ cookie as the query-token route.
 
 Delete a track: the row is removed from the DOM immediately, the API deletes row and file, `refreshView` rebuilds the view. Playback is untouched by refresh because the audio element lives outside the rendered views; deleting the playing track keeps it playing and fixes the queue index.
 
+## Settings and reset
+
+Every settings card posts the whole form with `POST /api/settings`; the server merges, and the
+card only reports the fields that changed. A scan **adds** to the library and never forgets a
+folder you scanned before, which is why a reset exists.
+
+`POST /api/factory-reset { "confirm": "RESET" }` deletes the index and the settings:
+`playlist_tracks`, `playlists`, `listens`, `kids_listens`, `likes`, `jobs`, `files`,
+`resolutions`, the taste tables, `spotify_plays`, `history_files` and `tracks`, plus the
+`settings` key/value table, `data/settings.json` and the cover cache. It does **not** delete
+audio files, the login (`musicfy.env`) or the app itself, and it does not touch the schema
+version. The client reloads and the first-run flow appears again.
+
 ## Kids mode
 
 A playlist marked `kids=1` is the unit of curation. `GET /api/kids` returns those playlists,

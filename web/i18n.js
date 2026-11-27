@@ -467,6 +467,14 @@
     'Age': 'Idade',
     'Not set': 'Não definida',
     'No playlists yet.': 'Nenhuma lista ainda.',
+    'Factory reset': 'Redefinir de fábrica',
+    'Factory reset? Settings, playlists and the library index are cleared. Audio files on disk are kept.':
+      'Redefinir de fábrica? Ajustes, listas e o índice da biblioteca são apagados. Os arquivos de áudio no disco ficam.',
+    'This cannot be undone. Reset now?': 'Isso não pode ser desfeito. Redefinir agora?',
+    'Reset. Reloading…': 'Redefinido. Recarregando…',
+    'Could not reset:': 'Não foi possível redefinir:',
+    'A scan adds to the library. It does not forget the folders you scanned before.':
+      'Um escaneamento adiciona à biblioteca. Ele não esquece as pastas escaneadas antes.',
     'Up to 6': 'Até 6',
     '7 to 10': '7 a 10',
     '11 to 14': '11 a 14',
