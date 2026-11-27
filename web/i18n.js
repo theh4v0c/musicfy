@@ -452,6 +452,34 @@
       'Tudo o que você acabou de dizer fica neste computador, numa pasta que você poderia apagar se mudasse de ideia. Não existe conta para cancelar.',
     'Repeatable: Settings → You → Run setup again.': 'Dá para repetir: Ajustes → Você → Refazer a configuração.',
     'An empty library, for now.': 'Uma biblioteca vazia, por enquanto.',
+    // kids
+    'Leave': 'Sair',
+    'Kids': 'Kids',
+    'Tap a list to play it.': 'Toque numa lista para tocar.',
+    'Lists': 'Listas',
+    'Nothing here yet.': 'Nada aqui ainda.',
+    'A grown-up can mark playlists with “Use in Kids Mode” from their menu.':
+      'Um adulto pode marcar listas com “Usar no modo Kids” no menu delas.',
+    'Use in Kids Mode': 'Usar no modo Kids',
+    'Remove from Kids Mode': 'Tirar do modo Kids',
+    'Could not open Kids mode': 'Não foi possível abrir o modo Kids',
+    'PIN to leave Kids mode': 'PIN para sair do modo Kids',
+    'That PIN is not right.': 'Esse PIN não está certo.',
+    'Playlist added to Kids mode': 'Lista adicionada ao modo Kids',
+    'Playlist removed from Kids mode': 'Lista removida do modo Kids',
+    'Could not change Kids mode': 'Não foi possível mudar o modo Kids',
+    'A separate shelf for a kid or a teenager. Plays made in Kids mode are recorded on their own and never reach your taste, your rotation, your play history or A&R.':
+      'Uma prateleira separada para uma criança ou adolescente. Reproduções no modo Kids ficam registradas à parte e nunca chegam ao seu gosto, à sua rotação, ao seu histórico ou ao A&R.',
+    'No playlist is in Kids mode yet.': 'Nenhuma lista está no modo Kids ainda.',
+    'Playlists in Kids mode:': 'Listas no modo Kids:',
+    'Mark one with “Use in Kids Mode” from its menu, and the Kids entry appears in the sidebar.':
+      'Marque uma com “Usar no modo Kids” no menu dela, e a entrada Kids aparece na barra lateral.',
+    'Save PIN': 'Salvar PIN',
+    'Clear PIN': 'Remover PIN',
+    'PIN set': 'PIN definido',
+    'PIN cleared': 'PIN removido',
+    'A PIN is a speed bump for a child, not a lock: anyone who can reach this screen can clear it.':
+      'Um PIN é um obstáculo para uma criança, não uma fechadura: quem chegar a esta tela pode removê-lo.',
     'MUSICFY plays files you already own. Add a folder with ⌘O, or download one track, and the page has something to say.':
       'O MUSICFY toca arquivos que você já tem. Adicione uma pasta com ⌘O, ou baixe uma faixa, e a página tem o que dizer.',
     'MUSICFY plays files you already own. Add a folder in Settings → Library folder, or download one track, and the page has something to say.':

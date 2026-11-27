@@ -474,3 +474,17 @@ test('the model picker asks the same base, without the chat path', () => {
   assert.equal(LLM.modelsUrl('https://host/v1/chat/completions').url.href, 'https://host/v1/models');
   assert.throws(() => LLM.modelsUrl('http://metadata.google.internal/v1'), /not a model endpoint/);
 });
+
+test('a kids play cannot reach the taste tables', () => {
+  // the isolation is structural, not a filter someone can forget: kids plays are written
+  // to their own table, and every taste query reads `listens`
+  const { readFileSync } = require('node:fs');
+  const src = readFileSync(new URL('../core/core.js', import.meta.url), 'utf8');
+  const fn = src.slice(src.indexOf('function recordListen'), src.indexOf('function maybeAutoDownload'));
+  assert.match(fn, /if \(kids\)/, 'recordListen must branch on kids before writing listens');
+  assert.match(fn, /INSERT INTO kids_listens/);
+  assert.match(src, /recordListen\(\{ \.\.\.b, track_id: tid, kids: kidsOn\(req\) \}\)/,
+    '/api/listen must pass the cookie, not a client-supplied flag');
+  assert.doesNotMatch(fn.slice(0, fn.indexOf('if (kids)')), /INSERT INTO listens/,
+    'the listens insert must not run before the kids branch');
+});

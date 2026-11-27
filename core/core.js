@@ -7,7 +7,7 @@ const https = require('node:https');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { createHash, timingSafeEqual } = require('node:crypto');
+const { createHash, timingSafeEqual, randomBytes, scryptSync } = require('node:crypto');
 const { execFile, execFileSync, spawn } = require('node:child_process');
 const { normalize, scoreCandidate, titleForVersion, QUALITY_RANK, blockedByAddress, searchPlan,
   durationFits, durationCeiling, durationTooLong, artistInCandidate } = require('./ladder');
@@ -1237,7 +1237,7 @@ const LADDER_TTL = Number(process.env.MUSICFY_LADDER_TTL || 5 * 60 * 1000);
 const ladderCache = new Map();
 
 // 4. schema version, so column changes stop being invisible
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 function currentVersion() {
   try {
     const row = db.prepare('SELECT value FROM meta WHERE key=?').get('schema_version');
@@ -1345,6 +1345,19 @@ function migrate() {
       // never unlink the owner's original. external=1 means "registered, not ours".
       try { db.exec('ALTER TABLE files ADD COLUMN external INTEGER DEFAULT 0'); } catch {}
       try { db.exec('CREATE INDEX IF NOT EXISTS idx_files_external ON files(external)'); } catch {}
+    }],
+    [9, () => {
+      // Kids mode records plays in their own table, not in `listens`. Every taste query
+      // reads `listens`, so a kid's listening cannot reach it by construction: there is no
+      // filter to forget. The playlist flag is the unit of curation.
+      try { db.exec('ALTER TABLE playlists ADD COLUMN kids INTEGER DEFAULT 0'); } catch {}
+      db.exec(`CREATE TABLE IF NOT EXISTS kids_listens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        track_id INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+        played_at INTEGER NOT NULL,
+        ms_played INTEGER DEFAULT 0
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_kids_listens ON kids_listens(track_id, played_at)');
     }],
   ];
   for (const [version, run] of steps) {
@@ -1496,10 +1509,39 @@ function setSetting(key, value) {
   db.prepare('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, String(value));
 }
 
-function recordListen({ track_id, ms_played, source }) {
+function recordListen({ track_id, ms_played, source, kids }) {
+  // Kids plays live in their own table. Not filtering `listens` is the point: every taste,
+  // rotation and A&R query already reads `listens`, so none of them can pick this up.
+  if (kids) {
+    db.prepare('INSERT INTO kids_listens (track_id,played_at,ms_played) VALUES (?,?,?)')
+      .run(track_id, now(), ms_played || 0);
+    return;
+  }
   db.prepare('INSERT INTO listens (track_id,played_at,ms_played,source,scrobbled) VALUES (?,?,?,?,0)')
     .run(track_id, now(), ms_played || 0, source || 'local');
   maybeAutoDownload(track_id);
+}
+
+/* ---------- kids mode ---------- */
+/* One profile, one cookie, one PIN. The PIN is a speed bump for a child, not a security
+   boundary, and the copy says so. */
+function kidsOn(req) {
+  return /(?:^|;\s*)mf_kids=1(?:;|$)/.test(String(req.headers.cookie || ''));
+}
+function kidsCookie(on) {
+  return `mf_kids=${on ? '1' : ''}; SameSite=Lax; Path=/; Max-Age=${on ? 31536000 : 0}`;
+}
+function hashPin(pin) {
+  const salt = randomBytes(16).toString('hex');
+  return `${salt}:${scryptSync(String(pin), salt, 32).toString('hex')}`;
+}
+function pinOk(pin, stored) {
+  const [salt, want] = String(stored || '').split(':');
+  if (!salt || !want) return false;
+  try {
+    const got = scryptSync(String(pin || ''), salt, 32).toString('hex');
+    return timingSafeEqual(Buffer.from(want, 'hex'), Buffer.from(got, 'hex'));
+  } catch { return false; }
 }
 
 // stream something twice and it lands in the library by itself
@@ -5136,6 +5178,45 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, rows);
     }
 
+    // ---------- kids mode ----------
+    // The catalog is the playlists marked kids. A track can be in both worlds; the play
+    // context decides where the listen is recorded.
+    if (u.pathname === '/api/kids' && req.method === 'GET') {
+      const playlists = db.prepare(`SELECT p.id, p.name,
+          (SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id=p.id) n_tracks
+        FROM playlists p WHERE COALESCE(p.kids,0)=1 ORDER BY lower(p.name)`).all();
+      const recent = db.prepare(`SELECT t.id, t.title, t.artist, MAX(k.played_at) last
+        FROM kids_listens k JOIN tracks t ON t.id=k.track_id
+        GROUP BY t.id ORDER BY last DESC LIMIT 12`).all();
+      return json(res, 200, {
+        kids: kidsOn(req),
+        pin_set: !!setting('kids_pin', ''),
+        playlists,
+        recent,
+      });
+    }
+    if (u.pathname === '/api/kids/enter' && req.method === 'POST') {
+      res.setHeader('set-cookie', kidsCookie(true));
+      return json(res, 200, { ok: true });
+    }
+    if (u.pathname === '/api/kids/exit' && req.method === 'POST') {
+      let b = {};
+      try { b = JSON.parse(await readBody(req) || '{}'); } catch {}
+      const stored = setting('kids_pin', '');
+      if (stored && !pinOk(b.pin, stored)) return json(res, 403, { error: 'wrong pin' });
+      res.setHeader('set-cookie', kidsCookie(false));
+      return json(res, 200, { ok: true });
+    }
+    if (u.pathname === '/api/kids/pin' && req.method === 'POST') {
+      let b = {};
+      try { b = JSON.parse(await readBody(req) || '{}'); } catch {}
+      const pin = String(b.pin || '').trim();
+      if (!pin) { setSetting('kids_pin', ''); return json(res, 200, { ok: true, pin_set: false }); }
+      if (!/^\d{4,8}$/.test(pin)) return json(res, 400, { error: 'four to eight digits' });
+      setSetting('kids_pin', hashPin(pin));
+      return json(res, 200, { ok: true, pin_set: true });
+    }
+
     if (u.pathname === '/api/listen' && req.method === 'POST') {
       let body = '';
       req.on('data', c => body += c);
@@ -5146,7 +5227,7 @@ const server = http.createServer(async (req, res) => {
         if (!Number.isInteger(tid) || !db.prepare('SELECT 1 FROM tracks WHERE id=?').get(tid)) {
           return json(res, 400, { error: 'no such track' });
         }
-        try { recordListen({ ...b, track_id: tid }); json(res, 200, { ok: true }); }
+        try { recordListen({ ...b, track_id: tid, kids: kidsOn(req) }); json(res, 200, { ok: true }); }
         catch (e) { serverError(res, e, '/api/listen'); }
       });
       return;
@@ -5717,6 +5798,9 @@ const server = http.createServer(async (req, res) => {
           // a new playlist is for listening; a DJ set is a deliberate choice
         const kind = b.kind === 'dj' ? 'dj' : 'listen';
           db.prepare('UPDATE playlists SET kind=?, updated_at=? WHERE id=?').run(kind, now(), id);
+        }
+        if (b.kids !== undefined) {
+          db.prepare('UPDATE playlists SET kids=?, updated_at=? WHERE id=?').run(b.kids ? 1 : 0, now(), id);
         }
         json(res, 200, { ok: true });
       });

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.0 — 2026-11-27
+
+- **Kids mode.** Mark a playlist with **Use in Kids Mode** from its menu and a **Kids** entry
+  appears in the sidebar. It opens a page with that playlist as a big card; a tap plays it.
+  The sidebar, top bar and bottom navigation disappear, the player bar stays, and the wordmark
+  becomes the only colourful thing in the app — the same gradient idea, five stops.
+- **The kid's listening cannot reach your taste.** A kids play is written to `kids_listens`,
+  not `listens`, so taste, rotation, play history, A&R and Prep — all of which read `listens` —
+  never see it. Auto-download is skipped too. `bin/unit.mjs` asserts the branch and that the
+  flag comes from the cookie, not from the request body.
+- **A PIN to leave**, 4 to 8 digits, stored as a salted scrypt hash. The Settings card says
+  what it is: a speed bump for a child, not a lock. Leaving without one is allowed.
+- Settings gains a **Kids** card: how many playlists are in it, where to mark more, and the PIN.
+- **Run setup again** moved to the top of the You card; it was at the bottom and read as
+  missing.
+- The Settings credit is now 12px and flush left with the version row, instead of 10px mono
+  centred.
+
 ## 0.3.7 — 2026-11-27
 
 - **One empty block, not two.** A stale lazy-fill timer from an earlier render looked the

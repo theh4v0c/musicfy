@@ -178,6 +178,8 @@ Screenshots use a small demo library, not a real one.
 - **DJ prep**: harmonic ordering, Camelot keys, and exports for Rekordbox (XML), Traktor (NML),
   a CDJ USB folder, plus a ZIP with the audio for moving a set to another machine.
 - **Genre** from the catalogue plus MusicBrainz artist tags.
+- **Kids mode**: mark playlists for a kid or a teenager, lock the exit with a PIN, and their
+  plays are recorded apart — your taste, rotation, history and A&R never see them.
 - **Listening history** capture, and a weekly "For you" playlist built from what is played now.
 - **Guided Ask**: plain language queries, playlist building and album downloads are
   proposals first; nothing is created or queued until you confirm.

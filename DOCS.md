@@ -679,6 +679,24 @@ cookie as the query-token route.
 
 Delete a track: the row is removed from the DOM immediately, the API deletes row and file, `refreshView` rebuilds the view. Playback is untouched by refresh because the audio element lives outside the rendered views; deleting the playing track keeps it playing and fixes the queue index.
 
+## Kids mode
+
+A playlist marked `kids=1` is the unit of curation. `GET /api/kids` returns those playlists,
+the recent kids plays and whether a PIN is set; `POST /api/kids/enter` sets the `mf_kids=1`
+cookie, `POST /api/kids/exit` clears it (with the PIN when one is set), and `POST
+/api/kids/pin` stores or clears a 4–8 digit PIN (scrypt, salt per PIN). The playlist flag is
+set by `PATCH /api/playlists/:id { "kids": true }`.
+
+The isolation is structural. `recordListen` writes a kids play to `kids_listens` and returns
+before touching `listens`, so every taste, rotation, history, A&R and Prep query — all of
+which read `listens` — cannot see it. There is no filter to forget, and `bin/unit.mjs` asserts
+that the branch exists and that `/api/listen` takes the flag from the cookie rather than the
+request body. Kids plays also skip auto-download.
+
+In the interface the cookie hides the sidebar, top bar and bottom navigation and shows the
+kids page; `nav()` refuses any other view while it is set. The PIN is a speed bump, not a
+lock: anyone who can open Settings can clear it.
+
 ## First run
 
 `GET /api/settings` carries `onboarding_done` and `onboarding_step`. `onboarding_done` is

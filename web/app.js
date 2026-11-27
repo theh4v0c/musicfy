@@ -302,6 +302,7 @@ function ctxRename(t) {
 }
 
 function openCtx(t, x, y) {
+  if (state.kidsOn) return;
   markCtxOpen();
   ctxTarget = t;
   const m = $('ctx');
@@ -850,6 +851,7 @@ function setNav(v) {
   const pill = $('pill'); if (pill) pill.hidden = v !== 'songs';
 }
 function nav(v, push = true) {
+  if (state.kidsOn && v !== 'kids') v = 'kids';
   if (state.tier === 'listener' && v === 'djexport') v = 'home';
   closeInlinePreview();
   const qd = $('queue-drawer'); if (qd) qd.hidden = true;
@@ -870,6 +872,7 @@ function nav(v, push = true) {
   else if (v === 'askai') renderAskAi();
   else if (v === 'djexport') renderDjExport();
   else if (v === 'settings') renderSettings();
+  else if (v === 'kids') renderKids();
   else if (v === 'import') renderImport();
   resetScroll();
   if (v === 'import') { const f = document.getElementById('imp-name'); if (f) f.scrollIntoView({ block: 'start' }); }
@@ -996,6 +999,7 @@ function openPlaylistMenu(p, x, y) {
   const m = $('ctx');
   m.innerHTML = `<div class="ctx-title"><span class="ctx-name">${esc(p.name)}</span></div>
     <button data-act="pl-play">Play</button>
+    <button data-act="pl-kids">${p.kids ? tr('Remove from Kids Mode') : tr('Use in Kids Mode')}</button>
     <button data-act="pl-upload">Upload tracks</button>
     <button data-act="pl-rename">Rename</button>
     <button data-act="pl-cover">Change cover</button>
@@ -1037,6 +1041,19 @@ function openPlaylistMenu(p, x, y) {
     }
     closeCtx(true); m.onclick = null;
     if (act === 'pl-play') { playPlaylist(p.id); return; }
+    if (act === 'pl-kids') {
+      try {
+        await api(`/api/playlists/${encodeURIComponent(p.id)}`, {
+          method: 'PATCH', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ kids: !p.kids }),
+        });
+        await loadPlaylists();
+        await syncKidsEntry();
+        refreshView();
+        toast(!p.kids ? 'Playlist added to Kids mode' : 'Playlist removed from Kids mode', 4000);
+      } catch { toast('Could not change Kids mode', 4000); }
+      return;
+    }
     if (act === 'pl-upload') { uploadToPlaylist(p.id); return; }
     if (act === 'pl-cover') { uploadPlaylistCover(p.id); return; }
     if (act === 'pl-cover-track') { openCoverPicker(p.id); return; }
@@ -2822,6 +2839,8 @@ async function renderSettings() {
   v.innerHTML = '<div class="ladder-state">Loading...</div>';
   let d = { settings: {}, llm: {} };
   try { d = await api('/api/settings', { nocache: true }); } catch {}
+  let k = { playlists: [], pin_set: false };
+  try { k = await api('/api/kids', { nocache: true }); } catch {}
   const s = d.settings || {};
   const l = d.llm || {};
   v.innerHTML = `<h1 class="sr-only">Settings</h1>
@@ -2840,6 +2859,10 @@ async function renderSettings() {
     <div class="set-grid">
       <section class="set-card" data-tone="acc">
         <h2>You</h2>
+        <div class="lib-actions set-onb">
+          <button class="btn btn-ghost" id="set-onboarding" type="button">Run setup again</button>
+          <span class="set-note">Name, place, mode and music folder, in five steps.</span>
+        </div>
         <label>Display name<input id="set-name" value="${esc(s.display_name || '')}" placeholder="Your name"></label>
         <p class="set-note">The first word is used by the greeting on Home. Nothing else reads it.</p>
         <label>Timezone<input id="set-tz" value="${esc(s.timezone || '')}" placeholder="Continent/City"></label>
@@ -2851,10 +2874,6 @@ async function renderSettings() {
           </select>
         </label>
         <p class="set-note">The interface language for this browser. Names of tracks, artists and playlists are never translated.</p>
-        <div class="lib-actions set-onb">
-          <button class="btn btn-ghost" id="set-onboarding" type="button">Run setup again</button>
-          <span class="set-note">Name, place, mode and music folder, in five steps.</span>
-        </div>
       </section>
       <section class="set-card" data-tone="acc">
         <h2>Location</h2>
@@ -2863,6 +2882,20 @@ async function renderSettings() {
         <div class="set-facts" id="set-geo">${s.latitude && s.longitude
           ? `<div><b>${esc(s.city || '')}</b>${s.country ? ` · ${esc(s.country)}` : ''}</div><div>${Number(s.latitude).toFixed(3)}, ${Number(s.longitude).toFixed(3)}</div><div>${esc(s.timezone || '')}</div>`
           : '<div>No city set</div>'}</div>
+      </section>
+      <section class="set-card" data-tone="acc">
+        <h2>Kids</h2>
+        <p class="set-note">A separate shelf for a kid or a teenager. Plays made in Kids mode are recorded on their own and never reach your taste, your rotation, your play history or A&amp;R.</p>
+        <p class="set-note">${k.playlists.length
+          ? `${k.playlists.length} playlist${k.playlists.length === 1 ? '' : 's'} in Kids mode.`
+          : 'No playlist is in Kids mode yet.'} Mark one with “Use in Kids Mode” from its menu, and the Kids entry appears in the sidebar.</p>
+        <label>PIN to leave Kids mode<input id="set-kids-pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="${k.pin_set ? 'set - type a new one to change it' : 'not set'}"></label>
+        <div class="lib-actions">
+          <button class="btn btn-ghost" id="set-kids-pin-save" type="button">Save PIN</button>
+          ${k.pin_set ? '<button class="btn btn-ghost" id="set-kids-pin-clear" type="button">Clear PIN</button>' : ''}
+          <span class="set-note" id="set-kids-msg"></span>
+        </div>
+        <p class="set-note">A PIN is a speed bump for a child, not a lock: anyone who can reach this screen can clear it.</p>
       </section>
       <section class="set-card" data-tone="ok">
         <h2>Taste</h2>
@@ -3042,6 +3075,32 @@ async function renderSettings() {
   };
   if (avoidInput) { avoidInput.addEventListener('input', paintAvoid); paintAvoid(); }
 
+  // kids PIN: a speed bump, so it is deliberately easy to set and to clear
+  const kidsSave = document.getElementById('set-kids-pin-save');
+  if (kidsSave) kidsSave.onclick = async () => {
+    const input = document.getElementById('set-kids-pin');
+    const msg = document.getElementById('set-kids-msg');
+    try {
+      const r = await api('/api/kids/pin', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ pin: input.value.trim() }),
+      });
+      if (msg) { msg.dataset.tone = 'ok'; msg.textContent = r.pin_set ? 'PIN set' : 'PIN cleared'; }
+      input.value = '';
+      input.placeholder = r.pin_set ? 'set - type a new one to change it' : 'not set';
+      await syncKidsEntry();
+    } catch (e) {
+      if (msg) { msg.dataset.tone = 'bad'; msg.textContent = e.message || 'Could not save'; }
+    }
+  };
+  const kidsClear = document.getElementById('set-kids-pin-clear');
+  if (kidsClear) kidsClear.onclick = async () => {
+    try {
+      await api('/api/kids/pin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: '' }) });
+      await syncKidsEntry();
+      renderSettings();
+    } catch {}
+  };
   // setup is repeatable: the flow edits the same fields this page does, so the button is a
   // shortcut, not a second source of truth
   const onbBtn = document.getElementById('set-onboarding');
@@ -6400,6 +6459,7 @@ $('np-like').onclick = (e) => { e.stopPropagation(); state.current && toggleLike
 $('mini-like') && ($('mini-like').onclick = (e) => { e.stopPropagation(); state.current && toggleLike(state.current); });
 
 document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => { state.history = []; $('back').hidden = true; nav(b.dataset.nav); });
+$('kids-nav').onclick = () => enterKids();
 // collapsible sidebar: the toggle lives inside it, collapsed is an icon rail
 (() => {
   const app = $('app');
@@ -7233,6 +7293,121 @@ function onbKeys(e) {
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 }
 
+/* ============ kids mode ============ */
+/* A separate shelf with its own play table. The cookie decides where a play is recorded;
+   the interface hides the adult chrome instead of restyling it. */
+function kidsMode(on) {
+  state.kidsOn = !!on;
+  document.body.classList.toggle('kids', !!on);
+  const entry = document.getElementById('kids-nav');
+  if (entry && on) entry.hidden = true;
+}
+
+async function syncKidsEntry() {
+  const k = await api('/api/kids', { nocache: true }).catch(() => null);
+  state.kids = k;
+  const entry = document.getElementById('kids-nav');
+  if (entry && k) entry.hidden = !(k.pin_set || (k.playlists || []).length);
+  return k;
+}
+
+async function enterKids() {
+  try {
+    await api('/api/kids/enter', { method: 'POST' });
+  } catch { toast(tr('Could not open Kids mode'), 4000); return; }
+  kidsMode(true);
+  renderKids();
+}
+
+async function leaveKids() {
+  const st = state.kids || await api('/api/kids', { nocache: true }).catch(() => null);
+  let pin = '';
+  if (st && st.pin_set) {
+    pin = await uiPrompt(tr('PIN to leave Kids mode'));
+    if (pin == null) return;
+  }
+  try {
+    await api('/api/kids/exit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin }) });
+  } catch {
+    toast(tr('That PIN is not right.'), 4000);
+    return;
+  }
+  kidsMode(false);
+  await syncKidsEntry();
+  state.view = 'home';
+  nav('home');
+}
+
+async function renderKids() {
+  state.view = 'kids';
+  state.playlistId = null;
+  kidsMode(true);
+  $('view-title').textContent = tr('Kids');
+  const v = $('view');
+  v.innerHTML = `<div class="kids-head">
+      <div class="kids-brand" aria-label="MUSICFY">MUSICFY</div>
+      <button class="btn btn-ghost" id="kids-leave" type="button">${tr('Leave')}</button>
+    </div>
+    <p class="kids-note">${tr('Tap a list to play it.')}</p>
+    <div id="kids-recent"></div>
+    <div class="sec-title" id="kids-lists-title">${tr('Lists')}</div>
+    <div class="pgrid kids-grid" id="kids-grid"></div>`;
+  const leave = $('kids-leave');
+  if (leave) leave.onclick = leaveKids;
+  let data = { playlists: [] };
+  try { data = await api('/api/kids', { nocache: true }); } catch {}
+  state.kids = data;
+  const grid = $('kids-grid');
+  if (!grid) return;
+  if (data.recent && data.recent.length) {
+    const host = $('kids-recent');
+    if (host) {
+      const h = document.createElement('div');
+      h.className = 'sec-title';
+      h.textContent = tr('Recently played');
+      const row = document.createElement('div');
+      row.className = 'row-scroller';
+      for (const t of data.recent) row.appendChild(trackCard(t, data.recent, 'Kids'));
+      host.append(h, row);
+    }
+  }
+  if (!data.playlists.length) {
+    grid.outerHTML = `<div class="hollow">
+      <svg class="hollow-mark" viewBox="0 0 64 56" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4">
+        <rect x="12" y="6" width="40" height="40" rx="7" stroke-dasharray="3 3" opacity=".6"/>
+        <path d="M21 26h9M34 26h9" stroke="var(--acc)" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <div><b>${tr('Nothing here yet.')}</b><p>${tr('A grown-up can mark playlists with “Use in Kids Mode” from their menu.')}</p></div>
+    </div>`;
+    return;
+  }
+  for (const p of data.playlists) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'pcard kids-card';
+    const img = document.createElement('img');
+    img.className = 'pcard-art';
+    img.loading = 'lazy';
+    img.alt = '';
+    img.src = `/api/cover-playlist/${encodeURIComponent(p.id)}?v=${state.artV || 0}`;
+    img.onerror = () => {
+      const ph = document.createElement('div');
+      ph.className = 'pcard-art ph';
+      ph.textContent = String(p.name || '?').charAt(0).toUpperCase();
+      img.replaceWith(ph);
+    };
+    const name = document.createElement('div');
+    name.className = 'pcard-name';
+    name.textContent = p.name;
+    const sub = document.createElement('div');
+    sub.className = 'pcard-sub';
+    sub.textContent = `${p.n_tracks} ${tr(p.n_tracks === 1 ? 'track' : 'tracks')}`;
+    card.append(img, name, sub);
+    card.onclick = () => playPlaylist(p.id);
+    grid.appendChild(card);
+  }
+}
+
 /* ============ boot ============ */
 async function loadPlaylists() {
   state.playlists = await api('/api/playlists', { nocache: true });
@@ -7255,8 +7430,10 @@ async function loadPlaylists() {
     await loadPlaylists();
     try { await syncLikes(); } catch {}
     paintPill();
+    try { await syncKidsEntry(); } catch {}
     // do not stomp a view the user opened while boot was loading playlists
-    if (state.view === bootView) renderHome();
+    if (state.kids && state.kids.kids) renderKids();
+    else if (state.view === bootView) renderHome();
     if (state.needsOnboarding) openOnboarding(Number(state.settings.onboarding_step) || 0);
     try { watchDownloads(); } catch {}
   } catch (e) {

@@ -173,8 +173,9 @@ Settings is two columns on a wide screen, at most 1100px wide, with the mode ban
 the top. Cards in one row share the same top and bottom edge; the grid stretches a short
 card to its row instead of letting a masonry column start at a different height. One
 column on a phone. A note directly above a field or checkbox keeps 10px of separation.
-The page ends with one credit line, 10px mono, muted and centred: `Developed by Roger Lima ·
-WNL`. It is a signature, not a footer bar: no border, no links, no second row.
+The page ends with one credit line, 12px, muted and flush left with the version row:
+`Developed by Roger Lima · WNL`. It is a signature, not a footer bar: no border, no links, no
+second row.
 
 The Library folder card has one primary action, **Scan folder**. The folder itself is a
 select of places this install may scan — the download folder, the configured roots and one
@@ -221,6 +222,18 @@ instead of the feeling, and any joke aims at the industry this app is refusing t
 the person. Banned: "Let's get started", "Welcome aboard", "You're all set", "Oops",
 exclamation marks, "seamless", "delight". A screen that can be skipped says so. A promise with
 an exception names the exception: the city is geocoded once, and the copy says exactly that.
+
+### 5.5 Kids mode
+
+Kids mode is a separate shelf, not a theme: the same type, the same spacing, no cartoon
+palette. The sidebar, the top bar and the bottom navigation disappear; the player bar stays.
+The wordmark becomes the one colourful thing in the app — five stops, clipped to the text —
+because it is the one screen a child opens alone.
+
+The page is a grid of the playlists marked for Kids mode; a tap plays one. **Leave** is the
+only other control, and it asks for the PIN when one is set. Plays made here are written to
+their own table, so taste, rotation, history and A&R never see them. The PIN is a speed bump
+for a child and the copy says so.
 
 ## 6. Containers
 | container | radius | padding | background | use |
