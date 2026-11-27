@@ -1245,13 +1245,6 @@ async function renderHome() {
   $('view-title').innerHTML = `<span class="wordmark">MUSICFY</span><span class="view-name">${tr('Home')}</span>`;
   const v = $('view');
   v.innerHTML = `
-    ${state.tierUnset ? `<div class="first-run" id="first-run">
-      <div><b>${tr('How do you use MUSICFY?')}</b><span>${tr('DJ shows Prep, analysis, BPM and key. Listener keeps the library and playback only.')}</span></div>
-      <div class="first-run-actions">
-        <button class="btn btn-primary" data-tier="dj" type="button">${tr('I am a DJ')}</button>
-        <button class="btn btn-ghost" data-tier="listener" type="button">${tr('I am a listener')}</button>
-      </div>
-    </div>` : ''}
     <section class="mast">
       <div class="mast-glow" id="mast-glow"></div>
       <div class="mast-meta"><span id="mast-clock"></span><span class="mast-flex"></span></div>
@@ -1281,20 +1274,6 @@ async function renderHome() {
       <div class="sec-title">Your playlists <small>${Number(state.playlists.length).toLocaleString(LOC())} TOTAL</small></div>
       <div class="pgrid" id="home-grid"></div>
     </div>`;
-  const firstRun = $('first-run');
-  if (firstRun) {
-    firstRun.querySelectorAll('[data-tier]').forEach((b) => {
-      b.onclick = async () => {
-        b.disabled = true;
-        try {
-          await api('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ui_tier: b.dataset.tier }) });
-          state.tierUnset = false;
-          applyTier(b.dataset.tier);
-          location.reload();
-        } catch { b.disabled = false; toast('Could not save the mode', 4000); }
-      };
-    });
-  }
   // the masthead reports the session, not the weather: time, place, what was last on
   const paintClock = () => {
     const clock = document.getElementById('mast-clock');
@@ -2855,6 +2834,10 @@ async function renderSettings() {
           </select>
         </label>
         <p class="set-note">The interface language for this browser. Names of tracks, artists and playlists are never translated.</p>
+        <div class="lib-actions set-onb">
+          <button class="btn btn-ghost" id="set-onboarding" type="button">Run setup again</button>
+          <span class="set-note">Name, place, mode and music folder, in five steps.</span>
+        </div>
       </section>
       <section class="set-card" data-tone="acc">
         <h2>Location</h2>
@@ -3041,6 +3024,15 @@ async function renderSettings() {
   };
   if (avoidInput) { avoidInput.addEventListener('input', paintAvoid); paintAvoid(); }
 
+  // setup is repeatable: the flow edits the same fields this page does, so the button is a
+  // shortcut, not a second source of truth
+  const onbBtn = document.getElementById('set-onboarding');
+  if (onbBtn) onbBtn.onclick = async () => {
+    await onbPost({ onboarding_done: false, onboarding_step: 0 });
+    state.settings = state.settings || {};
+    state.settings.onboarding_done = false;
+    openOnboarding(0);
+  };
   const langSel = document.getElementById('set-lang');
   if (langSel && window.I18N) langSel.onchange = () => window.I18N.set(langSel.value);
   const llmStatus = document.getElementById('set-llm-status');
@@ -3371,8 +3363,7 @@ async function renderSettings() {
     } catch (e) { maint(`Repair failed${e.message ? ` (${e.message})` : ''}`, 'bad'); }
     setRepair.disabled = false;
   };
-  const folderField = document.getElementById('set-folder');
-  const folderRow = document.getElementById('set-folder-path-row');
+  const folderField = document.getElementById('set-folder');  const folderRow = document.getElementById('set-folder-path-row');
   const folderSelect = document.getElementById('set-folder-select');
   const showFolderPath = (show) => { if (folderRow) folderRow.hidden = !show; };
   if (folderField) {
@@ -6844,6 +6835,366 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.ready.then(() => postToSw({ type: 'list-offline' })).catch(() => {});
 }
 
+/* ============ first run ============ */
+/* Five questions, one per screen, every one skippable, and the promise first: the library,
+ * the settings and the listening history stay on this computer. The fields are the ones the
+ * app actually uses (greeting, local hour, mode, folder), so nothing here is a survey. */
+const ONB_LAST = 4;             // steps 0..4, then the done screen
+let onb = null;
+
+const onbPhrase = () => {
+  const part = greetPart();
+  return part === 'night' ? 'Late one' : part === 'morning' ? 'Morning' : part === 'afternoon' ? 'Afternoon' : 'Evening';
+};
+
+function onbPost(patch) {
+  return api('/api/settings', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch),
+  }).catch(() => null);
+}
+
+function closeOnboarding() {
+  const el = document.getElementById('onb');
+  if (el) el.remove();
+  onb = null;
+}
+
+function openOnboarding(start = 0) {
+  if (document.getElementById('onb')) return;
+  const el = document.createElement('div');
+  el.className = 'onb';
+  el.id = 'onb';
+  el.innerHTML = `
+    <div class="onb-card" role="dialog" aria-modal="true" aria-labelledby="onb-title">
+      <div class="onb-top">
+        <span class="onb-count" id="onb-count"></span>
+        <button class="onb-skip" id="onb-skip" type="button">${tr('Skip setup')}</button>
+      </div>
+      <div class="onb-track" aria-hidden="true"><i id="onb-fill"></i></div>
+      <div class="onb-body" id="onb-body"></div>
+      <div class="onb-foot">
+        <p class="onb-privacy">${tr('Stays on this computer. No account, no upload.')}</p>
+        <div class="onb-nav">
+          <button class="onb-back" id="onb-back" type="button">${tr('Back')}</button>
+          <button class="btn btn-primary" id="onb-next" type="button">${tr('Continue')}</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+  const s = state.settings || {};
+  onb = {
+    el,
+    step: Math.min(ONB_LAST + 1, Math.max(0, Number(start) || 0)),
+    name: s.display_name || '',
+    city: s.city || '',
+    citySaved: s.city || '',
+    mode: s.ui_tier === 'listener' ? 'listener' : 'dj',
+    folder: '',
+    busy: false,
+  };
+  el.querySelector('#onb-skip').onclick = () => onbSkip();
+  el.querySelector('#onb-back').onclick = () => onbGo(onb.step - 1);
+  el.querySelector('#onb-next').onclick = () => onbNext();
+  el.addEventListener('keydown', onbKeys);
+  onbRender();
+}
+
+function onbRender() {
+  const body = document.getElementById('onb-body');
+  if (!body || !onb) return;
+  const step = onb.step;
+  const done = step > ONB_LAST;
+  document.getElementById('onb-count').textContent = done
+    ? tr('Done')
+    : `${String(step + 1).padStart(2, '0')} / ${String(ONB_LAST + 1).padStart(2, '0')}`;
+  document.getElementById('onb-fill').style.width = `${Math.round((Math.min(step + 1, ONB_LAST + 1) / (ONB_LAST + 1)) * 100)}%`;
+  document.getElementById('onb-skip').hidden = done;
+  document.getElementById('onb-back').hidden = step === 0 || done;
+  const next = document.getElementById('onb-next');
+  next.textContent = done ? tr('Open my library') : step === 0 ? tr('Get started') : tr('Continue');
+
+  if (done) {
+    const bits = [onb.mode === 'listener' ? tr('Listener') : tr('DJ')];
+    if (onb.city) bits.push(onb.city);
+    const ready = onb.name ? `${tr('Ready')}, ${onb.name}.` : `${tr('Ready')}.`;
+    body.innerHTML = `
+      <p class="onb-kicker">${tr('READY')}</p>
+      <h2 class="onb-title" id="onb-title">${esc(ready)}</h2>
+      <p class="onb-copy">${tr('Everything you see from here is stored on this computer. There is no account to keep, and nothing is uploaded.')}</p>
+      <ul class="onb-facts">${bits.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>
+      <p class="onb-note">${tr('Run this again any time from Settings, under You.')}</p>`;
+    onbFocus();
+    return;
+  }
+
+  if (step === 0) {
+    body.innerHTML = `
+      <p class="onb-kicker">MUSICFY</p>
+      <h2 class="onb-title" id="onb-title">${tr('A library you own.')}</h2>
+      <p class="onb-copy">${tr('Your files, your disk, no account. This takes a minute, and every step can be skipped.')}</p>
+      <ul class="onb-facts">
+        <li>${tr('Plays straight from the folders you already have')}</li>
+        <li>${tr('Settings and listening history stay on this computer')}</li>
+        <li>${tr('Nothing is uploaded; a download happens only when you ask for a track')}</li>
+      </ul>
+      <p class="onb-note" id="onb-path"></p>`;
+    if (window.musicfyDesktop && window.musicfyDesktop.info) {
+      window.musicfyDesktop.info().then((i) => {
+        const p = document.getElementById('onb-path');
+        if (p && i && i.home) p.textContent = `${tr('Your data lives in')} ${i.home}`;
+      }).catch(() => {});
+    }
+    onbFocus();
+    return;
+  }
+
+  if (step === 1) {
+    body.innerHTML = `
+      <p class="onb-kicker">${tr('YOU')}</p>
+      <h2 class="onb-title" id="onb-title">${tr('What should I call you?')}</h2>
+      <p class="onb-copy">${tr('Only the greeting uses it. Leave it empty if you would rather not.')}</p>
+      <label class="onb-field">${tr('Your name')}<input id="onb-name" type="text" maxlength="40" autocomplete="given-name" value="${esc(onb.name)}" placeholder="${tr('Your name')}"></label>
+      <p class="onb-preview" id="onb-preview"></p>`;
+    const input = document.getElementById('onb-name');
+    input.addEventListener('input', () => { onb.name = input.value; onbPaintPreview(); });
+    onbPaintPreview();
+    onbFocus();
+    return;
+  }
+
+  if (step === 2) {
+    body.innerHTML = `
+      <p class="onb-kicker">${tr('PLACE')}</p>
+      <h2 class="onb-title" id="onb-title">${tr('Where are you?')}</h2>
+      <p class="onb-copy">${tr('It says good evening at the right hour. The city is looked up once, now, to get its coordinates and time zone; the result stays on this computer.')}</p>
+      <label class="onb-field">${tr('City')}<input id="onb-city" type="text" maxlength="60" autocomplete="address-level2" value="${esc(onb.city)}" placeholder="Brasília"></label>
+      <p class="onb-note" id="onb-resolved">${onb.city ? esc(onb.city) : ''}</p>`;
+    const input = document.getElementById('onb-city');
+    // the lookup happens when the field is left, not on every keystroke, and not as a
+    // surprise after Continue: the person sees the place it resolved to before moving on
+    input.addEventListener('input', () => { onb.city = input.value; });
+    input.addEventListener('blur', () => { onbResolveCity(); });
+    onbFocus();
+    return;
+  }
+
+  if (step === 3) {
+    body.innerHTML = `
+      <p class="onb-kicker">${tr('MODE')}</p>
+      <h2 class="onb-title" id="onb-title">${tr('How do you listen?')}</h2>
+      <p class="onb-copy">${tr('This changes the whole app. You can switch it any time in Settings.')}</p>
+      <div class="onb-modes" role="group" aria-label="${tr('Mode')}">
+        <button class="onb-mode" data-mode="dj" type="button" aria-pressed="${onb.mode === 'dj'}">
+          <b>${tr('DJ')}</b><span>${tr('Prep, BPM and key, harmonic tools and exports for CDJs.')}</span>
+        </button>
+        <button class="onb-mode" data-mode="listener" type="button" aria-pressed="${onb.mode === 'listener'}">
+          <b>${tr('Listener')}</b><span>${tr('Library, playlists and playback. Prep stays out of the way.')}</span>
+        </button>
+      </div>`;
+    body.querySelectorAll('.onb-mode').forEach((b) => {
+      b.onclick = () => {
+        onb.mode = b.dataset.mode;
+        body.querySelectorAll('.onb-mode').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.mode === onb.mode)));
+      };
+    });
+    onbFocus();
+    return;
+  }
+
+  body.innerHTML = `
+    <p class="onb-kicker">${tr('MUSIC')}</p>
+    <h2 class="onb-title" id="onb-title">${tr('Where is your music?')}</h2>
+    <p class="onb-copy">${tr('Point at a folder you already have. The files stay where they are; nothing is copied or uploaded.')}</p>
+    <div id="onb-folder"></div>
+    <p class="onb-scan" id="onb-scan"></p>`;
+  onbFolders();
+  onbFocus();
+}
+
+function onbFocus() {
+  if (!onb) return;
+  const input = document.querySelector('#onb-body input');
+  if (input) { input.focus(); input.select(); return; }
+  const chosen = document.querySelector('#onb-body .onb-mode[aria-pressed="true"]');
+  if (chosen) { chosen.focus(); return; }
+  const next = document.getElementById('onb-next');
+  if (next && !next.disabled) next.focus();
+}
+
+function onbPaintPreview() {
+  const el = document.getElementById('onb-preview');
+  if (!el) return;
+  const name = (document.getElementById('onb-name')?.value || '').trim();
+  el.innerHTML = name
+    ? `${esc(tr(onbPhrase()))}, <b>${esc(name)}</b>.`
+    : esc(`${tr(onbPhrase())}.`);
+}
+
+async function onbFolders() {
+  const host = document.getElementById('onb-folder');
+  if (!host) return;
+  if (window.musicfyDesktop) {
+    host.innerHTML = `<button class="btn btn-ghost" id="onb-pick" type="button">${tr('Choose folder')}</button>
+      <p class="onb-note">${tr('A folder inside your Music folder works best.')}</p>`;
+    document.getElementById('onb-pick').onclick = async () => {
+      const picked = await window.musicfyDesktop.pickFolder();
+      if (picked) onbScan(picked);
+    };
+    return;
+  }
+  let folders = [];
+  try { folders = (await api('/api/library/folders', { nocache: true })).folders || []; } catch {}
+  if (!folders.length) {
+    host.innerHTML = `<p class="onb-note">${tr('No folder is available to this server. Add one later in Settings.')}</p>`;
+    return;
+  }
+  host.innerHTML = `<label class="onb-field">${tr('Music folder')}<select id="onb-folder-select"><option value="">${tr('Choose a folder…')}</option>${folders
+    .map((f) => `<option value="${esc(f.path)}">${esc(f.label)}</option>`).join('')}</select></label>`;
+  document.getElementById('onb-folder-select').onchange = (e) => { if (e.target.value) onbScan(e.target.value); };
+}
+
+async function onbScan(folder) {
+  const out = document.getElementById('onb-scan');
+  onb.folder = folder;
+  if (out) out.textContent = tr('Reading the folder…');
+  try {
+    await api('/api/library/scan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: folder }) });
+  } catch (e) {
+    if (out) out.textContent = `${tr('Could not read that folder:')} ${e.message || ''}`;
+    return;
+  }
+  for (let i = 0; i < 3000; i += 1) {
+    await new Promise((r) => setTimeout(r, 1200));
+    const el = document.getElementById('onb-scan');
+    if (!el || !onb) return;
+    let st = null;
+    try { st = await api('/api/library/scan', { nocache: true }); } catch { continue; }
+    if (st.running) {
+      el.dataset.tone = '';
+      el.textContent = st.total
+        ? `${Number(st.done).toLocaleString(LOC())} / ${Number(st.total).toLocaleString(LOC())}`
+        : tr('Reading the folder…');
+      continue;
+    }
+    el.dataset.tone = st.error ? 'bad' : 'ok';
+    el.textContent = st.error
+      ? `${tr('Scan stopped:')} ${st.error}`
+      : `${Number(st.total).toLocaleString(LOC())} ${tr('files read')} · ${st.added} ${tr('added')}`;
+    state.allTracks = null;
+    bustCache();
+    return;
+  }
+}
+
+function onbGo(step) {
+  if (!onb) return;
+  const n = Math.min(ONB_LAST + 1, Math.max(0, step));
+  if (n === onb.step) return;
+  onb.step = n;
+  onbRender();
+}
+
+async function onbResolveCity() {
+  if (!onb) return;
+  const input = document.getElementById('onb-city');
+  if (!input) return;
+  const q = input.value.trim();
+  if (q === onb.citySaved) return;
+  onb.citySaved = q;
+  onb.city = q;
+  if (!q) {
+    const empty = document.getElementById('onb-resolved');
+    if (empty) empty.textContent = '';
+    return;
+  }
+  const note = document.getElementById('onb-resolved');
+  if (note) note.textContent = tr('Looking up the city…');
+  const r = await onbPost({ city: q });
+  const saved = (r && r.settings) || null;
+  if (!onb) return;
+  if (saved) {
+    state.settings.city = saved.city || '';
+    state.settings.timezone = saved.timezone || state.settings.timezone;
+    state.settings.latitude = saved.latitude;
+    state.settings.longitude = saved.longitude;
+  }
+  const el = document.getElementById('onb-resolved');
+  if (!el) return;
+  if (saved && saved.city) {
+    onb.city = saved.city;
+    el.dataset.tone = 'ok';
+    el.textContent = [saved.city, saved.country, saved.timezone].filter(Boolean).join(' · ');
+  } else {
+    el.dataset.tone = 'bad';
+    el.textContent = tr('Could not find that city. The hour will use this computer’s time zone.');
+  }
+}
+
+async function onbNext() {  if (!onb || onb.busy) return;
+  const step = onb.step;
+  if (step > ONB_LAST) { onbFinish(); return; }
+  const next = document.getElementById('onb-next');
+  onb.busy = true;
+  if (next) next.disabled = true;
+  try {
+    if (step === 1) {
+      onb.name = (document.getElementById('onb-name')?.value || '').trim();
+      state.profileName = onb.name;
+      state.settings.display_name = onb.name;
+      await onbPost({ display_name: onb.name });
+    }
+    if (step === 2) {
+      await onbResolveCity();
+    }
+    if (step === 3) {
+      await onbPost({ ui_tier: onb.mode });
+      state.settings.ui_tier = onb.mode;
+      applyTier(onb.mode);
+    }
+    onb.step = step + 1;
+    onbRender();
+    await onbPost({ onboarding_step: onb.step });
+  } finally {
+    if (onb) {
+      onb.busy = false;
+      const again = document.getElementById('onb-next');
+      if (again) again.disabled = false;
+      onbFocus();
+    }
+  }
+}
+
+async function onbFinish() {
+  if (!onb) return;
+  await onbPost({ onboarding_done: true, onboarding_step: ONB_LAST + 1 });
+  state.settings.onboarding_done = true;
+  closeOnboarding();
+  toast(tr('Setup done.'), 4000);
+  refreshView();
+}
+
+async function onbSkip() {
+  if (!onb) return;
+  await onbPost({ onboarding_done: true, onboarding_step: 0 });
+  state.settings.onboarding_done = true;
+  closeOnboarding();
+  refreshView();
+}
+
+function onbKeys(e) {
+  if (!onb) return;
+  if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); onbNext(); return; }
+  if (e.key === 'Escape') { e.preventDefault(); if (onb.step > 0) onbGo(onb.step - 1); return; }
+  if (e.key !== 'Tab') return;
+  const f = [...onb.el.querySelectorAll('button, input, select')]
+    .filter((x) => !x.hidden && !x.disabled && x.offsetParent !== null);
+  if (!f.length) return;
+  const first = f[0];
+  const last = f[f.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
+
 /* ============ boot ============ */
 async function loadPlaylists() {
   state.playlists = await api('/api/playlists', { nocache: true });
@@ -6858,15 +7209,17 @@ async function loadPlaylists() {
     try {
       const s = await api('/api/settings', { nocache: true });
       state.settings = s.settings || {};
-      state.tierUnset = !state.settings.ui_tier_set;
       applyTier(state.settings.ui_tier || 'dj');
-      if (state.tierUnset && state.view === 'home') renderHome();
+      // a fresh install is walked through setup once; an install that already chose a mode
+      // is onboarding_done on the server, so it never sees the overlay
+      state.needsOnboarding = state.settings.onboarding_done === false;
     } catch { state.settings = {}; applyTier(state.tier); }
     await loadPlaylists();
     try { await syncLikes(); } catch {}
     paintPill();
     // do not stomp a view the user opened while boot was loading playlists
     if (state.view === bootView) renderHome();
+    if (state.needsOnboarding) openOnboarding(Number(state.settings.onboarding_step) || 0);
     try { watchDownloads(); } catch {}
   } catch (e) {
     $('view').innerHTML = `<div class="empty">core unreachable: ${esc(e.message)}</div>`;

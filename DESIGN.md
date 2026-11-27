@@ -193,8 +193,21 @@ does not list them, the field stays free text and says so.
 `--fs-meta`, `--acc-soft` fill, 1px border in accent at 40%. The label above them is a
 kicker: `never in picks`.
 
-## 6. Containers
+### 5.3 First run
 
+Five screens, one question each: the promise, name, city, mode, folder. The promise comes
+first and says what never leaves the computer, before any field. Every screen can be
+skipped; the mono step counter and a 2px playhead are the only progress chrome. The name
+screen shows the greeting it will produce as it is typed, the city is resolved when the field
+is left and the chip that appears is the place the app will use, the mode screen changes the
+app at once, and the folder screen reads a folder in place and reports the count without
+blocking. The last screen repeats the mode and the place and offers "Open my library".
+
+It is a dialog: focus is trapped, Enter advances from a field, Escape goes back, the cards
+are buttons rather than a carousel. On a phone it fills the screen and the action sits at the
+bottom. Skipping marks setup done; Settings, under You, replays it.
+
+## 6. Containers
 | container | radius | padding | background | use |
 |---|---|---|---|---|
 | `.mast` hero | `--r-xl` 18px | 16/20 | `--bg-elev` + light bloom | home only |

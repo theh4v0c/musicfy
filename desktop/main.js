@@ -363,6 +363,8 @@ ipcMain.handle('musicfy:pick-folder', async () => {
 
 ipcMain.handle('musicfy:reveal', (_e, which) => shell.openPath(which === 'music' ? MUSIC : HOME));
 
+ipcMain.handle('musicfy:info', () => ({ home: HOME, music: MUSIC, version: VERSION }));
+
 ipcMain.on('musicfy:playing', (_e, playing) => {
   if (playing && !blocker) blocker = powerSaveBlocker.start('prevent-app-suspension');
   else if (!playing && blocker) { try { powerSaveBlocker.stop(blocker); } catch { /* already stopped */ } blocker = 0; }

@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.4 — 2026-11-27
+
+- **A guided first run.** Five screens, one question each: the promise (your files, your
+  disk, nothing uploaded), your name, your city, how you listen, and where your music is.
+  The name screen shows the greeting as you type it; the city is looked up when you leave the
+  field and the chip shows the place and time zone it will use; the mode changes the app
+  immediately; the folder screen reads a folder in place and counts what it found.
+- **Skippable at every step**, with a step counter and a playhead as the only progress. The
+  last screen repeats the choices and opens the library. Skipping marks setup done.
+- **Repeatable:** Settings → You → **Run setup again** replays it. The first-run card from
+  0.2.9 is gone; the overlay replaces it.
+- The flow resumes where it stopped if the app is closed halfway: `onboarding_step` is saved
+  as each screen is finished. `onboarding_done` defaults to "an install that already chose a
+  mode", so existing libraries never see the overlay.
+- The city is geocoded once, when the field is left, and the result is stored here; the
+  promise on screen says exactly that instead of claiming nothing is ever sent.
+- README, INSTALL, DESIGN and DOCS record the flow and the two settings keys.
+
 ## 0.3.3 — 2026-11-27
 
 - The **Prep** pill under Resume is gone. The home mast is the greeting, the session report,

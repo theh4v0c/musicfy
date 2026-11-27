@@ -76,7 +76,9 @@ If you do not want to use a terminal at all, install the app instead of followin
    **Open Anyway**. You only do this once.
 4. Press **File → Add music folder…** and choose a folder you already have. The files stay
    where they are; nothing is copied, moved or uploaded.
-5. Choose **I am a DJ** or **I am a listener**. Both can be changed later in Settings.
+5. The app walks you through five screens: a short promise that everything stays on this
+   computer, your name, your city, DJ or listener, and a music folder. Each one can be
+   skipped, and **Settings → You → Run setup again** replays it.
 
 The app keeps its database, covers, logs and downloads in
 `~/Library/Application Support/MUSICFY`; the audio it downloads goes to `~/Music/MUSICFY`.

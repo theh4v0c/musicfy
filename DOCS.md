@@ -679,6 +679,16 @@ cookie as the query-token route.
 
 Delete a track: the row is removed from the DOM immediately, the API deletes row and file, `refreshView` rebuilds the view. Playback is untouched by refresh because the audio element lives outside the rendered views; deleting the playing track keeps it playing and fixes the queue index.
 
+## First run
+
+`GET /api/settings` carries `onboarding_done` and `onboarding_step`. `onboarding_done` is
+false only for an install that has never chosen a mode: an older install whose `ui_tier` is
+set is treated as done, so an update never replays the first run. The overlay lives in
+`openOnboarding()` in `web/app.js`; it writes `display_name`, `city`, `ui_tier` and
+`onboarding_step` through the normal settings endpoint as each screen is finished, then
+`onboarding_done: true`. Nothing is stored twice, and the Settings page edits the same keys.
+A city is geocoded once, when the field is left, by the same handler the Settings page uses.
+
 ## Typography
 
 The interface ships **no web font**. `body` and the label token use the native stack:

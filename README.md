@@ -29,6 +29,7 @@ server install below. The app is the same engine and the same interface, with ff
 ffprobe and yt-dlp inside it:
 
 - data lives in `~/Library/Application Support/MUSICFY`, downloads in `~/Music/MUSICFY`;
+- the first run is five short screens (name, city, mode, folder), and every one can be skipped;
 - **File → Add music folder…** (⌘O) imports a library in place — nothing is copied;
 - no account, no service, no Node install, and nothing is uploaded;
 - macOS blocks any app that is not notarized, so the first launch needs **System Settings →

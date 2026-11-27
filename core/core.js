@@ -3674,6 +3674,11 @@ const server = http.createServer(async (req, res) => {
           settings: { ...s, ui_tier: s.ui_tier === 'listener' ? 'listener' : 'dj',
             // a fresh install has no choice yet; the client asks once instead of guessing
             ui_tier_set: s.ui_tier === 'listener' || s.ui_tier === 'dj',
+            // an install that already chose a mode before onboarding existed is onboarded:
+            // replaying the first-run flow for it would ask a question it has answered
+            onboarding_done: s.onboarding_done === true
+              || (s.onboarding_done === undefined && (s.ui_tier === 'listener' || s.ui_tier === 'dj')),
+            onboarding_step: Math.min(9, Math.max(0, Number(s.onboarding_step) || 0)),
             auto_download_plays: Number(setting('auto_download_plays', '2')) },
           version: APP_VERSION,
           storefront: storefront.current(),
@@ -3699,12 +3704,15 @@ const server = http.createServer(async (req, res) => {
             'preferred_format', 'key_format', 'autoplay_next',
             'normalize_loudness', 'target_loudness', 'prefetch_ahead', 'ui_tier',
             'taste_genres', 'taste_artists', 'taste_context', 'taste_avoid', 'taste_include_children',
-            'storefront_country']) {
+            'storefront_country', 'onboarding_done', 'onboarding_step']) {
             if (b[k] !== undefined) s[k] = b[k];
           }
+          // setup state: a boolean, and the step reached, so an interrupted first run
+          // resumes instead of starting over
+          if (b.onboarding_done !== undefined) s.onboarding_done = b.onboarding_done === true;
+          if (b.onboarding_step !== undefined) s.onboarding_step = Math.min(9, Math.max(0, Number(b.onboarding_step) || 0));
           // a storefront is two letters or empty (empty follows the geocoded country)
-          if (b.storefront_country !== undefined) {
-            const cc = storefront.code(b.storefront_country);
+          if (b.storefront_country !== undefined) {            const cc = storefront.code(b.storefront_country);
             if (!cc) delete s.storefront_country;
             else s.storefront_country = cc;
           }
