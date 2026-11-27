@@ -3113,6 +3113,15 @@ async function renderSettings() {
         <p class="set-note">A track removed from the library later leaves its file on disk. Nothing here writes to your files.</p>
         <p class="set-note">A scan adds to the library. It does not forget the folders you scanned before.</p>
       </section>
+      ${window.musicfyDesktop && window.musicfyDesktop.connect ? `<section class="set-card" data-tone="acc" id="set-app">
+        <h2>This app</h2>
+        <p class="set-note">Point this Mac at another MUSICFY instead of its own library. The window becomes that server's app: its playlists, plays and likes, with audio streamed from it. The local library stays where it is.</p>
+        <label>Library address<input id="set-app-url" placeholder="http://plm.local:8710" autocomplete="off" spellcheck="false"></label>
+        <div class="lib-actions">
+          <button class="btn btn-ghost" id="set-app-connect" type="button">Connect</button>
+          <span class="set-note" id="set-app-msg"></span>
+        </div>
+      </section>` : ''}
       <section class="set-card" data-tone="mute">
         <h2>Reset</h2>
         <p class="set-note">Clears settings and the library index: tracks, files, playlists, plays, likes, jobs and covers. Audio on disk is kept, and so is the login.</p>
@@ -3188,6 +3197,24 @@ async function renderSettings() {
   if (avoidInput) { avoidInput.addEventListener('input', paintAvoid); paintAvoid(); }
 
   // kids PIN: a speed bump, so it is deliberately easy to set and to clear
+  const appConnect = document.getElementById('set-app-connect');
+  if (appConnect && window.musicfyDesktop && window.musicfyDesktop.connect) {
+    appConnect.onclick = async () => {
+      const input = document.getElementById('set-app-url');
+      const msg = document.getElementById('set-app-msg');
+      const url = (input.value || '').trim();
+      if (!url) { if (msg) { msg.dataset.tone = 'bad'; msg.textContent = tr('Type the address first.'); } return; }
+      appConnect.disabled = true;
+      if (msg) { msg.dataset.tone = ''; msg.textContent = tr('Checking…'); }
+      const r = await window.musicfyDesktop.connect(url).catch(() => null);
+      if (!r || !r.ok) {
+        appConnect.disabled = false;
+        if (msg) { msg.dataset.tone = 'bad'; msg.textContent = (r && r.error) || tr('Could not reach that address.'); }
+        return;
+      }
+      if (msg) { msg.dataset.tone = 'ok'; msg.textContent = tr('Connecting…'); }
+    };
+  }
   const kidsOpen = document.getElementById('set-kids-open');
   if (kidsOpen) kidsOpen.onclick = () => enterKids();
   const kidsSave = document.getElementById('set-kids-pin-save');
@@ -6624,6 +6651,20 @@ $('mini-like') && ($('mini-like').onclick = (e) => { e.stopPropagation(); state.
 
 document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => { state.history = []; $('back').hidden = true; nav(b.dataset.nav); });
 $('kids-nav').onclick = () => enterKids();
+document.querySelectorAll('[data-ktab]').forEach((b) => {
+  b.onclick = () => {
+    if (!state.kidsOn) return;
+    state.kidsList = null;
+    state.kidsAlbum = null;
+    state.kidsArtist = null;
+    state.kidsSee = null;
+    renderKids(b.dataset.ktab);
+  };
+});
+const grownRail = document.getElementById('kids-grown');
+if (grownRail) grownRail.onclick = () => leaveKids();
+const grownTop = document.getElementById('kids-grown-top');
+if (grownTop) grownTop.onclick = () => leaveKids();
 // collapsible sidebar: the toggle lives inside it, collapsed is an icon rail
 (() => {
   const app = $('app');
@@ -7531,6 +7572,8 @@ function handOverToKids() {
   state.kidsList = null;
   state.kidsAlbum = null;
   state.kidsArtist = null;
+  state.kidsSee = null;
+  state.kidsQ = '';
   state.queue = [];
   state.qi = -1;
   state._wantPlaying = false;
@@ -7580,27 +7623,49 @@ async function renderKids(tab) {
   kidsMode(true);
   const which = tab || state.kidsTab || 'home';
   state.kidsTab = which;
-  $('view-title').textContent = tr('Kids');
   const v = $('view');
   let data = { playlists: [], tracks: [], recent: [], name: '', age: '' };
   try {
     data = await api('/api/kids', { nocache: true });
     try { localStorage.setItem('mf-kids-data', JSON.stringify(data)); } catch {}
   } catch {
-    // offline: the child stays in Kids mode with the last known shelf, never the adult app
     try { const raw = localStorage.getItem('mf-kids-data'); if (raw) data = JSON.parse(raw); } catch {}
   }
   state.kids = data;
   const tracks = data.tracks || [];
-  const fold = (x) => String(x || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+  const name = data.name || '';
+  const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+  const atRoot = !state.kidsList && !state.kidsAlbum && !state.kidsArtist && !state.kidsSee;
 
-  // one row: cover, title, artist, duration, play. The whole row is the button, because a
-  // six year old aims at the picture, not at a 16px glyph.
-  const rowFor = (t, list) => {
+  // the rail carries the profile; the page title carries the tab
+  $('view-title').textContent = tr(which === 'home' ? 'Home' : which === 'lists' ? 'Lists' : 'Search');
+  const railName = document.getElementById('kids-prof-name');
+  if (railName) railName.textContent = name || tr('Kids');
+  const railAge = document.getElementById('kids-prof-age');
+  if (railAge) railAge.textContent = data.age || '';
+  const railArt = document.getElementById('kids-prof-art');
+  if (railArt) {
+    railArt.textContent = String(name || 'K').charAt(0).toUpperCase();
+    railArt.style.background = artistGrad(name || 'Kids');
+  }
+  document.querySelectorAll('[data-ktab]').forEach((b) => b.classList.toggle('on', atRoot && b.dataset.ktab === which));
+
+  const playAll = (list) => { if (list.length) playList(list, 0); };
+  const playShuffle = (list) => { if (list.length) playList(list, 0, true); };
+
+  const collage = (albums, size = 180) => {
+    const list = (albums || []).slice(0, 4);
+    if (!list.length) return '';
+    return `<div class="kids-collage" data-n="${list.length}">${list.map((a) =>
+      `<img src="/api/cover-album/${encodeURIComponent(a)}?s=${size}&v=${state.artV || 0}" alt="" loading="lazy">`).join('')}</div>`;
+  };
+
+  const rowFor = (t, list, i) => {
     const row = document.createElement('button');
     row.type = 'button';
     row.className = 'kids-row';
-    row.innerHTML = `<img class="kids-row-art" src="/api/cover/${t.id}?v=${state.artV || 0}" alt="" loading="lazy">
+    row.innerHTML = `<span class="kids-row-idx">${String(i + 1).padStart(2, '0')}</span>
+      <img class="kids-row-art" src="/api/cover/${t.id}?s=112&v=${state.artV || 0}" alt="" loading="lazy">
       <span class="kids-row-main"><b>${esc(t.title)}</b><i>${esc(t.artist || '')}${t.album ? ` · ${esc(t.album)}` : ''}</i></span>
       <span class="kids-row-dur">${fmt(t.duration)}</span>
       <span class="kids-row-play">${IC.play}</span>`;
@@ -7615,181 +7680,30 @@ async function renderKids(tab) {
     return row;
   };
 
-  const tile = ({ img, name, sub, open, play }) => {
+  const albumTile = (al) => {
+    const n = tracks.filter((t) => t.album === al).length;
     const card = document.createElement('div');
     card.className = 'kids-tile';
     card.innerHTML = `<div class="kids-tile-artwrap">
-        <img class="kids-tile-art" src="${img}" alt="" loading="lazy">
+        <img class="kids-tile-art" src="/api/cover-album/${encodeURIComponent(al)}?s=380&v=${state.artV || 0}" alt="" loading="lazy">
       </div>
-      <button class="kids-tile-open" type="button" aria-label="${esc(tr('Open'))} ${esc(name)}"></button>
-      ${play ? `<button class="kids-tile-play" type="button" aria-label="${esc(tr('Play'))} ${esc(name)}">${IC.play}</button>` : ''}
-      <div class="kids-tile-name">${esc(name)}</div>
-      <div class="kids-tile-sub">${esc(sub || '')}</div>`;
-    const image = card.querySelector('img');
-    image.onerror = () => {
+      <button class="kids-tile-open" type="button" aria-label="${esc(tr('Open'))} ${esc(al)}"></button>
+      <button class="kids-tile-play" type="button" aria-label="${esc(tr('Play'))} ${esc(al)}">${IC.play}</button>
+      <div class="kids-tile-name">${esc(al)}</div>
+      <div class="kids-tile-sub">${n} ${tr(n === 1 ? 'track' : 'tracks')}</div>`;
+    const img = card.querySelector('img');
+    img.onerror = () => {
       const phEl = document.createElement('div');
       phEl.className = 'kids-tile-art ph';
-      phEl.textContent = String(name || '?').charAt(0).toUpperCase();
-      image.replaceWith(phEl);
+      phEl.style.background = artistGrad(al);
+      phEl.textContent = String(al).charAt(0).toUpperCase();
+      img.replaceWith(phEl);
     };
-    card.querySelector('.kids-tile-open').onclick = open;
-    const playBtn = card.querySelector('.kids-tile-play');
-    if (play && playBtn) playBtn.onclick = () => play();
+    card.querySelector('.kids-tile-open').onclick = () => { state.kidsAlbum = al; renderKids('home'); };
+    card.querySelector('.kids-tile-play').onclick = () => playAll(tracks.filter((t) => t.album === al));
     return card;
   };
 
-  v.innerHTML = `<div class="kids-head">
-      <div>
-        <div class="kids-brand" aria-label="MUSICFY">MUSICFY</div>
-        ${data.name ? `<div class="kids-who">${esc(data.name)}${data.age ? ` · ${esc(data.age)}` : ''}</div>` : ''}
-      </div>
-      <button class="btn btn-ghost" id="kids-leave" type="button">${tr('Leave')}</button>
-    </div>
-    <div class="kids-tabs" role="tablist">
-      ${[['home', tr('Home')], ['lists', tr('Lists')], ['search', tr('Search')]].map(([k, label]) =>
-        `<button class="kids-tab" role="tab" data-ktab="${k}" aria-selected="${which === k && !state.kidsList && !state.kidsAlbum}">${label}</button>`).join('')}
-    </div>
-    <div id="kids-body"></div>`;
-  $('kids-leave').onclick = leaveKids;
-  v.querySelectorAll('[data-ktab]').forEach((b) => {
-    b.onclick = () => { state.kidsList = null; state.kidsAlbum = null; state.kidsArtist = null; renderKids(b.dataset.ktab); };
-  });
-  const body = $('kids-body');
-
-  if (state.kidsList) {
-    const p = data.playlists.find((x) => x.id === state.kidsList);
-    let rows = [];
-    try { rows = await api(`/api/playlists/${encodeURIComponent(state.kidsList)}`); } catch {}
-    body.innerHTML = `<button class="kids-back" id="kids-back" type="button">&#8592; ${tr('Lists')}</button>
-      <div class="kids-detail">
-        <img class="kids-detail-art" src="/api/cover-playlist/${encodeURIComponent(state.kidsList)}?v=${state.artV || 0}" alt="" loading="lazy">
-        <div class="kids-detail-main">
-          <b>${esc(p ? p.name : '')}</b>
-          <span>${rows.length} ${tr(rows.length === 1 ? 'track' : 'tracks')}</span>
-          <div class="kids-actions">
-            <button class="btn btn-primary" id="kids-play" type="button">${IC.play} ${tr('Play all')}</button>
-            <button class="btn btn-ghost" id="kids-shuffle" type="button">${tr('Shuffle')}</button>
-          </div>
-        </div>
-      </div>
-      <div class="kids-rows" id="kids-rows"></div>`;
-    const img = body.querySelector('.kids-detail-art');
-    img.onerror = () => {
-      const phEl = document.createElement('div');
-      phEl.className = 'kids-detail-art ph';
-      phEl.textContent = String((p && p.name) || '?').charAt(0).toUpperCase();
-      img.replaceWith(phEl);
-    };
-    $('kids-back').onclick = () => { state.kidsList = null; renderKids('lists'); };
-    $('kids-play').onclick = () => { if (rows.length) playList(rows, 0); };
-    $('kids-shuffle').onclick = () => { if (rows.length) playList(rows, 0, true); };
-    const host = $('kids-rows');
-    for (const t of rows) host.appendChild(rowFor(t, rows));
-    return;
-  }
-
-  if (state.kidsAlbum) {
-    const list = tracks.filter((t) => t.album === state.kidsAlbum);
-    body.innerHTML = `<button class="kids-back" id="kids-back" type="button">&#8592; ${tr('Albums')}</button>
-      <div class="kids-detail">
-        <img class="kids-detail-art" src="/api/cover-album/${encodeURIComponent(state.kidsAlbum)}?v=${state.artV || 0}" alt="" loading="lazy">
-        <div class="kids-detail-main">
-          <b>${esc(state.kidsAlbum)}</b>
-          <span>${list.length} ${tr(list.length === 1 ? 'track' : 'tracks')}</span>
-          <div class="kids-actions">
-            <button class="btn btn-primary" id="kids-play" type="button">${IC.play} ${tr('Play all')}</button>
-            <button class="btn btn-ghost" id="kids-shuffle" type="button">${tr('Shuffle')}</button>
-          </div>
-        </div>
-      </div>
-      <div class="kids-rows" id="kids-rows"></div>`;
-    $('kids-back').onclick = () => { state.kidsAlbum = null; renderKids('home'); };
-    $('kids-play').onclick = () => { if (list.length) playList(list, 0); };
-    $('kids-shuffle').onclick = () => { if (list.length) playList(list, 0, true); };
-    const host = $('kids-rows');
-    for (const t of list) host.appendChild(rowFor(t, list));
-    return;
-  }
-
-  if (state.kidsArtist) {
-    const list = tracks.filter((t) => t.artist === state.kidsArtist);
-    body.innerHTML = `<button class="kids-back" id="kids-back" type="button">&#8592; ${tr('Artists')}</button>
-      <div class="kids-detail">
-        <div class="kids-detail-art ph kids-artist-art" style="background:${artistGrad(state.kidsArtist)};color:rgba(255,255,255,.92)">${esc(String(state.kidsArtist).charAt(0).toUpperCase())}</div>
-        <div class="kids-detail-main">
-          <b>${esc(state.kidsArtist)}</b>
-          <span>${list.length} ${tr(list.length === 1 ? 'track' : 'tracks')}</span>
-          <div class="kids-actions">
-            <button class="btn btn-primary" id="kids-play" type="button">${IC.play} ${tr('Play all')}</button>
-            <button class="btn btn-ghost" id="kids-shuffle" type="button">${tr('Shuffle')}</button>
-          </div>
-        </div>
-      </div>
-      <div class="kids-rows" id="kids-rows"></div>`;
-    $('kids-back').onclick = () => { state.kidsArtist = null; renderKids('home'); };
-    $('kids-play').onclick = () => { if (list.length) playList(list, 0); };
-    $('kids-shuffle').onclick = () => { if (list.length) playList(list, 0, true); };
-    const host = $('kids-rows');
-    for (const t of list) host.appendChild(rowFor(t, list));
-    return;
-  }
-
-  if (!tracks.length && !data.playlists.length) {
-    body.innerHTML = `<div class="hollow kids-empty">
-      <svg class="hollow-mark kids-mark" viewBox="0 0 96 96" aria-hidden="true">
-        <defs>
-          <linearGradient id="kidsDrum" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#ff5c39"/><stop offset=".35" stop-color="#ffd166"/>
-            <stop offset=".68" stop-color="#3fc57d"/><stop offset="1" stop-color="#b06bff"/>
-          </linearGradient>
-        </defs>
-        <path d="M24 22 43 39M72 22 53 39" stroke="url(#kidsDrum)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-        <path d="M20 46c0-4.4 12.5-8 28-8s28 3.6 28 8v16c0 4.4-12.5 8-28 8s-28-3.6-28-8z" fill="url(#kidsDrum)" opacity=".92"/>
-        <ellipse cx="48" cy="46" rx="28" ry="8" fill="#0d0d0f" opacity=".45"/>
-        <ellipse cx="48" cy="46" rx="28" ry="8" fill="none" stroke="url(#kidsDrum)" stroke-width="2.4"/>
-      </svg>
-      <div><b>${tr('Nothing here yet.')}</b><p>${tr('A grown-up can mark playlists with “Use in Kids Mode” from their menu.')}</p></div>
-    </div>`;
-    return;
-  }
-
-  if (which === 'search') {
-    body.innerHTML = `<input class="kids-search" id="kids-q" type="search" placeholder="${tr('Search songs')}" value="${esc(state.kidsQ || '')}" autocomplete="off">
-      <div class="kids-rows" id="kids-results"></div>`;
-    const results = $('kids-results');
-    const paint = () => {
-      const q = fold(state.kidsQ);
-      results.innerHTML = '';
-      if (!q) return;
-      const hits = tracks.filter((t) => fold(`${t.title} ${t.artist} ${t.album}`).includes(q)).slice(0, 80);
-      if (!hits.length) { results.innerHTML = `<p class="kids-empty-line">${tr('Nothing here by that name.')}</p>`; return; }
-      for (const t of hits) results.appendChild(rowFor(t, hits));
-    };
-    const input = $('kids-q');
-    input.addEventListener('input', () => { state.kidsQ = input.value; paint(); });
-    input.focus();
-    paint();
-    return;
-  }
-
-  if (which === 'lists') {
-    body.innerHTML = `<div class="sec-title">${tr('Lists')} <small>${data.playlists.length}</small></div>
-      <div class="kids-grid" id="kids-lists" data-age="${esc(data.age || '')}"></div>`;
-    const host = $('kids-lists');
-    for (const p of data.playlists) {
-      host.appendChild(tile({
-        img: `/api/cover-playlist/${encodeURIComponent(p.id)}?v=${state.artV || 0}`,
-        name: p.name,
-        sub: `${p.n_tracks} ${tr(p.n_tracks === 1 ? 'track' : 'tracks')}`,
-        open: () => { state.kidsList = p.id; renderKids('lists'); },
-      }));
-    }
-    return;
-  }
-
-  const recent = (data.recent || []).map((r) => tracks.find((t) => t.id === r.id)).filter(Boolean).slice(0, 8);
-  const albums = [...new Set(tracks.map((t) => t.album).filter(Boolean))];
-  const artists = [...new Set(tracks.map((t) => t.artist).filter(Boolean))];
   const artistTile = (a) => {
     const n = tracks.filter((t) => t.artist === a).length;
     const card = document.createElement('div');
@@ -7802,40 +7716,233 @@ async function renderKids(tab) {
       <div class="kids-tile-name">${esc(a)}</div>
       <div class="kids-tile-sub">${n} ${tr(n === 1 ? 'track' : 'tracks')}</div>`;
     card.querySelector('.kids-tile-open').onclick = () => { state.kidsArtist = a; renderKids('home'); };
-    card.querySelector('.kids-tile-play').onclick = () => { const list = tracks.filter((t) => t.artist === a); if (list.length) playList(list, 0); };
+    card.querySelector('.kids-tile-play').onclick = () => playAll(tracks.filter((t) => t.artist === a));
     return card;
   };
-  body.innerHTML = `
-    ${recent.length ? `<div class="sec-title">${tr('Recently played')}</div><div class="kids-rows" id="kids-recent"></div>` : ''}
-    <div class="sec-title">${tr('Artists')} <small>${artists.length}</small></div>
-    <div class="kids-grid" id="kids-artists" data-age="${esc(data.age || '')}"></div>
-    <div class="sec-title">${tr('Albums')} <small>${albums.length}</small></div>
-    <div class="kids-grid" id="kids-albums" data-age="${esc(data.age || '')}"></div>
-    <div class="sec-title">${tr('Lists')} <small>${data.playlists.length}</small></div>
-    <div class="kids-grid" id="kids-lists"></div>`;
+
+  const listCard = (p) => {
+    const card = document.createElement('div');
+    card.className = 'kids-listcard';
+    const inner = collage(p.albums, 180)
+      || `<div class="kids-collage kids-collage-one" data-n="1"><span class="kids-collage-ph" style="background:${artistGrad(p.name)}">${esc(String(p.name).charAt(0).toUpperCase())}</span></div>`;
+    card.innerHTML = `${inner}
+      <div class="kids-listmain"><b>${esc(p.name)}</b><i>${p.n_tracks} ${tr(p.n_tracks === 1 ? 'track' : 'tracks')}</i></div>
+      <button class="kids-disc" type="button" aria-label="${esc(tr('Play'))} ${esc(p.name)}">${IC.play}</button>
+      <button class="kids-cover-hit" type="button" aria-label="${esc(tr('Open'))} ${esc(p.name)}"></button>`;
+    card.querySelector('.kids-disc').onclick = () => playPlaylist(p.id);
+    card.querySelector('.kids-cover-hit').onclick = () => { state.kidsList = p.id; renderKids('lists'); };
+    return card;
+  };
+
+  const detail = ({ cover, title, meta, list, back }) => {
+    v.innerHTML = `<button class="kids-back" id="kids-back" type="button">&#8592; ${tr(back)}</button>
+      <div class="kids-split">
+        <div class="kids-split-side">
+          ${cover}
+          <b class="kids-title">${esc(title)}</b>
+          <span class="kids-meta">${meta}</span>
+          <div class="kids-actions">
+            <button class="btn btn-primary" id="kids-play" type="button">${IC.play} ${tr('Play all')}</button>
+            <button class="btn btn-ghost" id="kids-shuffle" type="button">${tr('Shuffle')}</button>
+          </div>
+        </div>
+        <div class="kids-split-main"><div class="kids-rows" id="kids-rows"></div></div>
+      </div>`;
+    $('kids-back').onclick = () => { state.kidsList = null; state.kidsAlbum = null; state.kidsArtist = null; renderKids(back === 'Lists' ? 'lists' : 'home'); };
+    $('kids-play').onclick = () => playAll(list);
+    $('kids-shuffle').onclick = () => playShuffle(list);
+    const host = $('kids-rows');
+    list.forEach((t, i) => host.appendChild(rowFor(t, list, i)));
+  };
+
+  if (state.kidsList) {
+    const p = data.playlists.find((x) => x.id === state.kidsList);
+    let rows = [];
+    try { rows = await api(`/api/playlists/${encodeURIComponent(state.kidsList)}`); } catch {}
+    const cover = (p && p.albums && p.albums.length)
+      ? `<div class="kids-cover">${collage(p.albums, 340)}</div>`
+      : `<div class="kids-cover kids-cover-one"><span class="kids-collage-ph" style="background:${artistGrad((p && p.name) || '?')}">${esc(String((p && p.name) || '?').charAt(0).toUpperCase())}</span></div>`;
+    detail({
+      cover,
+      title: (p && p.name) || '',
+      meta: `${rows.length} ${tr(rows.length === 1 ? 'track' : 'tracks')}`,
+      list: rows,
+      back: 'Lists',
+    });
+    return;
+  }
+
+  if (state.kidsAlbum) {
+    const list = tracks.filter((t) => t.album === state.kidsAlbum);
+    detail({
+      cover: `<div class="kids-cover"><img src="/api/cover-album/${encodeURIComponent(state.kidsAlbum)}?s=480&v=${state.artV || 0}" alt=""></div>`,
+      title: state.kidsAlbum,
+      meta: `${list.length} ${tr(list.length === 1 ? 'track' : 'tracks')}`,
+      list,
+      back: 'Home',
+    });
+    return;
+  }
+
+  if (state.kidsArtist) {
+    const list = tracks.filter((t) => t.artist === state.kidsArtist);
+    detail({
+      cover: `<div class="kids-cover kids-cover-artist" style="background:${artistGrad(state.kidsArtist)}">${esc(String(state.kidsArtist).charAt(0).toUpperCase())}</div>`,
+      title: state.kidsArtist,
+      meta: `${list.length} ${tr(list.length === 1 ? 'track' : 'tracks')}`,
+      list,
+      back: 'Home',
+    });
+    return;
+  }
+
+  const albums = [...new Set(tracks.map((t) => t.album).filter(Boolean))];
+  const artists = [...new Set(tracks.map((t) => t.artist).filter(Boolean))];
+
+  if (state.kidsSee === 'albums') {
+    v.innerHTML = `<button class="kids-back" id="kids-back" type="button">&#8592; ${tr('Home')}</button>
+      <div class="sec-title">${tr('Albums')} <small>${albums.length}</small></div>
+      <div class="kids-grid" id="kids-all"></div>`;
+    $('kids-back').onclick = () => { state.kidsSee = null; renderKids('home'); };
+    for (const al of albums) $('kids-all').appendChild(albumTile(al));
+    return;
+  }
+  if (state.kidsSee === 'artists') {
+    v.innerHTML = `<button class="kids-back" id="kids-back" type="button">&#8592; ${tr('Home')}</button>
+      <div class="sec-title">${tr('Artists')} <small>${artists.length}</small></div>
+      <div class="kids-grid" id="kids-all"></div>`;
+    $('kids-back').onclick = () => { state.kidsSee = null; renderKids('home'); };
+    for (const a of artists) $('kids-all').appendChild(artistTile(a));
+    return;
+  }
+
+  if (!tracks.length && !data.playlists.length) {
+    v.innerHTML = `<div class="hollow kids-empty">
+      <svg class="hollow-mark kids-mark" viewBox="0 0 96 96" aria-hidden="true">
+        <defs><linearGradient id="kidsDrum" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ff5c39"/><stop offset=".35" stop-color="#ffd166"/>
+          <stop offset=".68" stop-color="#3fc57d"/><stop offset="1" stop-color="#b06bff"/>
+        </linearGradient></defs>
+        <path d="M24 22 43 39M72 22 53 39" stroke="url(#kidsDrum)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+        <path d="M20 46c0-4.4 12.5-8 28-8s28 3.6 28 8v16c0 4.4-12.5 8-28 8s-28-3.6-28-8z" fill="url(#kidsDrum)" opacity=".92"/>
+        <ellipse cx="48" cy="46" rx="28" ry="8" fill="#0d0d0f" opacity=".45"/>
+        <ellipse cx="48" cy="46" rx="28" ry="8" fill="none" stroke="url(#kidsDrum)" stroke-width="2.4"/>
+      </svg>
+      <div><b>${tr('Nothing here yet.')}</b><p>${tr('A grown-up can mark playlists with “Use in Kids Mode” from their menu.')}</p></div>
+    </div>`;
+    return;
+  }
+
+  if (which === 'search') {
+    v.innerHTML = `<div class="kids-searchwrap"><input class="kids-search" id="kids-q" type="search" placeholder="${tr('Search songs, albums, artists')}" value="${esc(state.kidsQ || '')}" autocomplete="off" aria-label="${tr('Search')}"></div>
+      <div id="kids-results"></div>`;
+    const host = $('kids-results');
+    const paint = () => {
+      const q = String(state.kidsQ || '').trim().toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+      host.innerHTML = '';
+      if (!q) {
+        if (data.playlists.length) {
+          const h = document.createElement('div');
+          h.className = 'sec-title';
+          h.textContent = tr('Your lists');
+          host.appendChild(h);
+          const box = document.createElement('div');
+          box.className = `kids-feature${data.playlists.length === 1 ? ' one' : ''}`;
+          for (const p of data.playlists) box.appendChild(listCard(p));
+          host.appendChild(box);
+        }
+        if (albums.length) {
+          const h = document.createElement('div');
+          h.className = 'sec-title';
+          h.textContent = tr('Albums');
+          const g = document.createElement('div');
+          g.className = 'kids-grid';
+          for (const al of albums) g.appendChild(albumTile(al));
+          host.append(h, g);
+        }
+        if (artists.length) {
+          const h = document.createElement('div');
+          h.className = 'sec-title';
+          h.textContent = tr('Artists');
+          const g = document.createElement('div');
+          g.className = 'kids-grid';
+          for (const a of artists) g.appendChild(artistTile(a));
+          host.append(h, g);
+        }
+        return;
+      }
+      const hits = tracks.filter((t) => `${t.title} ${t.artist} ${t.album}`.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').includes(q));
+      if (!hits.length) { host.innerHTML = `<p class="kids-empty-line">${tr('Nothing here by that name.')}</p>`; return; }
+      const rows = document.createElement('div');
+      rows.className = 'kids-rows';
+      hits.slice(0, 100).forEach((t, i) => rows.appendChild(rowFor(t, hits, i)));
+      host.appendChild(rows);
+    };
+    const input = $('kids-q');
+    input.addEventListener('input', () => { state.kidsQ = input.value; paint(); });
+    input.focus();
+    paint();
+    return;
+  }
+
+  if (which === 'lists') {
+    v.innerHTML = `<div class="sec-title">${tr('Your lists')} <small>${data.playlists.length}</small></div>
+      <div class="kids-feature${data.playlists.length === 1 ? ' one' : ''}" id="kids-lists"></div>`;
+    const host = $('kids-lists');
+    for (const p of data.playlists) host.appendChild(listCard(p));
+    return;
+  }
+
+  // home
+  const recent = (data.recent || []).map((r) => tracks.find((t) => t.id === r.id)).filter(Boolean).slice(0, 6);
+  const last = recent[0];
+  const part = greeterPartForKids();
+  const greeting = `${tr(cap(part))}${name ? `, ${esc(name)}` : ''}.`;
+  const note = last
+    ? `${tr('You left off on')} “${esc(last.title)}”.`
+    : `${tracks.length} ${tr(tracks.length === 1 ? 'song' : 'songs')} · ${data.playlists.length} ${tr('lists')}`;
+  v.innerHTML = `
+    <section class="mast kids-mast">
+      <div class="mast-meta"><span id="kids-clock"></span></div>
+      <div class="mast-main">
+        <div class="mast-copy">
+          <h1 class="mast-greet" id="kids-greet">${greeting}</h1>
+          <p class="mast-note"><span class="mast-fact">${note}</span></p>
+        </div>
+        <div class="mast-side">
+          <button class="flow-key" id="kids-mix" type="button">
+            <span class="flow-key-k">${IC.play}</span>
+            <span class="flow-key-t"><b>${tr('Mix it up')}</b><i>${tr('a little of everything')}</i></span>
+          </button>
+        </div>
+      </div>
+    </section>
+    <div class="sec-title">${tr('Your lists')} <small>${data.playlists.length}</small></div>
+    <div class="kids-feature${data.playlists.length === 1 ? ' one' : ''}" id="kids-lists"></div>
+    <div class="sec-title">${tr('Albums')} <small>${albums.length}</small> <button class="kids-see" id="see-albums" type="button">${tr('See all')}</button></div>
+    <div class="row-scroller kids-rail" id="kids-albums"></div>
+    <div class="sec-title">${tr('Artists')} <small>${artists.length}</small> <button class="kids-see" id="see-artists" type="button">${tr('See all')}</button></div>
+    <div class="kids-grid kids-grid-artists" id="kids-artists"></div>
+    ${recent.length ? `<div class="sec-title">${tr('Recently played')}</div><div class="kids-rows kids-rows-two" id="kids-recent"></div>` : ''}`;
+
+  $('kids-mix').onclick = () => playShuffle(tracks.slice());
+  const listsHost = $('kids-lists');
+  for (const p of data.playlists) listsHost.appendChild(listCard(p));
+  const albumsHost = $('kids-albums');
+  for (const al of albums.slice(0, 8)) albumsHost.appendChild(albumTile(al));
+  const artistsHost = $('kids-artists');
+  for (const a of artists) artistsHost.appendChild(artistTile(a));
   if (recent.length) {
     const host = $('kids-recent');
-    for (const t of recent) host.appendChild(rowFor(t, recent));
+    recent.forEach((t, i) => host.appendChild(rowFor(t, recent, i)));
   }
-  for (const a of artists) $('kids-artists').appendChild(artistTile(a));
-  for (const al of albums) {
-    const n = tracks.filter((t) => t.album === al).length;
-    $('kids-albums').appendChild(tile({
-      img: `/api/cover-album/${encodeURIComponent(al)}?v=${state.artV || 0}`,
-      name: al,
-      sub: `${n} ${tr(n === 1 ? 'track' : 'tracks')}`,
-      open: () => { state.kidsAlbum = al; renderKids('home'); },
-      play: () => { const list = tracks.filter((t) => t.album === al); if (list.length) playList(list, 0); },
-    }));
-  }
-  for (const p of data.playlists) {
-    $('kids-lists').appendChild(tile({
-      img: `/api/cover-playlist/${encodeURIComponent(p.id)}?v=${state.artV || 0}`,
-      name: p.name,
-      sub: `${p.n_tracks} ${tr(p.n_tracks === 1 ? 'track' : 'tracks')}`,
-      open: () => { state.kidsList = p.id; renderKids('lists'); },
-    }));
-  }
+  $('see-albums').onclick = () => { state.kidsSee = 'albums'; renderKids('home'); };
+  $('see-artists').onclick = () => { state.kidsSee = 'artists'; renderKids('home'); };
+}
+
+function greeterPartForKids() {
+  const part = greetPart();
+  return part === 'night' ? 'evening' : part;
 }
 
 /* ============ boot ============ */

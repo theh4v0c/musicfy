@@ -247,12 +247,23 @@ shelf and the dot before a track count; everywhere else stays monochrome. The ki
 under the wordmark, and the age band from setup sets the card size: up to 6 gets 240px cards,
 11 and over gets 170px. The gradient is the app's own, not a second palette.
 
-Kids mode is the app, not a stunted version of it. Three tabs — **Home, Lists, Search** — and
-the player bar; the sidebar, the top bar and the bottom navigation are gone. Home shows her
-recent plays, album cards and list cards, each with a play button; a card opens its own page
-with **Play all**, **Shuffle** and a row per song, and every row is a button: a child aims at
-the picture, not at a 16px glyph. Search filters her catalog by title, artist and album.
-Albums and lists keep their generated cover tiles. **Leave** asks for the PIN when one is set.
+Kids mode is the same shell, one size up: the adult rail and topbar stay, with a 240px rail
+that carries the profile (duotone initial, name, age band) and three destinations — Home,
+Lists, Search — and **Grown-ups** with the lock at the bottom. On a phone the rail becomes the
+three-item bottom navigation and the lock moves to the topbar. There is no second brand, no
+white pills, no separate page header; content is capped at 1,400px and padded 32.
+
+Home is a mast — greeting with her name, "You left off on …", and **Mix it up** using the adult
+Flow key's anatomy — then **Your lists** as 2-up feature cards with a 2×2 cover collage, an
+**Albums** rail with **See all**, **Artists** as name duotones, and **Recently played** in two
+columns. A list or album page is a 300px sticky cover and action panel next to a 1fr table of
+72px hairline rows, with a 44px cover and a 44–48px title: the adult playlist header, scaled,
+not the phone layout on a desk. Search is a 640px field with a browse state (lists, albums,
+artists) so it is never a blank form.
+
+One accent. Colour comes from covers, collages and the name duotone, not the furniture. Every
+row is a button; the play disc is always visible on touch. What is removed is adult work: no
+downloads, no A&R, no Prep, no settings, no delete, no drag-to-playlist, no context menu.
 
 What is removed is adult work, not capability: no downloads, no A&R, no Prep, no settings, no
 delete, no drag-to-playlist, no context menu.

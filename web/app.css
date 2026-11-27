@@ -1589,36 +1589,38 @@ body.tier-listener #ctx [data-act="pl-zip"] { display: none !important; }
 /* the rung badge in the player is the same information */
 body.tier-listener #pb-badge { display: none !important; }
 
-/* kids mode: the same app with the adult chrome removed. No second palette, no cartoon
-   skin: what changes is what is on screen and where a play is recorded. */
-body.kids #app { grid-template-columns: 1fr; grid-template-areas: "main" "player"; }
-body.kids .sidebar, body.kids .topbar, body.kids .bottomnav { display: none !important; }
-body.kids main.main { width: 100%; }
-body.kids .view { padding: 22px 26px 140px; }
+/* kids mode: the same shell, one size up. The rail and topbar stay; who sits at the top,
+   the nav inside them and the size of the controls are what changes. */
+body.kids .snav > .snav-btn,
+body.kids .snav > .snav-group,
+body.kids .slib-label,
+body.kids .slib,
+body.kids .side-settings { display: none !important; }
+.kids-snav { display: none; }
+body.kids .kids-snav { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.side-kids { display: none; }
+body.kids .side-kids { display: block; margin-top: auto; padding: 8px 8px 4px; }
+.kids-grown-top { display: none; }
+
+body.kids #palette-btn, body.kids #dl-btn, body.kids #queue-btn,
+body.kids .pill, body.kids .selhost { display: none !important; }
+#kids-bottomnav { display: none; }
+
+body.kids .bottomnav:not(.kids-bottomnav) { display: none !important; }
+body.kids .view { padding: 24px 32px 150px; max-width: 1400px; margin: 0 auto; width: 100%; }
 body.kids .pb-like, body.kids .pb-menu, body.kids .mini-like, body.kids .mini-menu,
 body.kids .pb-badge, body.kids .np-add, body.kids .np-like, body.kids .np-badge { display: none !important; }
-.kids-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 6px; }
-.kids-brand { font-size: clamp(26px, 3vw, 34px); font-weight: 700; letter-spacing: -.02em;
-  background: linear-gradient(90deg, #ff5c39 0%, #ffd166 22%, #3fc57d 45%, #4aa8ff 68%, #b06bff 100%);
-  -webkit-background-clip: text; background-clip: text; color: transparent; }
-.kids-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 18px; }
-@media (max-width: 560px) {
-  body.kids .view { padding: 18px 16px 130px; }
-  .kids-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.kids-prof { display: flex; align-items: center; gap: 10px; padding: 6px 10px 14px; }
+.kids-prof-art { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 700; color: rgba(255,255,255,.92); flex: none; }
+.kids-prof-meta { min-width: 0; display: grid; }
+.kids-prof-meta b { font-size: 13px; }
+.kids-prof-meta small { font-size: 10.5px; color: var(--fg-mute); }
+@media (max-width: 760px) {
+  body.kids .view { padding: 16px 16px 140px; }
+  body.kids #kids-bottomnav { display: flex; }
+  body.kids .kids-grown-top { display: inline-flex; }
 }
-
-/* first run: the second question on the mode screen, and playful chips for the kid setup */
-.onb-else { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
-.onb-else-k { display: block; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-mute); margin: 0 0 8px; }
-.onb-chips { display: flex; gap: 8px; flex-wrap: wrap; }
-.onb-chip { height: 32px; padding: 0 14px; border-radius: var(--r-pill); border: 1px solid var(--line);
-  background: var(--bg-elev2); color: var(--fg-soft); font-size: 12.5px; }
-.onb-chip:hover { color: var(--fg); }
-.onb-chip[aria-pressed="true"] { color: var(--fg); border-color: transparent;
-  background: linear-gradient(90deg, rgba(255,92,57,.20), rgba(176,107,255,.20));
-  box-shadow: inset 0 0 0 1px rgba(255,92,57,.45); }
-.onb-kid { display: grid; gap: 10px; margin-top: 14px; }
-.onb-kid[hidden] { display: none; }
 
 /* kids: a gradient instrument for the empty shelf, bigger cards for smaller kids */
 .kids-mark { width: 96px; height: 96px; color: inherit; filter: drop-shadow(0 6px 16px rgba(176,107,255,.22)); }
@@ -1653,57 +1655,100 @@ body.kids .pb-badge, body.kids .np-add, body.kids .np-like, body.kids .np-badge 
   background: linear-gradient(135deg, #ff5c39, #b06bff); }
 .slib-kids[hidden] { display: none; }
 
-/* kids: the same app, with bigger targets and no adult chrome */
-.kids-who { margin-top: 2px; font-size: 12.5px; color: var(--fg-soft); }
-.kids-tabs { display: flex; gap: 8px; margin: 6px 0 20px; flex-wrap: wrap; }
-.kids-tab { height: 44px; padding: 0 20px; border-radius: var(--r-pill); border: 1px solid var(--line);
-  background: var(--bg-elev); color: var(--fg-soft); font-size: 15px; font-weight: 600; }
-.kids-tab[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: transparent; }
-.kids-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; margin: 4px 0 26px; }
+/* kids components: the adult vocabulary, one size up */
+.kids-collage { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px;
+  background: var(--bg-elev2); border-radius: var(--r-md); overflow: hidden; }
+.kids-collage[data-n="1"] { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.kids-collage[data-n="2"] { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
+.kids-collage[data-n="3"] img:first-child { grid-row: span 2; }
+.kids-collage img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.kids-collage-ph { display: grid; place-items: center; width: 100%; height: 100%;
+  font-size: 40px; font-weight: 700; color: rgba(255,255,255,.9); }
+.kids-feature { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 6px 0 28px; }
+.kids-feature.one { grid-template-columns: 1fr; }
+.kids-listcard { position: relative; display: flex; align-items: center; gap: 16px; padding: 12px;
+  background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-lg); text-align: left; }
+.kids-listcard:hover { background: var(--bg-elev2); }
+.kids-listcard .kids-collage { width: 148px; height: 148px; flex: none; }
+.kids-listmain { min-width: 0; display: grid; gap: 4px; padding-right: 56px; }
+.kids-listmain b { font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
+.kids-listmain i { font-style: normal; font-size: 12px; color: var(--fg-mute); }
+.kids-disc { position: absolute; right: 14px; bottom: 14px; width: 44px; height: 44px; border-radius: 50%;
+  border: 0; background: var(--acc); color: var(--on-acc); display: grid; place-items: center; z-index: 2; }
+.kids-disc svg { width: 16px; height: 16px; }
+.kids-cover-hit { position: absolute; inset: 0; z-index: 1; border: 0; background: transparent; border-radius: var(--r-lg); }
+.kids-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 18px; margin: 6px 0 26px; }
+.kids-rail { margin: 6px 0 26px; }
+.kids-rail .kids-tile { flex: 0 0 190px; }
+.kids-see { margin-left: auto; border: 0; background: none; color: var(--fg-soft); font-size: 12px; padding: 0; }
+.kids-see:hover { color: var(--fg); }
 .kids-tile { position: relative; text-align: left; min-width: 0; }
 .kids-tile-artwrap { position: relative; border-radius: var(--r-md); overflow: hidden; background: var(--bg-elev2); }
 .kids-tile-art { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
 .kids-tile-art.ph { display: grid; place-items: center; font-size: 44px; font-weight: 700; color: var(--fg-soft); }
 .kids-tile-play { position: absolute; right: 8px; bottom: 52px; z-index: 2; width: 44px; height: 44px; border-radius: 50%;
-  border: 0; background: var(--acc); color: var(--on-acc); display: grid; place-items: center; }
+  border: 0; background: var(--acc); color: var(--on-acc); display: grid; place-items: center; opacity: 0; }
+.kids-tile:hover .kids-tile-play, .kids-tile:focus-within .kids-tile-play { opacity: 1; }
+.kids-tile-play svg { width: 16px; height: 16px; }
 .kids-tile-open { position: absolute; inset: 0; z-index: 1; border: 0; border-radius: var(--r-lg); background: transparent; }
 .kids-tile-open:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
-.kids-tile-play svg { width: 16px; height: 16px; }
-.kids-tile-name { margin-top: 8px; font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kids-tile-sub { margin-top: 2px; font-size: 11.5px; color: var(--fg-mute); }
-.kids-rows { display: grid; gap: 6px; margin: 0 0 24px; max-width: 980px; }
-.kids-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 6px 8px;
-  border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-elev); color: var(--fg); text-align: left; }
-.kids-row:hover { background: var(--bg-elev2); }
-.kids-row-art { width: 48px; height: 48px; border-radius: var(--r-sm); object-fit: cover; flex: none; background: var(--bg-elev2); }
+.kids-tile-name { margin-top: 8px; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kids-tile-sub { margin-top: 2px; font-size: 12px; color: var(--fg-mute); }
+.kids-artist-art { font-size: 54px; font-weight: 700; letter-spacing: -.02em; }
+.kids-rows { display: grid; margin: 0 0 24px; }
+.kids-rows-two { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+.kids-row { display: grid; grid-template-columns: 32px 56px minmax(0, 1fr) auto 40px; align-items: center; gap: 12px;
+  width: 100%; padding: 8px 4px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0;
+  background: none; color: var(--fg); text-align: left; }
+.kids-row:hover { background: var(--bg-elev); }
+.kids-row-idx { font-family: var(--mono); font-size: 10.5px; color: var(--fg-mute); }
+.kids-row-art { width: 56px; height: 56px; border-radius: var(--r-sm); object-fit: cover; background: var(--bg-elev2); }
 .kids-row-art.ph { display: grid; place-items: center; color: var(--fg-mute); font-weight: 600; }
 .kids-row-main { min-width: 0; display: grid; gap: 2px; }
-.kids-row-main b { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kids-row-main i { font-style: normal; font-size: 11.5px; color: var(--fg-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kids-row-dur { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--fg-mute); }
-.kids-row-play { width: 40px; height: 40px; border-radius: 50%; background: var(--acc); color: var(--on-acc); display: grid; place-items: center; flex: none; }
+.kids-row-main b { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kids-row-main i { font-style: normal; font-size: 12px; color: var(--fg-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kids-row-dur { font-family: var(--mono); font-size: 11px; color: var(--fg-mute); }
+.kids-row-play { width: 36px; height: 36px; border-radius: 50%; background: var(--acc-soft); color: var(--fg); display: grid; place-items: center; }
+.kids-row:hover .kids-row-play, .kids-row:focus-visible .kids-row-play { background: var(--acc); color: var(--on-acc); }
 .kids-row-play svg { width: 13px; height: 13px; }
-.kids-detail { display: flex; gap: 18px; align-items: flex-end; margin: 6px 0 20px; }
-.kids-detail-art { width: 160px; height: 160px; border-radius: var(--r-lg); object-fit: cover; background: var(--bg-elev2); flex: none; }
-.kids-detail-art.ph { display: grid; place-items: center; font-size: 54px; color: var(--fg-mute); }
-.kids-detail-main { min-width: 0; }
-.kids-detail-main b { display: block; font-size: clamp(22px, 3vw, 34px); font-weight: 700; letter-spacing: -.02em; }
-.kids-detail-main span { display: block; margin-top: 6px; color: var(--fg-soft); font-size: 12.5px; }
-.kids-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
-.kids-back { border: 0; background: none; color: var(--fg-soft); font-size: 13px; padding: 6px 0; margin-bottom: 6px; }
+.kids-back { border: 0; background: none; color: var(--fg-soft); font-size: 13px; padding: 6px 0; margin-bottom: 10px; }
 .kids-back:hover { color: var(--fg); }
-.kids-search { width: 100%; font-family: inherit; font-size: 16px; padding: 12px 16px; border-radius: var(--r-pill);
-  border: 1px solid var(--line); background: var(--bg-elev2); color: var(--fg); margin: 0 0 16px; }
+.kids-split { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 32px; align-items: start; }
+.kids-split-side { position: sticky; top: 12px; }
+.kids-cover { width: 240px; height: 240px; border-radius: var(--r-lg); overflow: hidden; background: var(--bg-elev2); }
+.kids-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.kids-cover .kids-collage { width: 100%; height: 100%; }
+.kids-cover-artist { display: grid; place-items: center; font-size: 84px; font-weight: 700; color: rgba(255,255,255,.92); }
+.kids-title { display: block; margin: 16px 0 4px; font-size: 44px; font-weight: 700; letter-spacing: -.02em; line-height: 1.02; }
+.kids-meta { color: var(--fg-soft); font-size: 13px; }
+.kids-actions { margin-top: 16px; }
+.kids-searchwrap { margin: 0 0 22px; }
+.kids-search { width: 100%; max-width: 640px; height: 48px; padding: 0 18px; font-family: inherit; font-size: 16px;
+  border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--bg-elev2); color: var(--fg); }
 .kids-search:focus { outline: none; border-color: var(--acc); box-shadow: 0 0 0 3px rgba(255,92,57,.18); }
 .kids-empty-line { color: var(--fg-mute); font-size: 13px; }
-@media (max-width: 560px) {
-  .kids-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-  .kids-detail { flex-direction: column; align-items: flex-start; gap: 12px; }
-  .kids-detail-art { width: 132px; height: 132px; }
+@media (max-width: 900px) {
+  .kids-split { grid-template-columns: 1fr; gap: 18px; }
+  .kids-split-side { position: static; }
+  .kids-cover { width: 180px; height: 180px; }
+  .kids-title { font-size: 32px; }
+  .kids-rows-two { grid-template-columns: 1fr; }
 }
-
+@media (max-width: 760px) {
+  .kids-feature { grid-template-columns: 1fr; }
+  .kids-listcard .kids-collage { width: 112px; height: 112px; }
+  .kids-listmain b { font-size: 17px; }
+  .kids-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .kids-row { grid-template-columns: 24px 48px minmax(0, 1fr) auto 36px; gap: 8px; }
+  .kids-row-art { width: 48px; height: 48px; }
+}
 /* a play button is a circle, never a pill: flex used to squeeze these when the bar was tight */
 .ctl { flex: none; }
 .ctl.main, .ctl.xl, .sm-main { aspect-ratio: 1; flex: none; }
 
 .kids-artist-art { font-size: 54px; font-weight: 700; letter-spacing: -.02em; }
+
+/* a child's device is a finger: the play disc is always visible where there is no hover */
+@media (hover: none) {
+  .kids-tile-play { opacity: 1; }
+}

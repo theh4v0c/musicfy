@@ -14,6 +14,7 @@ const { app, BrowserWindow, Menu, dialog, ipcMain, shell, Notification, powerSav
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const http = require('node:http');
+const https = require('node:https');
 const net = require('node:net');
 const path = require('node:path');
 const os = require('node:os');
@@ -25,6 +26,7 @@ const DATA = path.join(HOME, 'data');
 const MUSIC = path.join(os.homedir(), 'Music', 'MUSICFY');
 const LOGS = path.join(HOME, 'logs');
 const LOG = path.join(LOGS, 'desktop.log');
+const CONFIG = path.join(HOME, 'desktop.json');
 const BIN = app.isPackaged
   ? path.join(process.resourcesPath, 'bin')
   : path.join(APP_ROOT, 'desktop', 'vendor', 'bin');
@@ -52,9 +54,43 @@ let port = 0;
 let base = '';
 let quitting = false;
 let stopping = false;
+let switching = false;
 let blocker = 0;
 
 const say = (pt, en) => (PT ? pt : en);
+
+function config() {
+  try { return JSON.parse(fs.readFileSync(CONFIG, 'utf8')); } catch { return {}; }
+}
+function saveConfig(patch) {
+  const next = { ...config(), ...patch };
+  fs.mkdirSync(HOME, { recursive: true });
+  fs.writeFileSync(CONFIG, JSON.stringify(next, null, 2), { mode: 0o600 });
+}
+function remoteUrl() {
+  const u = String(config().remoteUrl || '').trim().replace(/\/+$/, '');
+  return /^https?:\/\//i.test(u) ? u : '';
+}
+function probe(url, ms = 4000) {
+  return new Promise((resolve) => {
+    let mod = http;
+    try { mod = new URL(url).protocol === 'https:' ? https : http; } catch { return resolve(false); }
+    const req = mod.get(`${url}/health`, { timeout: ms }, (res) => {
+      res.resume();
+      resolve(res.statusCode >= 200 && res.statusCode < 500);
+    });
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+    req.on('error', () => resolve(false));
+  });
+}
+async function waitRemote(url, ms = 10000) {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    if (await probe(url, 3000)) return true;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
+}
 
 function ensureDirs() {
   for (const dir of [HOME, DATA, MUSIC, LOGS, path.join(HOME, 'backups'), path.join(HOME, 'bin')]) {
@@ -192,7 +228,81 @@ function waitHealthy(ms = 30000) {
   })();
 }
 
-function createWindow() {
+async function stopCore() {
+  const dying = child;
+  child = null;
+  if (!dying) return;
+  await new Promise((resolve) => {
+    const t = setTimeout(resolve, 2500);
+    dying.once('exit', () => { clearTimeout(t); resolve(); });
+    try { dying.kill('SIGTERM'); } catch { clearTimeout(t); resolve(); }
+  });
+  try { dying.kill('SIGKILL'); } catch { /* gone */ }
+}
+
+async function openLocal() {
+  port = await freePort();
+  if (!port) throw new Error(say('Nenhuma porta livre entre 8790 e 8809.', 'No free port between 8790 and 8809.'));
+  base = `http://127.0.0.1:${port}`;
+  startCore();
+  if (!(await waitHealthy())) throw new Error(say('O motor local não iniciou.', 'The local engine did not start.'));
+}
+
+/* Swap the window between this Mac and a remote library without relaunching: a relaunch
+   raced the single-instance lock and the new process quit against the old one. */
+async function switchMode(remote) {
+  switching = true;
+  const old = win;
+  win = null;
+  if (old) { try { old.destroy(); } catch { /* already gone */ } }
+  if (child) await stopCore();
+  try {
+    if (remote) {
+      base = remote;
+      if (!(await waitRemote(base))) throw new Error(say('Não consegui alcançar essa biblioteca.', 'Could not reach that library.'));
+      createWindow(false);
+    } else {
+      await openLocal();
+      createWindow(true);
+    }
+    buildMenu();
+  } catch (e) {
+    // never leave the user without a window: fall back to the local library
+    saveConfig({ remoteUrl: '' });
+    try {
+      await openLocal();
+      createWindow(true);
+      buildMenu();
+    } catch { /* reported below */ }
+    dialog.showErrorBox('MUSICFY', String(e.message || e));
+  } finally {
+    switching = false;
+    if (!win) app.quit();
+  }
+}
+
+function remoteFailed(url) {
+  dialog.showMessageBox({
+    type: 'error',
+    message: say('Não consegui alcançar essa biblioteca.', 'Could not reach that library.'),
+    detail: `${url}\n\n${say('O servidor está ligado e na mesma rede?', 'Is the server running and on the same network?')}`,
+    buttons: [
+      say('Tentar de novo', 'Try again'),
+      say('Usar a biblioteca deste Mac', 'Use this Mac\'s library'),
+      say('Abrir no navegador', 'Open in browser'),
+      say('Sair', 'Quit'),
+    ],
+    defaultId: 0,
+    cancelId: 3,
+  }).then(({ response }) => {
+    if (response === 0) boot();
+    else if (response === 1) { saveConfig({ remoteUrl: '' }); setTimeout(() => { switchMode('').catch(() => {}); }, 150); }
+    else if (response === 2) shell.openExternal(url);
+    else app.quit();
+  }).catch(() => app.quit());
+}
+
+function createWindow(withBridge = true) {
   win = new BrowserWindow({
     width: 1360,
     height: 900,
@@ -202,7 +312,7 @@ function createWindow() {
     title: 'MUSICFY',
     backgroundColor: '#0b0b0d',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      ...(withBridge ? { preload: path.join(__dirname, 'preload.js') } : {}),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -276,11 +386,29 @@ function buildMenu() {
     {
       label: say('Arquivo', 'File'),
       submenu: [
+        ...(remoteUrl()
+          ? [
+            { label: say('Usar a biblioteca deste Mac', 'Use this Mac\'s library'), click: () => { saveConfig({ remoteUrl: '' }); setTimeout(() => { switchMode('').catch(() => {}); }, 150); } },
+            { label: say('Abrir esta biblioteca no navegador', 'Open this library in a browser'), click: () => shell.openExternal(remoteUrl()) },
+            { type: 'separator' },
+          ]
+          : [
+            {
+              label: say('Conectar a uma biblioteca…', 'Connect to a library…'),
+              click: () => {
+                if (!win) return;
+                win.webContents.executeJavaScript("nav('settings'); setTimeout(() => document.getElementById('set-app')?.scrollIntoView({ block: 'center' }), 700)").catch(() => {});
+              },
+            },
+            { type: 'separator' },
+          ]),
+        ...(remoteUrl() ? [] : [
         { label: say('Adicionar pasta de músicas…', 'Add music folder…'), accelerator: 'CmdOrCtrl+O', click: addMusicFolder },
         { label: say('Abrir pasta de músicas', 'Open music folder'), click: openMusic },
         { label: say('Abrir pasta de dados', 'Open data folder'), click: openData },
         { type: 'separator' },
         { label: say('Reiniciar o motor', 'Restart engine'), click: restartEngine },
+        ]),
         ...(process.platform === 'darwin' ? [] : [{ role: 'quit' }]),
       ],
     },
@@ -317,6 +445,21 @@ async function restartEngine() {
 
 async function boot() {
   ensureDirs();
+  const remote = remoteUrl();
+  if (remote) {
+    base = remote;
+    if (!(await waitRemote(base))) return remoteFailed(base);
+    createWindow(false);
+    buildMenu();
+    app.setAboutPanelOptions({
+      applicationName: 'MUSICFY',
+      applicationVersion: VERSION,
+      version: VERSION,
+      copyright: 'AGPL-3.0-or-later',
+      credits: base,
+    });
+    return;
+  }
   port = await freePort();
   if (!port) {
     dialog.showErrorBox('MUSICFY', say('Nenhuma porta livre entre 8790 e 8809.', 'No free port between 8790 and 8809.'));
@@ -365,6 +508,27 @@ ipcMain.handle('musicfy:reveal', (_e, which) => shell.openPath(which === 'music'
 
 ipcMain.handle('musicfy:info', () => ({ home: HOME, music: MUSIC, version: VERSION }));
 
+ipcMain.handle('musicfy:mode', () => ({ remote: remoteUrl() }));
+
+ipcMain.handle('musicfy:connect', async (_e, url) => {
+  const target = String(url || '').trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(target)) {
+    return { ok: false, error: say('O endereço precisa começar com http:// ou https://', 'The address must start with http:// or https://') };
+  }
+  if (!(await probe(target, 5000))) {
+    return { ok: false, error: say('Não consegui alcançar esse endereço.', 'Could not reach that address.') };
+  }
+  saveConfig({ remoteUrl: target });
+  setTimeout(() => { switchMode(target).catch(() => {}); }, 150);
+  return { ok: true };
+});
+
+ipcMain.handle('musicfy:disconnect', () => {
+  saveConfig({ remoteUrl: '' });
+  setTimeout(() => { switchMode('').catch(() => {}); }, 150);
+  return { ok: true };
+});
+
 ipcMain.on('musicfy:playing', (_e, playing) => {
   if (playing && !blocker) blocker = powerSaveBlocker.start('prevent-app-suspension');
   else if (!playing && blocker) { try { powerSaveBlocker.stop(blocker); } catch { /* already stopped */ } blocker = 0; }
@@ -376,9 +540,9 @@ app.on('second-instance', () => {
   win.focus();
 });
 
-app.on('activate', () => { if (!win && base) createWindow(); });
+app.on('activate', () => { if (!win && base) createWindow(!remoteUrl()); });
 
-app.on('window-all-closed', () => app.quit());
+app.on('window-all-closed', () => { if (!switching) app.quit(); });
 
 app.on('before-quit', (event) => {
   quitting = true;

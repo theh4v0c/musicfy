@@ -493,8 +493,8 @@ test('kids mode cannot leak through the shared player or the layout css', () => 
   const { readFileSync } = require('node:fs');
   const css = readFileSync(new URL('../web/app.css', import.meta.url), 'utf8');
   // the oval was `body.kids .main`, which matched the .ctl.main play button
-  assert.match(css, /body\.kids main\.main \{ width: 100%; \}/);
   assert.doesNotMatch(css, /body\.kids \.main \{/);
+  assert.match(css, /body\.kids \.kids-snav/, 'the kid rail is the shell, not a hidden sidebar');
   assert.match(css, /body\.kids \.np-add, body\.kids \.np-like/);
   const js = readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
   assert.match(js, /function handOverToKids\(\)/, 'entering kids must be one hand-over path');

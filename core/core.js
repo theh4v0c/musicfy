@@ -5222,6 +5222,18 @@ const server = http.createServer(async (req, res) => {
       const playlists = db.prepare(`SELECT p.id, p.name,
           (SELECT COUNT(*) FROM playlist_tracks pt WHERE pt.playlist_id=p.id) n_tracks
         FROM playlists p WHERE COALESCE(p.kids,0)=1 ORDER BY lower(p.name)`).all();
+      // up to four album names per list, for the collage cover the adult crates already use
+      const albumRows = db.prepare(`SELECT pt.playlist_id pid, t.album
+        FROM playlist_tracks pt JOIN tracks t ON t.id=pt.track_id JOIN playlists p ON p.id=pt.playlist_id
+        WHERE COALESCE(p.kids,0)=1 AND COALESCE(t.album,'')!=''
+        ORDER BY pt.playlist_id, pt.position`).all();
+      const albumsBy = new Map();
+      for (const r of albumRows) {
+        const list = albumsBy.get(r.pid) || [];
+        if (list.length < 4 && !list.includes(r.album)) list.push(r.album);
+        albumsBy.set(r.pid, list);
+      }
+      for (const p of playlists) p.albums = albumsBy.get(p.id) || [];
       const recent = db.prepare(`SELECT t.id, t.title, t.artist, MAX(k.played_at) last
         FROM kids_listens k JOIN tracks t ON t.id=k.track_id
         GROUP BY t.id ORDER BY last DESC LIMIT 12`).all();

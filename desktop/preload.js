@@ -9,5 +9,8 @@ contextBridge.exposeInMainWorld('musicfyDesktop', {
   pickFolder: () => ipcRenderer.invoke('musicfy:pick-folder'),
   reveal: (which) => ipcRenderer.invoke('musicfy:reveal', which),
   info: () => ipcRenderer.invoke('musicfy:info'),
+  mode: () => ipcRenderer.invoke('musicfy:mode'),
+  connect: (url) => ipcRenderer.invoke('musicfy:connect', url),
+  disconnect: () => ipcRenderer.invoke('musicfy:disconnect'),
   setPlaying: (playing) => ipcRenderer.send('musicfy:playing', !!playing),
 });

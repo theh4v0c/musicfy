@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.7.0 — 2026-11-27
+
+- **The Mac app can be a window to another MUSICFY.** Settings → This app takes an address; the
+  shell probes it, saves it, and reloads as that server's client — same library, plays, likes
+  and playlists, with audio streamed. The remote page gets no preload, so it has none of the
+  local file bridge. The File menu offers **Use this Mac's library**. Switching is in place:
+  the relaunch path raced the single-instance lock.
+- **Kids mode is the same shell, one size up.** The adult rail and topbar stay: a 240px rail
+  with her duotone profile, Home / Lists / Search, and **Grown-ups** at the bottom (the lock
+  moves to the topbar on a phone, where the rail becomes a three-item bottom nav).
+- **Home is a dashboard.** A mast with the greeting, "You left off on …" and **Mix it up**;
+  **Your lists** as 2-up collage cards above the fold; an **Albums** rail and **Artists**
+  duotones with **See all**; recent plays in two columns.
+- **List and album pages are a split**, 300px sticky cover/action panel plus a 1fr table of
+  72px hairline rows, 240px cover and 44px title — the adult playlist header, scaled, with no
+  dead right column.
+- **Search is a 640px field with a browse state** (lists, albums, artists), not a 1,516px input
+  over a blank page.
+- The five-stop rainbow wordmark and the white top pills are gone; the brand is the adult
+  brand, and colour comes from covers, collages and the name duotone. The play disc is always
+  visible where there is no hover.
+
 ## 0.6.2 — 2026-11-27
 
 - **"Your rotation" could appear stuck or doubled.** `drawRotation` looked `#rotation-slot` up

@@ -718,6 +718,17 @@ the address for ten minutes. Recovery for a forgotten PIN: stop the service and 
 It remains a speed bump for a child, not a security boundary against an adult with the file
 system.
 
+## The desktop app as a client
+
+`desktop.json` in `~/Library/Application Support/MUSICFY` can carry `{ "remoteUrl": "http://host:8710" }`.
+When it does, the shell does not spawn the local engine: it probes `<url>/health`, then loads
+that server in a window with **no preload**, so the remote page has none of the local file
+bridge. Settings → **This app** writes the address (it probes once before saving); the File menu
+offers **Use this Mac's library** to clear it. Switching happens in place — the window is
+recreated and the local core started or stopped — because `app.relaunch()` raced the
+single-instance lock and the new process quit against the old one. If the remote is unreachable
+the dialog offers retry, local, or the browser.
+
 ## First run
 
 `GET /api/settings` carries `onboarding_done` and `onboarding_step`. `onboarding_done` is
