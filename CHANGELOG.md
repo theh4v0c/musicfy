@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.2 — 2026-11-27
+
+- **"Your rotation" could appear stuck or doubled.** `drawRotation` looked `#rotation-slot` up
+  by id when it resumed, so a render that had already been replaced appended its rail into the
+  new page — two rails, one stale seed, and the top one never moved. It now captures its own
+  slot, draws at most once per slot, bails when the slot is detached, and clears before it
+  paints.
+
 ## 0.6.1 — 2026-11-27
 
 - **The play button oval is fixed.** `body.kids .main { width: 100% }` matched `.ctl.main` — the

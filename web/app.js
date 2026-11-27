@@ -1394,8 +1394,9 @@ async function renderHome() {
     } catch { toast('Flow failed'); }
     fb.disabled = false;
   };
+  const rotationSlot = document.getElementById('rotation-slot');
   const rec = await loadRecentlyPlayed();
-  drawRotation(rec);
+  drawRotation(rec, rotationSlot);
   // nothing below the fold is fetched until it is about to be seen: 90 idle requests
   // on a phone delay the first play more than the audio itself does
   const lazy = document.getElementById('home-lazy');
@@ -1715,14 +1716,19 @@ function trackCard(t, list, origin) {
 /* all time, from 175k real Spotify plays */
 
 
-async function drawRotation(rec) {
-  const slot = $('rotation-slot');
+async function drawRotation(rec, host) {
+  const slot = host || $('rotation-slot');
   if (!slot || !rec || !rec.length) return;
+  // one rotation per render: a stale render resumed after its page was replaced and
+  // appended a second rail, which looked like the rotation was stuck on an old seed
+  if (slot.dataset.drawn === '1') return;
+  slot.dataset.drawn = '1';
   const includeChildren = !!(state.settings && state.settings.taste_include_children);
   const seedTrack = includeChildren ? rec[0] : rec.find((t) => t.genre_family !== 'children');
   if (!seedTrack) return;
   const list = await api(`/api/radio/${seedTrack.id}`).catch(() => []);
-  if (!list.length) return;
+  if (!list.length || !slot.isConnected) return;
+  slot.innerHTML = '';
   const row = document.createElement('div');
   row.innerHTML = `<div class="sec-title">Your rotation <small>BUILT FROM ${esc((seedTrack.title || '').toUpperCase()).slice(0, 40)}</small></div>
     <div class="row-scroller" id="rot-row"></div>`;
