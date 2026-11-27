@@ -3746,7 +3746,7 @@ const server = http.createServer(async (req, res) => {
             'preferred_format', 'key_format', 'autoplay_next',
             'normalize_loudness', 'target_loudness', 'prefetch_ahead', 'ui_tier',
             'taste_genres', 'taste_artists', 'taste_context', 'taste_avoid', 'taste_include_children',
-            'storefront_country', 'onboarding_done', 'onboarding_step']) {
+            'storefront_country', 'onboarding_done', 'onboarding_step', 'kids_name', 'kids_age']) {
             if (b[k] !== undefined) s[k] = b[k];
           }
           // setup state: a boolean, and the step reached, so an interrupted first run
@@ -5188,9 +5188,15 @@ const server = http.createServer(async (req, res) => {
       const recent = db.prepare(`SELECT t.id, t.title, t.artist, MAX(k.played_at) last
         FROM kids_listens k JOIN tracks t ON t.id=k.track_id
         GROUP BY t.id ORDER BY last DESC LIMIT 12`).all();
+      // the name and the age band come from the settings file (the same object the settings
+      // page edits); the PIN is a separate secret and lives in the settings table
+      let sfile = {};
+      try { sfile = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); } catch {}
       return json(res, 200, {
         kids: kidsOn(req),
         pin_set: !!setting('kids_pin', ''),
+        name: sfile.kids_name || '',
+        age: sfile.kids_age || '',
         playlists,
         recent,
       });

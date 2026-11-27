@@ -1605,3 +1605,24 @@ body.kids .pb-like, body.kids .pb-menu, body.kids .mini-like, body.kids .mini-me
   body.kids .view { padding: 18px 16px 130px; }
   .kids-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 }
+
+/* first run: the second question on the mode screen, and playful chips for the kid setup */
+.onb-else { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+.onb-else-k { display: block; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-mute); margin: 0 0 8px; }
+.onb-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.onb-chip { height: 32px; padding: 0 14px; border-radius: var(--r-pill); border: 1px solid var(--line);
+  background: var(--bg-elev2); color: var(--fg-soft); font-size: 12.5px; }
+.onb-chip:hover { color: var(--fg); }
+.onb-chip[aria-pressed="true"] { color: var(--fg); border-color: transparent;
+  background: linear-gradient(90deg, rgba(255,92,57,.20), rgba(176,107,255,.20));
+  box-shadow: inset 0 0 0 1px rgba(255,92,57,.45); }
+.onb-kid { display: grid; gap: 10px; margin-top: 14px; }
+.onb-kid[hidden] { display: none; }
+
+/* kids: a gradient instrument for the empty shelf, bigger cards for smaller kids */
+.kids-mark { width: 96px; height: 96px; color: inherit; filter: drop-shadow(0 6px 16px rgba(176,107,255,.22)); }
+.kids-grid[data-age="0-6"] { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.kids-grid[data-age="11-14"], .kids-grid[data-age="15+"] { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.kids-card .pcard-sub { display: inline-flex; align-items: center; gap: 6px; }
+.kids-card .pcard-sub::before { content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: linear-gradient(135deg, #ff5c39, #ffd166 45%, #b06bff); flex: none; }

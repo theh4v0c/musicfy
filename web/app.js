@@ -2886,7 +2886,7 @@ async function renderSettings() {
       <section class="set-card" data-tone="acc">
         <h2>Kids</h2>
         <p class="set-note">A separate shelf for a kid or a teenager. Plays made in Kids mode are recorded on their own and never reach your taste, your rotation, your play history or A&amp;R.</p>
-        <p class="set-note">${k.playlists.length
+        <p class="set-note">${k.name || k.age ? `${esc(k.name || '')}${k.name && k.age ? ' · ' : ''}${esc(k.age || '')}. ` : ''}${k.playlists.length
           ? `${k.playlists.length} playlist${k.playlists.length === 1 ? '' : 's'} in Kids mode.`
           : 'No playlist is in Kids mode yet.'} Mark one with “Use in Kids Mode” from its menu, and the Kids entry appears in the sidebar.</p>
         <label>PIN to leave Kids mode<input id="set-kids-pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="${k.pin_set ? 'set - type a new one to change it' : 'not set'}"></label>
@@ -6979,6 +6979,9 @@ function openOnboarding(start = 0) {
     city: s.city || '',
     citySaved: s.city || '',
     mode: s.ui_tier === 'listener' ? 'listener' : 'dj',
+    kids: !!(s.kids_name || s.kids_age),
+    kidName: s.kids_name || '',
+    kidAge: s.kids_age || '',
     folder: '',
     busy: false,
   };
@@ -7006,6 +7009,7 @@ function onbRender() {
 
   if (done) {
     const bits = [onb.mode === 'listener' ? tr('Listener') : tr('DJ')];
+    if (onb.kids) bits.push(onb.kidName ? `${onb.kidName} · ${onb.kidAge}` : tr('Kids mode'));
     if (onb.city) bits.push(onb.city);
     const ready = onb.name ? `${tr('Ready')}, ${onb.name}.` : `${tr('Ready')}.`;
     body.innerHTML = `
@@ -7081,11 +7085,42 @@ function onbRender() {
         <button class="onb-mode" data-mode="listener" type="button" aria-pressed="${onb.mode === 'listener'}">
           <b>${tr('Listener')}</b><span>${tr('Library, playlists, playback. Prep and analysis stay out of sight, along with the homework.')}</span>
         </button>
+      </div>
+      <div class="onb-else">
+        <span class="onb-else-k">${tr('Anyone else?')}</span>
+        <div class="onb-chips" role="group" aria-label="${tr('Anyone else?')}">
+          <button class="onb-chip" type="button" data-else="me" aria-pressed="${!onb.kids}">${tr('Just me')}</button>
+          <button class="onb-chip" type="button" data-else="kid" aria-pressed="${onb.kids}">${tr('A kid or teenager')}</button>
+        </div>
+        <p class="onb-note">${tr('Kids mode keeps their playlists apart and their plays out of your taste. The PIN that guards the exit is in Settings, under Kids.')}</p>
+        <div class="onb-kid" id="onb-kid" ${onb.kids ? '' : 'hidden'}>
+          <label class="onb-field">${tr('Their name')}<input id="onb-kid-name" type="text" maxlength="30" autocomplete="off" value="${esc(onb.kidName)}" placeholder="${tr('Optional')}"></label>
+          <span class="onb-else-k">${tr('Age')}</span>
+          <div class="onb-chips" id="onb-ages" role="group" aria-label="${tr('Age')}">
+            ${[['0-6', 'Up to 6'], ['7-10', '7 to 10'], ['11-14', '11 to 14'], ['15+', '15 and up']]
+              .map(([v, label]) => `<button class="onb-chip" type="button" data-age="${v}" aria-pressed="${onb.kidAge === v}">${tr(label)}</button>`).join('')}
+          </div>
+        </div>
       </div>`;
     body.querySelectorAll('.onb-mode').forEach((b) => {
       b.onclick = () => {
         onb.mode = b.dataset.mode;
         body.querySelectorAll('.onb-mode').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.mode === onb.mode)));
+      };
+    });
+    body.querySelectorAll('[data-else]').forEach((b) => {
+      b.onclick = () => {
+        onb.kids = b.dataset.else === 'kid';
+        body.querySelectorAll('[data-else]').forEach((x) => x.setAttribute('aria-pressed', String((x.dataset.else === 'kid') === onb.kids)));
+        const box = document.getElementById('onb-kid');
+        if (box) box.hidden = !onb.kids;
+        if (onb.kids) document.getElementById('onb-kid-name')?.focus();
+      };
+    });
+    body.querySelectorAll('[data-age]').forEach((b) => {
+      b.onclick = () => {
+        onb.kidAge = b.dataset.age;
+        body.querySelectorAll('[data-age]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.age === onb.kidAge)));
       };
     });
     onbFocus();
@@ -7251,9 +7286,17 @@ async function onbNext() {  if (!onb || onb.busy) return;
       await onbResolveCity();
     }
     if (step === 3) {
-      await onbPost({ ui_tier: onb.mode });
+      onb.kidName = (document.getElementById('onb-kid-name')?.value || '').trim();
+      await onbPost({
+        ui_tier: onb.mode,
+        kids_name: onb.kids ? onb.kidName : '',
+        kids_age: onb.kids ? onb.kidAge : '',
+      });
       state.settings.ui_tier = onb.mode;
+      state.settings.kids_name = onb.kids ? onb.kidName : '';
+      state.settings.kids_age = onb.kids ? onb.kidAge : '';
       applyTier(onb.mode);
+      await syncKidsEntry();
     }
     onb.step = step + 1;
     onbRender();
@@ -7313,7 +7356,7 @@ async function syncKidsEntry() {
   const k = await api('/api/kids', { nocache: true }).catch(() => null);
   state.kids = k;
   const entry = document.getElementById('kids-nav');
-  if (entry && k) entry.hidden = !(k.pin_set || (k.playlists || []).length);
+  if (entry && k) entry.hidden = !(k.pin_set || (k.playlists || []).length || k.name || k.age);
   return k;
 }
 
@@ -7354,7 +7397,7 @@ async function renderKids() {
       <div class="kids-brand" aria-label="MUSICFY">MUSICFY</div>
       <button class="btn btn-ghost" id="kids-leave" type="button">${tr('Leave')}</button>
     </div>
-    <p class="kids-note">${tr('Tap a list to play it.')}</p>
+    <p class="kids-note">${(state.kids && state.kids.name) ? `${esc(state.kids.name)} · ` : ''}${tr('Tap a list to play it.')}</p>
     <div id="kids-recent"></div>
     <div class="sec-title" id="kids-lists-title">${tr('Lists')}</div>
     <div class="pgrid kids-grid" id="kids-grid"></div>`;
@@ -7378,15 +7421,25 @@ async function renderKids() {
     }
   }
   if (!data.playlists.length) {
-    grid.outerHTML = `<div class="hollow">
-      <svg class="hollow-mark" viewBox="0 0 64 56" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4">
-        <rect x="12" y="6" width="40" height="40" rx="7" stroke-dasharray="3 3" opacity=".6"/>
-        <path d="M21 26h9M34 26h9" stroke="var(--acc)" stroke-width="2" stroke-linecap="round"/>
+    grid.outerHTML = `<div class="hollow kids-empty">
+      <svg class="hollow-mark kids-mark" viewBox="0 0 96 96" aria-hidden="true">
+        <defs>
+          <linearGradient id="kidsDrum" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#ff5c39"/><stop offset=".35" stop-color="#ffd166"/>
+            <stop offset=".68" stop-color="#3fc57d"/><stop offset="1" stop-color="#b06bff"/>
+          </linearGradient>
+        </defs>
+        <path d="M24 22 43 39M72 22 53 39" stroke="url(#kidsDrum)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+        <path d="M20 46c0-4.4 12.5-8 28-8s28 3.6 28 8v16c0 4.4-12.5 8-28 8s-28-3.6-28-8z" fill="url(#kidsDrum)" opacity=".92"/>
+        <ellipse cx="48" cy="46" rx="28" ry="8" fill="#0d0d0f" opacity=".45"/>
+        <ellipse cx="48" cy="46" rx="28" ry="8" fill="none" stroke="url(#kidsDrum)" stroke-width="2.4"/>
+        <path d="M26 54c0 3 9.8 5.4 22 5.4S70 57 70 54" stroke="rgba(13,13,15,.35)" stroke-width="2" fill="none"/>
       </svg>
       <div><b>${tr('Nothing here yet.')}</b><p>${tr('A grown-up can mark playlists with “Use in Kids Mode” from their menu.')}</p></div>
     </div>`;
     return;
   }
+  if (data.age) grid.dataset.age = data.age;
   for (const p of data.playlists) {
     const card = document.createElement('button');
     card.type = 'button';

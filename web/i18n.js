@@ -457,6 +457,18 @@
     'Kids': 'Kids',
     'Tap a list to play it.': 'Toque numa lista para tocar.',
     'Lists': 'Listas',
+    'Anyone else?': 'Mais alguém?',
+    'Just me': 'Só eu',
+    'A kid or teenager': 'Uma criança ou adolescente',
+    'Kids mode keeps their playlists apart and their plays out of your taste. The PIN that guards the exit is in Settings, under Kids.':
+      'O modo Kids mantém as listas deles separadas e as reproduções fora do seu gosto. O PIN que protege a saída fica em Ajustes, em Kids.',
+    'Their name': 'O nome',
+    'Optional': 'Opcional',
+    'Age': 'Idade',
+    'Up to 6': 'Até 6',
+    '7 to 10': '7 a 10',
+    '11 to 14': '11 a 14',
+    '15 and up': '15 ou mais',
     'Nothing here yet.': 'Nada aqui ainda.',
     'A grown-up can mark playlists with “Use in Kids Mode” from their menu.':
       'Um adulto pode marcar listas com “Usar no modo Kids” no menu delas.',

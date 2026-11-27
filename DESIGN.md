@@ -212,6 +212,11 @@ It is a dialog: focus is trapped, Enter advances from a field, Escape goes back,
 are buttons rather than a carousel. On a phone it fills the screen and the action sits at the
 bottom. Skipping marks setup done; Settings, under You, replays it.
 
+The mode screen carries a second question, **Anyone else?**. It expands to a kid's name and
+an age band only when **A kid or teenager** is chosen, so the default path stays one tap. It
+writes `kids_name` and `kids_age`, and the Kids entry appears from that point even before a
+playlist is marked.
+
 The language switch (EN / PT) is the first control in the dialog, before Skip: the copy is
 the product here, and it has to be readable before anything is asked. The browser language
 still decides the first value. Switching saves the current screen and the fields already
@@ -229,8 +234,10 @@ an exception names the exception: the city is geocoded once, and the copy says e
 
 Kids mode is a separate shelf, not a theme: the same type, the same spacing, no cartoon
 palette. The sidebar, the top bar and the bottom navigation disappear; the player bar stays.
-The wordmark becomes the one colourful thing in the app — five stops, clipped to the text —
-because it is the one screen a child opens alone.
+The wordmark is colourful — five stops, clipped to the text — and so is the drum on the empty
+shelf and the dot before a track count; everywhere else stays monochrome. The kid's name sits
+under the wordmark, and the age band from setup sets the card size: up to 6 gets 240px cards,
+11 and over gets 170px. The gradient is the app's own, not a second palette.
 
 The page is a grid of the playlists marked for Kids mode; a tap plays one. **Leave** is the
 only other control, and it asks for the PIN when one is set. Plays made here are written to

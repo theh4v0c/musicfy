@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.2 — 2026-11-27
+
+- **Kids is a question in the first run.** The mode screen now asks **Anyone else?** — "Just
+  me" or "A kid or teenager". Choosing a kid expands a name and an age band (up to 6, 7–10,
+  11–14, 15 and up), and the Kids entry appears from then on even before a playlist is marked.
+  The default path is unchanged: one tap and continue.
+- **The kid is a person, not a toggle.** Their name sits under the wordmark on the Kids page
+  ("Ana · Tap a list to play it."), the Settings card repeats the name and band, and the band
+  sets the card size: bigger covers for the youngest, tighter for teenagers.
+- **Playful, with a purpose.** The Kids empty shelf gets a gradient drum drawn with the app's
+  five-stop gradient, the age and "anyone else" choices are gradient chips, and the track
+  count on a kids card carries a small gradient dot. Still no cartoon palette and no second
+  theme: the colour lives in the marks, not in the furniture.
+- `GET /api/kids` returns the name and band; the settings file is the source (the PIN stays in
+  the settings table).
+
 ## 0.4.1 — 2026-11-27
 
 - Settings signature: **MUSICFY** is bold on the version line, and `Developed by Roger Lima ·
