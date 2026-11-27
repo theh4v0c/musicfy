@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.2 — 2026-11-27
+
+- **Connecting the Mac to another MUSICFY names the port instead of saying "unreachable".**
+  This app's own engine listens on 8790; a MUSICFY server listens on 8710, and typing the
+  wrong one gave the same message as a server that is switched off. When nothing answers on
+  the port that was typed, the app now asks the same host on 8710, and if it answers, says so
+  and puts that address in the field. One more press of Connect finishes the job.
+
 ## 0.8.1 — 2026-11-27
 
 - **Covers are covers again.** On a touch screen the play disc is removed from album,

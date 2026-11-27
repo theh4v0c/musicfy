@@ -78,6 +78,9 @@ function remoteUrl() {
   const u = String(config().remoteUrl || '').trim().replace(/\/+$/, '');
   return /^https?:\/\//i.test(u) ? u : '';
 }
+// the port a MUSICFY server listens on; this app's own engine takes 8790 and up
+const SERVER_PORT = 8710;
+
 function probe(url, ms = 4000) {
   return new Promise((resolve) => {
     let mod = http;
@@ -533,7 +536,21 @@ ipcMain.handle('musicfy:connect', async (_e, url) => {
     return { ok: false, error: say('Fora da sua rede, use https://: http envia a senha em claro.', 'Outside your network use https://; http sends the password in the clear.') };
   }
   if (!(await probe(target, 5000))) {
-    return { ok: false, error: say('Não consegui alcançar esse endereço.', 'Could not reach that address.') };
+    // The port is the usual mistake: this app runs its own engine on 8790, while a MUSICFY
+    // server answers on 8710. Ask the same host on 8710 before giving up, and say the
+    // address instead of "unreachable".
+    const shownPort = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+    if (parsed.port !== String(SERVER_PORT)) {
+      const alt = new URL(parsed.toString());
+      alt.port = String(SERVER_PORT);
+      const guess = alt.toString().replace(/\/+$/, '');
+      if (guess !== target && (await probe(guess, 4000))) {
+        return { ok: false, suggest: guess, error: say(
+          `Nada respondeu na porta ${shownPort} de ${parsed.hostname}. O MUSICFY daquele computador responde na porta ${SERVER_PORT} — use ${guess}`,
+          `Nothing answered on ${parsed.hostname}:${shownPort}. MUSICFY on that machine answers on port ${SERVER_PORT} — use ${guess}`) };
+      }
+    }
+    return { ok: false, error: say('Não consegui alcançar esse endereço. O MUSICFY está rodando naquele computador?', 'Could not reach that address. Is MUSICFY running on that computer?') };
   }
   saveConfig({ remoteUrl: target });
   setTimeout(() => { switchMode(target).catch(() => {}); }, 150);

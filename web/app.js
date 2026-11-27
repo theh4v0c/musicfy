@@ -3257,6 +3257,8 @@ async function renderSettings() {
       const r = await window.musicfyDesktop.connect(url).catch(() => null);
       if (!r || !r.ok) {
         appConnect.disabled = false;
+        // the only thing to do next is press Connect again on the address it named
+        if (r && r.suggest && input) input.value = r.suggest;
         if (msg) { msg.dataset.tone = 'bad'; msg.textContent = (r && r.error) || tr('Could not reach that address.'); }
         return;
       }
