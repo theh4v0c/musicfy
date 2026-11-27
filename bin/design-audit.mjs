@@ -35,6 +35,7 @@ const json = process.argv.includes('--json');
 
 const ROLES = [
   ['action', '.btn, .action-chip'],
+  ['menu', '.chip-menu-item'],
   ['tab', '.mode-tab, .view-switch'],
   ['icon', '.icon-btn'],
 ];

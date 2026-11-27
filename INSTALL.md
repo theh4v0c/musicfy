@@ -156,6 +156,10 @@ export PATH="$HOME/.local/bin:$PATH"
 Open <http://localhost:8710> in Safari, Chrome, Firefox or Edge. The first page is Home.
 The first start creates the database automatically.
 
+A new install starts in **DJ** mode. Use **Settings > Mode** to switch to **Listener** for a
+family or a store; the choice is stored on the server and applies to every browser. The store
+instance is set to Listener deliberately; the owner's Pi is DJ.
+
 ### 3.7 Add music
 
 Two ways, and the first is the one for a folder you already keep:

@@ -1,6 +1,6 @@
 {
   "name": "musicfy",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Self-hosted music library, browser player and DJ prep bench",
   "license": "AGPL-3.0-or-later",
   "type": "commonjs",

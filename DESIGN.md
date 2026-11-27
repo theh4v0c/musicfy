@@ -111,6 +111,7 @@ Three visual roles, plus one touch minimum. Every interactive control is one of 
 | role | what it is | height | type | padding | radius | classes |
 |---|---|---|---|---|---|---|
 | **action** | a button or a chip that does something | 36px | 13px / 600 | 16px sides | pill | `.btn`, `.btn-primary`, `.btn-ghost`, `.action-chip` |
+| **menu** | a row inside a popover menu | 30px | 13px / 600 | 10px sides | 8px | `.chip-menu-item` |
 | **tab** | a filter that changes the list in place | 30px | 12px | 12px sides | pill | `.mode-tab`, `.view-switch` |
 | **icon** | a square icon control | 30×30 | 18px glyph | — | 8px | `.icon-btn` |
 | **touch** | minimum tap area on `(pointer: coarse)` | 44×44 | — | — | — | hit area, not a visible shape |
@@ -184,7 +185,7 @@ kicker: `never in picks`.
 | container | radius | padding | background | use |
 |---|---|---|---|---|
 | `.mast` hero | `--r-xl` 18px | 16/20 | `--bg-elev` + light bloom | home only |
-| `.page-hero` | `--r-lg` 14px | 20/22 (13/15 on phone) | `--bg-elev` + right-edge texture | Playlists, Settings and A&R: one line of context |
+| `.prep-hero` | `--r-lg` 14px | 20/22 (13/15 on phone) | `--bg-elev` + right-edge texture | Prep only: title and coverage meter |
 | `.prep-hero` | `--r-lg` 14px | 20/22 (13/15 on phone) | `--bg-elev` + right-edge texture | Prep only: title plus the coverage meter |
 | `.pcard` / card | `--r-lg` | 12px | `--bg-elev` | playlists, albums, artists |
 | `.answer`, `.inline-panel`, `.set-card` | `--r-lg` | 14–16px | `--bg-elev` | blocks inside a page |
@@ -195,19 +196,25 @@ Cards are 150px wide in a rail on desktop, 128px on a phone, with the artwork sq
 and the title under it. A rail scrolls sideways; it does not wrap.
 
 The page name lives in the top bar, once. Library and Search start with their toolbar: the
-first track row is the content. Playlists, Settings and A&R open with a `.page-hero` holding
-one line of context, never a kicker or a second title. Prep is the exception: its card
-carries the page's identity and its coverage meter. A hidden `h1` keeps the outline correct.
+first track row is the content. Playlists, Settings and A&R start with an inline `.page-sub`
+line, not a hero card. Prep is the only page with a real hero: its card carries the title and
+the coverage meter. A hidden `h1` keeps the outline correct.
 
 The Library toolbar is four ways into the library (Artists, Albums, Genres, For you) plus
 one Tools menu for import, upload, recent downloads and the BPM sort. Ten equal pills across
 five phone rows were chrome before content. The player bar stays hidden until the first
 track starts; an empty player is a broken widget, not a state.
 
+No generated rainbow: a track without artwork gets a neutral surface (`--bg-elev2` to
+`--bg-elev`) with a muted initial. Real artwork is the only source of colour in a grid.
+Menu rows use `.chip-menu-item` (30px, one label, no inline hint) so the Tools popover cannot
+reflow a row.
+
 Navigation follows the device and the mode. The phone bottom bar is Home, Search, A&R,
 Library, Playlists and Settings; Prep is desktop-only, inside the **Studio** group with A&R.
-On desktop, A&R and Prep sit under Studio; Prep disappears entirely in Listener. A&R is not
-hidden on a phone: it is a destination, not a Search sub-page.
+On desktop, A&R and Prep sit under Studio; Prep disappears entirely in Listener. Settings is
+separated at the foot of the sidebar, outside Studio. A&R is not hidden on a phone: it is a
+destination, not a Search sub-page.
 
 Search is the one global search. Its Scope control is Both, This library or Web; playlist
 hits appear above the track results, so sets are found in the same field. The Library field

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.8 — 2026-11-26
+
+- The design gate is green again: Tools rows are their own `.chip-menu-item` role (30px,
+  label only), documented in DESIGN.md, so the audit no longer compares them to 36px actions.
+- Artwork placeholders are neutral. `gradFor` no longer invents a hue per track; a missing
+  cover is `--bg-elev2` to `--bg-elev` with a muted initial, so real covers are the only
+  colour in a rail.
+- Settings moved out of the Studio group to the foot of the desktop sidebar, separated.
+- Playlists, Settings and A&R use an inline subtitle instead of a headless hero card; Prep is
+  the only real hero left.
+- BPM and key read at 11px. Palette options expose `aria-activedescendant` and a platform
+  hint (⌘K / Ctrl K). Playing-row secondary text uses `--fg-soft` on the accent wash.
+- README, INSTALL, DESIGN and DOCS record the DJ default, the Listener switch, the menu role,
+  neutral placeholders and the inline subtitle.
+
 ## 0.2.7 — 2026-11-26
 
 - Album pages are fetched fresh, and a write clears the cached album and artist pages. After

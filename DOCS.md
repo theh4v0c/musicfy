@@ -781,6 +781,10 @@ surface (`--bg-elev2` with `--fg`); a mode switch (Listener/DJ, DJ set/Listening
 selection with `--acc-soft` and an accent border, never a solid fill. Card play discs are
 neutral on touch.
 
+Artwork placeholders are neutral surfaces, not generated gradients; only real covers add
+colour. The Tools menu uses its own 30px menu rows. Settings sits at the foot of the desktop
+sidebar, outside the Studio group.
+
 Navigation is device- and mode-driven. The phone bottom bar is Home, Search, A&R, Library,
 Playlists and Settings; Prep is desktop-only in the Studio group, because A&R matters more on
 a phone. On desktop, A&R and Prep share the Studio group; Prep is hidden in Listener. Search is the single global

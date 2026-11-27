@@ -102,20 +102,15 @@ const fmt = (s) => (!s || !isFinite(s)) ? '0:00' : `${Math.floor(s / 60)}:${Stri
 const fmtSize = (bytes) => `${(Number(bytes || 0) / 1e9).toLocaleString(LOC(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} GB`;
 const artUrl = (t, s) => t && t.has_art ? `/api/cover/${t.id}?s=${s}&v=${state.artV || 0}` : null;
 // deterministic gradient from a seed, so every placeholder has its own colour, not a flat box
-function gradFor(seed) {
-  const s = String(seed || '?');
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
-  const a = Math.abs(h) % 360;
-  const b = (a + 30 + (Math.abs(h >> 9) % 90)) % 360;
-  const l1 = 40 + (Math.abs(h >> 3) % 14);
-  const l2 = 16 + (Math.abs(h >> 5) % 10);
-  return `linear-gradient(135deg, hsl(${a} 58% ${l1}%), hsl(${b} 52% ${l2}%))`;
+function gradFor() {
+  // real artwork is the only source of colour. A generated rainbow made one row of
+  // covers look like a different product; the placeholder is a quiet surface instead.
+  return 'linear-gradient(135deg, var(--bg-elev2), var(--bg-elev))';
 }
 const ph = (t, cls) => {
   const seed = t ? `${t.artist || ''}${t.title || ''}` : '?';
   const letter = (t ? (t.title || '?') : '?').charAt(0).toUpperCase();
-  return `<div class="${cls} ph" style="background:${gradFor(seed)};color:rgba(255,255,255,.9)">${esc(letter)}</div>`;
+  return `<div class="${cls} ph" style="background:${gradFor(seed)};color:var(--fg-mute)">${esc(letter)}</div>`;
 };
 // uniform artwork setter: always a div with a background image, never a stale <img src>
 function setArt(elId, url, letter) {
@@ -124,7 +119,7 @@ function setArt(elId, url, letter) {
   if (url) {
     el.outerHTML = `<div id="${elId}" class="${base}" style="background-image:url('${url}');background-size:cover;background-position:center"></div>`;
   } else {
-    el.outerHTML = `<div id="${elId}" class="${base} ph" style="background:${gradFor(letter || '?')};color:rgba(255,255,255,.9)">${esc((letter || '?').charAt(0).toUpperCase())}</div>`;
+    el.outerHTML = `<div id="${elId}" class="${base} ph" style="background:${gradFor(letter || '?')};color:var(--fg-mute)">${esc((letter || '?').charAt(0).toUpperCase())}</div>`;
   }
 }
 const artTag = (t, cls, size) => artUrl(t, size)
@@ -1247,7 +1242,7 @@ function bindViewSwitch(scope, onChange) {
 async function renderHome() {
   setNav('home'); state.playlistId = null; renderSidebar();
   // the name, where the sidebar is not on screen to carry it
-  $('view-title').innerHTML = '<span class="wordmark">MUSICFY</span><span class="view-name">Home</span>';
+  $('view-title').innerHTML = `<span class="wordmark">MUSICFY</span><span class="view-name">${tr('Home')}</span>`;
   const v = $('view');
   v.innerHTML = `
     <section class="mast">
@@ -1432,7 +1427,7 @@ async function renderExternalInto(host) {
       for (const s of g.songs) {
         const card = document.createElement('div');
         card.className = 'tcard';
-        card.innerHTML = `<div class="tcard-art ph" style="background:${gradFor((s.artist || '') + (s.title || ''))};color:rgba(255,255,255,.9)">${esc((s.artist || '?').charAt(0))}</div>
+        card.innerHTML = `<div class="tcard-art ph" style="background:${gradFor((s.artist || '') + (s.title || ''))};color:var(--fg-mute)">${esc((s.artist || '?').charAt(0))}</div>
           <div class="tcard-name">${esc(s.title)}</div>
           <div class="tcard-sub">${esc(s.artist)}</div>
           <button class="tcard-play" title="Preview before downloading" aria-label="Preview before downloading">${IC.play}</button>`;
@@ -2032,7 +2027,7 @@ async function renderLibrary() {
   $('view-title').textContent = tr('Playlists');
   const v = $('view');
   v.innerHTML = `<h1 class="sr-only">Playlists</h1>
-    ${pageHero('PLAYLISTS', 'Playlists', 'Listening lists and DJ sets, ordered and ready to open.')}
+    <p class="page-sub">Listening lists and DJ sets, ordered and ready to open.</p>
     <div class="lib-actions">
       <button class="btn btn-primary" id="lib-upload">Upload track</button>
       <button class="btn btn-ghost" id="lib-newpl">New playlist</button>
@@ -2405,12 +2400,12 @@ async function renderSongs(push = true) {
       <details class="chip-tools">
         <summary class="action-chip"><b>Tools</b><span>IMPORT · SORT</span></summary>
         <div class="chip-menu" role="menu">
-          <button class="action-chip" data-browse="recentdl" role="menuitem"><b>Recently downloaded</b><span>NEWEST FIRST</span></button>
-          <button class="action-chip" data-browse="bpm" role="menuitem"><b>Sort by BPM</b><span>${Number(all.filter((t) => t.bpm).length).toLocaleString(LOC())} ANALYSED</span></button>
-          <button class="action-chip" data-browse="upload" role="menuitem"><b>Upload files</b><span>MP3, FLAC, M4A, WAV</span></button>
-          <button class="action-chip" data-browse="uploadfolder" role="menuitem"><b>Upload a folder</b><span>ADDS EVERY TRACK INSIDE</span></button>
-          <button class="action-chip" data-browse="import" role="menuitem"><b>Import track</b><span>SPOTIFY LINK</span></button>
-          <button class="action-chip" data-browse="importpl" role="menuitem"><b>Import playlist</b><span>PASTE A LIST OR A LINK</span></button>
+          <button class="chip-menu-item" data-browse="recentdl" role="menuitem"><b>Recently downloaded</b></button>
+          <button class="chip-menu-item" data-browse="bpm" role="menuitem"><b>Sort by BPM</b></button>
+          <button class="chip-menu-item" data-browse="upload" role="menuitem"><b>Upload files</b></button>
+          <button class="chip-menu-item" data-browse="uploadfolder" role="menuitem"><b>Upload a folder</b></button>
+          <button class="chip-menu-item" data-browse="import" role="menuitem"><b>Import track</b></button>
+          <button class="chip-menu-item" data-browse="importpl" role="menuitem"><b>Import playlist</b></button>
         </div>
       </details>`;
     chips.querySelectorAll('[data-browse]').forEach((b) => b.onclick = async () => {
@@ -2575,7 +2570,7 @@ async function renderSongs(push = true) {
         const untag = name === 'no family';
         const card = document.createElement('div');
         card.className = 'pcard';
-        card.innerHTML = `<div class="pcard-art ph" style="background:${untag ? 'var(--bg-elev2)' : gradFor(name)};color:rgba(255,255,255,.9)">${esc(name.charAt(0).toUpperCase())}</div>
+        card.innerHTML = `<div class="pcard-art ph" style="background:${untag ? 'var(--bg-elev2)' : gradFor(name)};color:var(--fg-mute)">${esc(name.charAt(0).toUpperCase())}</div>
           <div class="pcard-name">${esc(name)}</div><div class="pcard-sub">${n} tracks</div>`;
         card.onclick = () => { browse = null; state.genreFilter = untag ? '__none__' : name; limit = 60; draw(); };
         grid.appendChild(card);
@@ -2813,7 +2808,7 @@ async function renderSettings() {
   const s = d.settings || {};
   const l = d.llm || {};
   v.innerHTML = `<h1 class="sr-only">Settings</h1>
-    ${pageHero('SETTINGS', 'Settings', 'You, the library, the model endpoint and how downloads behave.')}
+    <p class="page-sub">You, the library, the model endpoint and how downloads behave.</p>
     <div class="set-wrap">
     <section class="set-card set-mode" data-tone="acc">
       <div class="set-mode-head">
@@ -3906,7 +3901,7 @@ async function renderAskAi() {
   // Generic on purpose: a fresh install must show examples that make sense without the
   // owner's library, artists or taste. No real artist names, no library-derived prompts.
   v.innerHTML = `<h1 class="sr-only">A&amp;R</h1>
-    ${pageHero('A&R', 'A&R', 'Describe what you want; it builds a draft before anything is saved.')}
+    <p class="page-sub">Describe what you want; it builds a draft before anything is saved.</p>
     <div class="search-wrap">
       <input class="search" id="ai-q" placeholder="Describe what you want: a playlist, a filter or a question" autocomplete="off">
       <div class="ask-hint">
@@ -6555,6 +6550,7 @@ function paintPalette() {
   paletteIndex = Math.max(0, Math.min(paletteIndex, paletteItems.length - 1));
   list.innerHTML = '';
   if (!paletteItems.length) {
+    q.removeAttribute('aria-activedescendant');
     const empty = document.createElement('div');
     empty.className = 'palette-item empty';
     empty.textContent = tr('No matches');
@@ -6563,6 +6559,7 @@ function paintPalette() {
   }
   paletteItems.forEach((a, i) => {
     const b = document.createElement('button');
+    b.id = `palette-opt-${i}`;
     b.className = `palette-item${i === paletteIndex ? ' on' : ''}`;
     b.setAttribute('role', 'option');
     b.setAttribute('aria-selected', String(i === paletteIndex));
@@ -6570,6 +6567,7 @@ function paintPalette() {
     b.onclick = () => runPalette(i);
     list.appendChild(b);
   });
+  q.setAttribute('aria-activedescendant', `palette-opt-${paletteIndex}`);
 }
 
 function runPalette(i) {
@@ -6591,6 +6589,8 @@ async function openPalette() {
   const q = $('palette-q');
   if (q) { q.value = ''; q.focus(); }
   paletteIndex = 0;
+  const key = document.getElementById('palette-key');
+  if (key) key.textContent = /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘K' : 'Ctrl K';
   if (!state.allTracks) {
     try { state.allTracks = await api('/api/tracks'); } catch {}
   }
