@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.10 — 2026-11-27
+
+- The minimised player's heart reflects the current track. Starting a track painted only the
+  full player bar, so the mini heart kept the previous track's state, or stayed an outline on
+  a liked track. All three hearts now come from `paintLike`.
+
 ## 0.2.9 — 2026-11-26
 
 - A fresh install asks once: **I am a DJ** / **I am a listener**, stored on the server. The

@@ -5889,8 +5889,9 @@ function paintNowPlaying() {
   $('pb-title').textContent = t.title || '';
   $('pb-artist').textContent = t.artist || '';
   setArt('pb-art', artUrl(t, 128), t.title);
-  $('pb-like').innerHTML = isLiked(t) ? IC.heartFull : IC.heart;
-  $('pb-like').classList.toggle('on', isLiked(t));
+  // one painter for the bar, the mini player and the full-screen cover: the mini heart
+  // used to keep the previous track's state, or stay an outline on a liked track
+  paintLike(t);
   $('pb-badge').hidden = false;
   $('pb-badge').className = `pb-badge rung-${shortRung(t.rung).cls}`;
   $('pb-badge').textContent = `${shortRung(t.rung).label} ${q}`;
