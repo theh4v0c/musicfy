@@ -14,6 +14,7 @@
   --ok: #3fc57d;
   --acc-soft: rgba(255, 92, 57, 0.14);
   --liked: #ff4d6d;
+  --warn: #ffb454;
   /* one native typeface everywhere: no web font to cache, block or fail to render */
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: var(--sans); /* kept for the label rules; the interface has no monospace stack */
@@ -117,7 +118,11 @@ main.main { grid-area: main; display: flex; flex-direction: column; overflow: hi
 .hollow b { display: block; font-size: 14px; font-weight: 600; }
 .hollow p { margin: 5px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--fg-soft); max-width: 66ch; }
 @media (max-width: 560px) { .hollow { flex-direction: column; gap: 12px; padding: 16px; } .hollow-mark { width: 52px; height: 46px; } }
-.set-credit { margin: 2px 0 8px; font-size: 12px; color: var(--fg-mute); }
+.set-credit { margin: 2px 0 8px; font-size: 10px; color: var(--fg-mute); }
+.set-about > span:first-child, .set-about > span:first-child b { font-weight: 700; }
+.set-about [data-tone="ok"] { color: var(--ok); }
+.set-about [data-tone="warn"] { color: var(--warn); }
+.set-about [data-tone="bad"] { color: var(--liked); }
 
 /* first run: one question per screen, every one skippable, promise before fields */
 .onb { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 24px;
@@ -452,7 +457,7 @@ html, body { overflow-x: hidden; max-width: 100%; }
 #set-msg[data-tone="bad"] { color: #ff8b74; }
 #set-maint[data-tone="ok"] { color: var(--ok); }
 #set-maint[data-tone="bad"] { color: #ff8b74; }
-#set-maint[data-tone="warn"] { color: #ffb454; }
+#set-maint[data-tone="warn"] { color: var(--warn); }
 /* actions that change the library read as a list, not as a row of lozenges */
 .set-tools { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
 .set-tools .btn { width: 100%; justify-content: flex-start; text-align: left; }

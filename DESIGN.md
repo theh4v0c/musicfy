@@ -173,9 +173,11 @@ Settings is two columns on a wide screen, at most 1100px wide, with the mode ban
 the top. Cards in one row share the same top and bottom edge; the grid stretches a short
 card to its row instead of letting a masonry column start at a different height. One
 column on a phone. A note directly above a field or checkbox keeps 10px of separation.
-The page ends with one credit line, 12px, muted and flush left with the version row:
+The page ends with one credit line, 10px, muted and flush left with the version row:
 `Developed by Roger Lima · WNL`. It is a signature, not a footer bar: no border, no links, no
-second row.
+second row. The version line reports the update state in colour: `--ok` when current, `--warn`
+when an update is available or a restart is pending, `--liked` when the check fails. The
+wordmark on that line is 700; the state sentence stays regular.
 
 The Library folder card has one primary action, **Scan folder**. The folder itself is a
 select of places this install may scan — the download folder, the configured roots and one

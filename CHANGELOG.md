@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1 — 2026-11-27
+
+- Settings signature: **MUSICFY** is bold on the version line, and `Developed by Roger Lima ·
+  WNL` is 10px, still flush left with it.
+- The update state is colour, not just words: **green** for up to date, **yellow** for an
+  update available or a restart pending, red for a failed check. `warn` is a token now
+  (`#ffb454`), so `design-check` covers it.
+
 ## 0.4.0 — 2026-11-27
 
 - **Kids mode.** Mark a playlist with **Use in Kids Mode** from its menu and a **Kids** entry

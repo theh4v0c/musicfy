@@ -3204,36 +3204,42 @@ async function renderSettings() {
   const checkUpdate = async () => {
     if (!updateMsg) return;
     updateMsg.textContent = 'Checking for updates...';
+    updateMsg.dataset.tone = '';
     try {
       const r = await api('/api/update/status?check=1', { nocache: true });
       if (versionEl && r.version) versionEl.textContent = `v${r.version}`;
       // files newer than the running process: the update happened, the restart did not
       if (r.pending_restart) {
+        updateMsg.dataset.tone = 'warn';
         updateMsg.textContent = `Version ${r.disk} is installed. Restart to run it.`;
         if (updateBtn) updateBtn.hidden = true;
         if (restartBtn) restartBtn.hidden = false;
         return;
       }
-      if (r.error) { updateMsg.textContent = `Could not check: ${r.error}`; if (updateBtn) updateBtn.hidden = true; return; }
+      if (r.error) { updateMsg.dataset.tone = 'bad'; updateMsg.textContent = `Could not check: ${r.error}`; if (updateBtn) updateBtn.hidden = true; return; }
       if (!r.git) {
         // a bundle install compares versions with the published release
         if (r.behind > 0) {
+          updateMsg.dataset.tone = 'warn';
           updateMsg.textContent = `Version ${r.latest || ''} is available.`;
           if (updateBtn) updateBtn.hidden = false;
         } else {
+          updateMsg.dataset.tone = 'ok';
           updateMsg.textContent = 'Up to date.';
           if (updateBtn) updateBtn.hidden = true;
         }
         return;
       }
       if (r.behind > 0) {
+        updateMsg.dataset.tone = 'warn';
         updateMsg.textContent = `Update available (${r.behind} new commit${r.behind === 1 ? '' : 's'}).`;
         if (updateBtn) updateBtn.hidden = false;
       } else {
+        updateMsg.dataset.tone = 'ok';
         updateMsg.textContent = 'Up to date.';
         if (updateBtn) updateBtn.hidden = true;
       }
-    } catch (e) { updateMsg.textContent = `Could not check: ${e.message || 'unknown error'}`; }
+    } catch (e) { updateMsg.dataset.tone = 'bad'; updateMsg.textContent = `Could not check: ${e.message || 'unknown error'}`; }
   };
   if (checkBtn) checkBtn.onclick = checkUpdate;
   if (restartBtn) restartBtn.onclick = async () => {
