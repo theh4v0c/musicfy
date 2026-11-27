@@ -265,9 +265,6 @@ One accent. Colour comes from covers, collages and the name duotone, not the fur
 row is a button; the play disc is always visible on touch. What is removed is adult work: no
 downloads, no A&R, no Prep, no settings, no delete, no drag-to-playlist, no context menu.
 
-What is removed is adult work, not capability: no downloads, no A&R, no Prep, no settings, no
-delete, no drag-to-playlist, no context menu.
-
 Kids mode is a **boundary**, not a coat of paint. Entering clears the adult queue and stops
 playback, closes every overlay, and writes the mode to `localStorage` so an offline reload
 cannot fall back to the adult Home. The shared player and the Now Playing sheet are adult
