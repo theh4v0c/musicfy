@@ -247,15 +247,27 @@ shelf and the dot before a track count; everywhere else stays monochrome. The ki
 under the wordmark, and the age band from setup sets the card size: up to 6 gets 240px cards,
 11 and over gets 170px. The gradient is the app's own, not a second palette.
 
-The page is a grid of the playlists marked for Kids mode; a tap plays one. **Leave** is the
-only other control, and it asks for the PIN when one is set.
+Kids mode is the app, not a stunted version of it. Three tabs — **Home, Lists, Search** — and
+the player bar; the sidebar, the top bar and the bottom navigation are gone. Home shows her
+recent plays, album cards and list cards, each with a play button; a card opens its own page
+with **Play all**, **Shuffle** and a row per song, and every row is a button: a child aims at
+the picture, not at a 16px glyph. Search filters her catalog by title, artist and album.
+Albums and lists keep their generated cover tiles. **Leave** asks for the PIN when one is set.
+
+What is removed is adult work, not capability: no downloads, no A&R, no Prep, no settings, no
+delete, no drag-to-playlist, no context menu.
 
 In the owner's interface those lists are not mixed into `PLAYLISTS`. They sit in a **named,
 collapsible group** under it, headed by the child's name and a count: the divider says they
 belong to another listener. The group is collapsed by default, remembers being open, and opens
 itself when a filter matches something inside. Counts — the sidebar pill, Home, the Playlists
 page — count only the owner's lists. The **Kids** nav entry is the other thing: it hands the
-device over. The group is management; the entry is use. Settings → Kids edits the profile
+device over. The group is management; the entry is use.
+
+An artist has no artwork, so an **artist card** and the artist hero fallback take a duotone
+derived from the name: two hues 38° apart, 58%/62% saturation, dark enough for white text. The
+same name is always the same colour. Albums and tracks keep the neutral surface; the rule is
+about identity, not decoration. Settings → Kids edits the profile
 and lists every playlist with a switch, so a list is moved in from there or from its context
 menu; the card is ordered profile, switches, PIN, because that is the order you come to it. Plays made here are written to
 their own table, so taste, rotation, history and A&R never see them. The PIN is a speed bump

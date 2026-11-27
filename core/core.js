@@ -5213,6 +5213,15 @@ const server = http.createServer(async (req, res) => {
       const recent = db.prepare(`SELECT t.id, t.title, t.artist, MAX(k.played_at) last
         FROM kids_listens k JOIN tracks t ON t.id=k.track_id
         GROUP BY t.id ORDER BY last DESC LIMIT 12`).all();
+      // the whole kids catalog: small by nature, and it lets the kids page search, list
+      // albums and play a song without a second round trip per screen
+      const tracks = db.prepare(`SELECT DISTINCT t.id, t.title, t.artist, t.album, t.duration, t.year,
+          t.has_art, t.src_id, t.src_kind, (f.id IS NOT NULL) AS owned
+        FROM tracks t
+        JOIN playlist_tracks pt ON pt.track_id=t.id
+        JOIN playlists p ON p.id=pt.playlist_id
+        LEFT JOIN files f ON f.id=(SELECT id FROM files WHERE track_id=t.id AND tier='owned' LIMIT 1)
+        WHERE COALESCE(p.kids,0)=1 ORDER BY lower(t.artist), lower(t.album), t.track_no, lower(t.title)`).all();
       // the name and the age band come from the settings file (the same object the settings
       // page edits); the PIN is a separate secret and lives in the settings table
       let sfile = {};
@@ -5224,6 +5233,7 @@ const server = http.createServer(async (req, res) => {
         age: sfile.kids_age || '',
         playlists,
         recent,
+        tracks,
       });
     }
     if (u.pathname === '/api/kids/enter' && req.method === 'POST') {

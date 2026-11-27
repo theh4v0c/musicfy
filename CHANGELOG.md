@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.0 — 2026-11-27
+
+- **Kids mode is the app, not a cage.** Three tabs — Home, Lists, Search — with the player bar.
+  Home shows her recent plays, albums and lists; a card opens its own page with **Play all**,
+  **Shuffle** and a row per song. Every row is a button, so tapping the cover plays it. Search
+  finds her songs by title, artist or album. Albums and lists keep their covers.
+- What is gone is adult work, not capability: no downloads, A&R, Prep, settings, delete,
+  drag-to-playlist or context menu. The wordmark, cards and rows are the app's own.
+- **Artist cards have gradients again.** A name becomes a duotone (two hues 38° apart, dark),
+  on the artist card and the artist hero fallback, in the adult interface and in kids. Albums
+  and tracks stay neutral: the colour marks identity, not decoration.
+- Play buttons are pinned to circles (`flex: none` + `aspect-ratio`). A tight player bar could
+  squeeze the main button into a pill; the NPC-shaped oval in the screenshot was that.
+
 ## 0.5.1 — 2026-11-27
 
 - **A kid's playlists no longer sit inside yours.** They move into a named, collapsible group

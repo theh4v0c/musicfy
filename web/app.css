@@ -1600,9 +1600,7 @@ body.kids .pb-like, body.kids .pb-menu, body.kids .mini-like, body.kids .mini-me
 .kids-brand { font-size: clamp(26px, 3vw, 34px); font-weight: 700; letter-spacing: -.02em;
   background: linear-gradient(90deg, #ff5c39 0%, #ffd166 22%, #3fc57d 45%, #4aa8ff 68%, #b06bff 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent; }
-.kids-note { color: var(--fg-soft); font-size: 13px; margin: 0 0 20px; }
 .kids-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 18px; }
-.kids-card .pcard-name { font-size: 15px; }
 @media (max-width: 560px) {
   body.kids .view { padding: 18px 16px 130px; }
   .kids-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -1625,9 +1623,6 @@ body.kids .pb-like, body.kids .pb-menu, body.kids .mini-like, body.kids .mini-me
 .kids-mark { width: 96px; height: 96px; color: inherit; filter: drop-shadow(0 6px 16px rgba(176,107,255,.22)); }
 .kids-grid[data-age="0-6"] { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
 .kids-grid[data-age="11-14"], .kids-grid[data-age="15+"] { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
-.kids-card .pcard-sub { display: inline-flex; align-items: center; gap: 6px; }
-.kids-card .pcard-sub::before { content: ""; width: 6px; height: 6px; border-radius: 50%;
-  background: linear-gradient(135deg, #ff5c39, #ffd166 45%, #b06bff); flex: none; }
 
 /* kids card: the profile and the playlist switches, so an existing list can be moved in
    without knowing that a playlist has a context menu */
@@ -1656,3 +1651,54 @@ body.kids .pb-like, body.kids .pb-menu, body.kids .mini-like, body.kids .mini-me
 .slib-kids-dot { width: 6px; height: 6px; border-radius: 50%; flex: none;
   background: linear-gradient(135deg, #ff5c39, #b06bff); }
 .slib-kids[hidden] { display: none; }
+
+/* kids: the same app, with bigger targets and no adult chrome */
+.kids-who { margin-top: 2px; font-size: 12.5px; color: var(--fg-soft); }
+.kids-tabs { display: flex; gap: 8px; margin: 6px 0 20px; flex-wrap: wrap; }
+.kids-tab { height: 40px; padding: 0 18px; border-radius: var(--r-pill); border: 1px solid var(--line);
+  background: var(--bg-elev); color: var(--fg-soft); font-size: 14px; font-weight: 600; }
+.kids-tab[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: transparent; }
+.kids-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; margin: 4px 0 26px; }
+.kids-tile { text-align: left; min-width: 0; cursor: pointer; }
+.kids-tile-artwrap { position: relative; border-radius: var(--r-md); overflow: hidden; background: var(--bg-elev2); }
+.kids-tile-art { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.kids-tile-art.ph { display: grid; place-items: center; font-size: 44px; font-weight: 700; color: var(--fg-soft); }
+.kids-tile-play { position: absolute; right: 8px; bottom: 8px; width: 40px; height: 40px; border-radius: 50%;
+  border: 0; background: var(--acc); color: var(--on-acc); display: grid; place-items: center; }
+.kids-tile-play svg { width: 16px; height: 16px; }
+.kids-tile-name { margin-top: 8px; font-size: 14.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kids-tile-sub { margin-top: 2px; font-size: 11.5px; color: var(--fg-mute); }
+.kids-rows { display: grid; gap: 6px; margin: 0 0 24px; }
+.kids-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 6px 8px;
+  border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg-elev); color: var(--fg); text-align: left; }
+.kids-row:hover { background: var(--bg-elev2); }
+.kids-row-art { width: 48px; height: 48px; border-radius: var(--r-sm); object-fit: cover; flex: none; background: var(--bg-elev2); }
+.kids-row-art.ph { display: grid; place-items: center; color: var(--fg-mute); font-weight: 600; }
+.kids-row-main { min-width: 0; display: grid; gap: 2px; }
+.kids-row-main b { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kids-row-main i { font-style: normal; font-size: 11.5px; color: var(--fg-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kids-row-dur { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--fg-mute); }
+.kids-row-play { width: 34px; height: 34px; border-radius: 50%; background: var(--acc); color: var(--on-acc); display: grid; place-items: center; flex: none; }
+.kids-row-play svg { width: 13px; height: 13px; }
+.kids-detail { display: flex; gap: 18px; align-items: flex-end; margin: 6px 0 20px; }
+.kids-detail-art { width: 160px; height: 160px; border-radius: var(--r-lg); object-fit: cover; background: var(--bg-elev2); flex: none; }
+.kids-detail-art.ph { display: grid; place-items: center; font-size: 54px; color: var(--fg-mute); }
+.kids-detail-main { min-width: 0; }
+.kids-detail-main b { display: block; font-size: clamp(22px, 3vw, 34px); font-weight: 700; letter-spacing: -.02em; }
+.kids-detail-main span { display: block; margin-top: 6px; color: var(--fg-soft); font-size: 12.5px; }
+.kids-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.kids-back { border: 0; background: none; color: var(--fg-soft); font-size: 13px; padding: 6px 0; margin-bottom: 6px; }
+.kids-back:hover { color: var(--fg); }
+.kids-search { width: 100%; font-family: inherit; font-size: 16px; padding: 12px 16px; border-radius: var(--r-pill);
+  border: 1px solid var(--line); background: var(--bg-elev2); color: var(--fg); margin: 0 0 16px; }
+.kids-search:focus { outline: none; border-color: var(--acc); box-shadow: 0 0 0 3px rgba(255,92,57,.18); }
+.kids-empty-line { color: var(--fg-mute); font-size: 13px; }
+@media (max-width: 560px) {
+  .kids-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .kids-detail { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .kids-detail-art { width: 132px; height: 132px; }
+}
+
+/* a play button is a circle, never a pill: flex used to squeeze these when the bar was tight */
+.ctl { flex: none; }
+.ctl.main, .ctl.xl, .sm-main { aspect-ratio: 1; flex: none; }
