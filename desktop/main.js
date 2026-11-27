@@ -67,6 +67,13 @@ function saveConfig(patch) {
   fs.mkdirSync(HOME, { recursive: true });
   fs.writeFileSync(CONFIG, JSON.stringify(next, null, 2), { mode: 0o600 });
 }
+function privateHost(host) {
+  const h = String(host || '').toLowerCase().replace(/^\[|\]$/g, '');
+  return h === 'localhost' || h === '::1' || /\.local$/.test(h)
+    || /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h)
+    || /^172\.(1[6-9]|2\d|3[01])\./.test(h) || /^fc|^fd/.test(h);
+}
+
 function remoteUrl() {
   const u = String(config().remoteUrl || '').trim().replace(/\/+$/, '');
   return /^https?:\/\//i.test(u) ? u : '';
@@ -325,7 +332,12 @@ function createWindow(withBridge = true) {
     return { action: 'deny' };
   });
   win.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith(base)) { event.preventDefault(); if (/^https?:/i.test(url)) shell.openExternal(url); }
+    // startsWith() let https://music.example.com.evil.com pass as the library
+    let origin = '';
+    try { origin = new URL(url).origin; } catch { origin = ''; }
+    let baseOrigin = '';
+    try { baseOrigin = new URL(base).origin; } catch { baseOrigin = base; }
+    if (origin !== baseOrigin) { event.preventDefault(); if (/^https?:/i.test(url)) shell.openExternal(url); }
   });
   win.on('closed', () => { win = null; });
   win.loadURL(base);
@@ -512,8 +524,13 @@ ipcMain.handle('musicfy:mode', () => ({ remote: remoteUrl() }));
 
 ipcMain.handle('musicfy:connect', async (_e, url) => {
   const target = String(url || '').trim().replace(/\/+$/, '');
-  if (!/^https?:\/\//i.test(target)) {
+  let parsed = null;
+  try { parsed = new URL(target); } catch { parsed = null; }
+  if (!parsed || !/^https?:$/.test(parsed.protocol)) {
     return { ok: false, error: say('O endereço precisa começar com http:// ou https://', 'The address must start with http:// or https://') };
+  }
+  if (parsed.protocol === 'http:' && !privateHost(parsed.hostname)) {
+    return { ok: false, error: say('Fora da sua rede, use https://: http envia a senha em claro.', 'Outside your network use https://; http sends the password in the clear.') };
   }
   if (!(await probe(target, 5000))) {
     return { ok: false, error: say('Não consegui alcançar esse endereço.', 'Could not reach that address.') };

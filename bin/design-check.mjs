@@ -69,6 +69,9 @@ expect.push(
   ['--fs-meta', tokens.type.meta],
   ['--fs-kicker', tokens.type.kicker],
   ['--fs-micro', tokens.type.micro],
+  ['--fs-note', tokens.type.note],
+  ['--fs-label', tokens.type.label],
+  ['--field-h', tokens.control.field.height],
   ['--brand-track', tokens.brand.tracking],
   ['--brand-gradient', tokens.brand.gradient],
 );

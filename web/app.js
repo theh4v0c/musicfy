@@ -799,6 +799,15 @@ function paintLike(t) {
   }
 }
 
+function popLike(id) {
+  document.querySelectorAll(`.trow[data-tid="${id}"] .like, #pb-like, #np-like, #mini-like`).forEach((el) => {
+    el.classList.remove('pop');
+    void el.offsetWidth;
+    el.classList.add('pop');
+    setTimeout(() => el.classList.remove('pop'), 320);
+  });
+}
+
 const likeInFlight = new Set();
 async function toggleLike(t) {
   if (state.kidsOn) return;
@@ -809,6 +818,7 @@ async function toggleLike(t) {
   else { state.liked.add(t.id); if (serverLiked) serverLiked.add(t.id); }
   saveLiked();
   paintLike(t);
+  popLike(t.id);
   toast(wasLiked ? 'Removed from Liked Songs' : 'Added to Liked Songs');
   try {
     await api('/api/likes', {
@@ -2939,10 +2949,6 @@ async function renderSettings() {
     <div class="set-grid">
       <section class="set-card" data-tone="acc">
         <h2>You</h2>
-        <div class="lib-actions set-onb">
-          <button class="btn btn-ghost" id="set-onboarding" type="button">Run setup again</button>
-          <span class="set-note">Name, place, mode and music folder, in five steps.</span>
-        </div>
         <label>Display name<input id="set-name" value="${esc(s.display_name || '')}" placeholder="Your name"></label>
         <p class="set-note">The first word is used by the greeting on Home. Nothing else reads it.</p>
         <label>Timezone<input id="set-tz" value="${esc(s.timezone || '')}" placeholder="Continent/City"></label>
@@ -2954,7 +2960,11 @@ async function renderSettings() {
           </select>
         </label>
         <p class="set-note">The interface language for this browser. Names of tracks, artists and playlists are never translated.</p>
-        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg></span></div>
+        <div class="set-row set-onb">
+          <button class="btn btn-ghost" id="set-onboarding" type="button">Run setup again</button>
+          <span class="set-note">Name, place, mode and music folder, in five steps.</span>
+        </div>
+        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg role="status" aria-live="polite"></span></div>
       </section>
       <section class="set-card" data-tone="acc">
         <h2>Location</h2>
@@ -2963,12 +2973,12 @@ async function renderSettings() {
         <div class="set-facts" id="set-geo">${s.latitude && s.longitude
           ? `<div><b>${esc(s.city || '')}</b>${s.country ? ` · ${esc(s.country)}` : ''}</div><div>${Number(s.latitude).toFixed(3)}, ${Number(s.longitude).toFixed(3)}</div><div>${esc(s.timezone || '')}</div>`
           : '<div>No city set</div>'}</div>
-        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg></span></div>
+        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg role="status" aria-live="polite"></span></div>
       </section>
       <section class="set-card" data-tone="acc">
         <h2>Kids</h2>
         <p class="set-note">A separate shelf for a kid or a teenager. Plays made in Kids mode are recorded on their own and never reach your taste, your rotation, your play history or A&amp;R.</p>
-        <div class="lib-actions">
+        <div class="set-row">
           <button class="btn btn-ghost" id="set-kids-open" type="button">Open Kids mode</button>
         </div>
         <div class="kids-profile">
@@ -2980,7 +2990,7 @@ async function renderSettings() {
                 .map(([v, label]) => `<option value="${v}"${k.age === v ? ' selected' : ''}>${tr(label)}</option>`).join('')}
             </select>
           </label>
-          <div class="lib-actions">
+          <div class="set-row">
             <button class="btn btn-ghost" id="set-kids-save" type="button">${tr('Save')}</button>
             <span class="set-note" id="set-kids-saved"></span>
           </div>
@@ -2993,7 +3003,7 @@ async function renderSettings() {
         </div>
         ${k.pin_set ? `<label>Current PIN<input id="set-kids-pin-current" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="${tr('required to change or clear')}"></label>` : ''}
         <label>PIN to leave Kids mode<input id="set-kids-pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="${k.pin_set ? 'set - type a new one to change it' : 'not set'}"></label>
-        <div class="lib-actions">
+        <div class="set-row">
           <button class="btn btn-ghost" id="set-kids-pin-save" type="button">Save PIN</button>
           ${k.pin_set ? '<button class="btn btn-ghost" id="set-kids-pin-clear" type="button">Clear PIN</button>' : ''}
           <span class="set-note" id="set-kids-msg"></span>
@@ -3011,7 +3021,7 @@ async function renderSettings() {
         <p class="set-note">Commas. "no" and "non" are ignored, so "non pop" means pop. Matched against genre, family, artist, album and title.</p>
         <label class="set-check"><input type="checkbox" id="set-taste-children"${s.taste_include_children ? ' checked' : ''}> Let children's music shape recommendations</label>
         <p class="set-note">Off: children's plays stay in your history but do not move your top genres, tempo, key, picks or rotation.</p>
-        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg></span></div>
+        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg role="status" aria-live="polite"></span></div>
       </section>
       <section class="set-card" data-tone="mute">
         <h2>Maintenance</h2>
@@ -3053,7 +3063,7 @@ async function renderSettings() {
         <datalist id="set-llm-models"></datalist>
         <p class="set-note" id="set-llm-models-note" hidden></p>
         <label>API key<input id="set-llm-key" type="password" placeholder="${l.has_key ? 'stored, leave blank to keep' : 'not set'}"></label>
-        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg></span></div>
+        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg role="status" aria-live="polite"></span></div>
       </section>
       <section class="set-card">
         <h2>Downloads</h2>
@@ -3067,7 +3077,7 @@ async function renderSettings() {
         <p class="set-note">Applies to downloads from streaming sources only. "Keep the original" stores what the source serves without re-encoding. m4a and mp3 convert only when the source uses a different codec; when the source already serves AAC, m4a is a container fix with no re-encode. Files you upload are stored byte for byte, and lossless files are never converted.</p>
         <label>Catalogue country<input id="set-storefront" value="${esc(s.storefront_country || '')}" placeholder="" maxlength="2"></label>
         <p class="set-note">Two letters. The catalogue differs by country: a release in Brazil can be missing from the US store. Empty follows the country of the city above. Set it while travelling when you want another storefront; Deezer is queried too, so the answer does not depend on one store.</p>
-        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg></span></div>
+        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg role="status" aria-live="polite"></span></div>
       </section>
       <section class="set-card">
         <h2>Playback</h2>
@@ -3097,10 +3107,10 @@ async function renderSettings() {
           </select>
         </label>
         <p class="set-note">Buffer ahead keeps the next track preloaded. More buffer means no wait between tracks and more data held in memory; off frees the memory on a small device.</p>
-        <div class="lib-actions"><button class="btn btn-ghost" id="set-clearbuf" type="button">Clear buffer</button><span class="set-note">Frees preloaded audio and cached pages</span></div>
-        <div class="lib-actions"><button class="btn btn-ghost" id="set-copylog" type="button">Copy playback log</button><span class="set-note">For a stop in the car: what the phone and the server saw</span></div>
+        <div class="set-row"><button class="btn btn-ghost" id="set-clearbuf" type="button">Clear buffer</button><span class="set-note">Frees preloaded audio and cached pages</span></div>
+        <div class="set-row"><button class="btn btn-ghost" id="set-copylog" type="button">Copy playback log</button><span class="set-note">For a stop in the car: what the phone and the server saw</span></div>
         <p class="set-note" id="set-playlog"></p>
-        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg></span></div>
+        <div class="set-save"><button class="btn btn-ghost" data-save type="button">${tr('Save')}</button><span class="set-note" data-save-msg role="status" aria-live="polite"></span></div>
       </section>
       <section class="set-card">
         <h2>Library</h2>
@@ -3112,7 +3122,7 @@ async function renderSettings() {
         <p class="set-note">Point at a folder you already have. The files stay where they are: nothing is copied, moved or renamed. Playlists written by Traktor, rekordbox, M3U or PLS are imported with their order, and the BPM and key they already carry are kept.</p>
         <label>Music folder<select id="set-folder-select"><option value="">Choose a folder…</option></select></label>
         <label id="set-folder-path-row" hidden>Folder or playlist file<input id="set-folder" placeholder="/path/to/music"></label>
-        <div class="lib-actions">
+        <div class="set-row">
           <button class="btn btn-ghost" id="set-folder-pick" type="button" hidden>Choose folder</button>
           <button class="btn btn-primary" id="set-folder-scan" type="button">Scan folder</button>
           <span class="set-note" id="set-folder-out">Not scanned yet.</span>
@@ -3120,19 +3130,28 @@ async function renderSettings() {
         <p class="set-note">A track removed from the library later leaves its file on disk. Nothing here writes to your files.</p>
         <p class="set-note">A scan adds to the library. It does not forget the folders you scanned before.</p>
       </section>
-      ${window.musicfyDesktop && window.musicfyDesktop.connect ? `<section class="set-card" data-tone="acc" id="set-app">
+      <section class="set-card set-wide" id="set-device" hidden>
+        <h2>Connect a device</h2>
+        <p class="set-note">Open one of these on a phone or another computer on the same network. The library and the audio stay on this server; the device is a window to it.</p>
+        <div class="set-facts" id="set-device-urls"></div>
+        <div class="set-row">
+          <button class="btn btn-ghost" id="set-device-copy" type="button">Copy address</button>
+          <span class="set-note" id="set-device-msg" role="status" aria-live="polite"></span>
+        </div>
+      </section>
+      ${window.musicfyDesktop && window.musicfyDesktop.connect ? `<section class="set-card set-wide" data-tone="acc" id="set-app">
         <h2>This app</h2>
         <p class="set-note">Point this Mac at another MUSICFY instead of its own library. The window becomes that server's app: its playlists, plays and likes, with audio streamed from it. The local library stays where it is.</p>
         <label>Library address<input id="set-app-url" placeholder="http://plm.local:8710" autocomplete="off" spellcheck="false"></label>
-        <div class="lib-actions">
+        <div class="set-row">
           <button class="btn btn-ghost" id="set-app-connect" type="button">Connect</button>
           <span class="set-note" id="set-app-msg"></span>
         </div>
       </section>` : ''}
-      <section class="set-card" data-tone="mute">
+      <section class="set-card set-danger" data-tone="bad">
         <h2>Reset</h2>
         <p class="set-note">Clears settings and the library index: tracks, files, playlists, plays, likes, jobs and covers. Audio on disk is kept, and so is the login.</p>
-        <div class="lib-actions">
+        <div class="set-row">
           <button class="btn btn-ghost" id="set-reset" type="button">Factory reset</button>
           <span class="set-note" id="set-reset-msg"></span>
         </div>
@@ -3144,9 +3163,9 @@ async function renderSettings() {
         <span id="set-update-msg" class="set-note">Checking for updates...</span>
       </div>
       <div class="set-about-actions">
-        <button class="btn btn-ghost" id="set-check-update" type="button">Check for updates</button>
-        <button class="btn btn-ghost" id="set-update" type="button" hidden>Update now</button>
-        <button class="btn btn-ghost" id="set-restart" type="button" hidden>Restart now</button>
+        <button class="set-about-link" id="set-check-update" type="button">Check for updates</button>
+        <button class="set-about-link" id="set-update" type="button" hidden>Update now</button>
+        <button class="set-about-link" id="set-restart" type="button" hidden>Restart now</button>
       </div>
     </div>
     <p class="set-credit">Developed by Roger Lima · WNL</p>
@@ -3204,6 +3223,28 @@ async function renderSettings() {
   if (avoidInput) { avoidInput.addEventListener('input', paintAvoid); paintAvoid(); }
 
   // kids PIN: a speed bump, so it is deliberately easy to set and to clear
+  const devCard = document.getElementById('set-device');
+  if (devCard) {
+    const devMsg = document.getElementById('set-device-msg');
+    const copyAddr = async (url) => {
+      try {
+        await navigator.clipboard.writeText(url);
+        if (devMsg) { devMsg.dataset.tone = 'ok'; devMsg.textContent = tr('Copied'); }
+      } catch {
+        if (devMsg) { devMsg.dataset.tone = 'bad'; devMsg.textContent = url; }
+      }
+      setTimeout(() => { if (devMsg) { devMsg.textContent = ''; devMsg.dataset.tone = ''; } }, 2200);
+    };
+    api('/api/connect', { nocache: true }).then((c) => {
+      if (!c || !c.local || !(c.urls || []).length) { devCard.remove(); return; }
+      devCard.hidden = false;
+      const host = document.getElementById('set-device-urls');
+      host.innerHTML = c.urls.map((u) => `<button class="alink" type="button" data-url="${esc(u)}">${esc(u)}</button>`).join('');
+      host.querySelectorAll('[data-url]').forEach((b) => { b.onclick = () => copyAddr(b.dataset.url); });
+      const copyBtn = document.getElementById('set-device-copy');
+      if (copyBtn) copyBtn.onclick = () => copyAddr(c.urls[0]);
+    }).catch(() => devCard.remove());
+  }
   const appConnect = document.getElementById('set-app-connect');
   if (appConnect && window.musicfyDesktop && window.musicfyDesktop.connect) {
     appConnect.onclick = async () => {
@@ -3511,14 +3552,55 @@ async function renderSettings() {
     taste_genres: 'genres', taste_artists: 'artists', taste_context: 'listening context',
     taste_avoid: 'pick exclusions', taste_include_children: 'children in taste',
   };
+  // which setting each field edits, so a card reports only its own changes
+  const FIELD_KEY = {
+    'set-name': 'display_name', 'set-tz': 'timezone', 'set-city': 'city',
+    'set-llm-url': 'llm_base_url', 'set-llm-model': 'llm_model', 'set-llm-key': 'llm_api_key',
+    'set-format': 'preferred_format', 'set-storefront': 'storefront_country',
+    'set-keyfmt': 'key_format', 'set-normalize': 'normalize_loudness',
+    'set-target': 'target_loudness', 'set-autoplay': 'autoplay_next', 'set-buffer': 'prefetch_ahead',
+    'set-taste-genres': 'taste_genres', 'set-taste-artists': 'taste_artists',
+    'set-taste-context': 'taste_context', 'set-taste-avoid': 'taste_avoid',
+    'set-taste-children': 'taste_include_children',
+  };
+  const cardKeys = (card) => [...card.querySelectorAll('input, select, textarea')]
+    .map((el) => FIELD_KEY[el.id]).filter(Boolean);
+  const setSaveState = (card, state, label) => {
+    const btn = card.querySelector('[data-save]');
+    if (!btn) return;
+    btn.classList.toggle('saving', state === 'saving');
+    btn.classList.toggle('saved', state === 'saved');
+    btn.classList.toggle('dirty', state === 'dirty');
+    btn.disabled = state === 'clean' || state === 'saving';
+    if (label) btn.textContent = label;
+  };
+  v.querySelectorAll('.set-card').forEach((card) => {
+    const btn = card.querySelector('[data-save]');
+    if (!btn) return;
+    setSaveState(card, 'clean', tr('Save'));
+    card.querySelectorAll('input, select, textarea').forEach((el) => {
+      const mark = () => { card.dataset.dirty = '1'; setSaveState(card, 'dirty', tr('Save changes')); };
+      el.addEventListener('input', mark);
+      el.addEventListener('change', mark);
+    });
+  });
+
   const saveSettings = async (btn) => {
+    const card = btn ? btn.closest('.set-card') : null;
+    const keys = card ? cardKeys(card) : [];
     const body = readForm();
-    const changed = Object.keys(body).filter((k) => !same(body[k], baseline[k]));
-    const row = btn ? btn.closest('.set-save') : null;
-    const msg = row ? row.querySelector('[data-save-msg]') : null;
-    if (btn) btn.disabled = true;
+    const changed = keys.filter((k) => !same(body[k], baseline[k]));
+    if (!changed.length) {
+      if (card) setSaveState(card, 'clean', tr('Save'));
+      return;
+    }
+    const msg = card ? card.querySelector('[data-save-msg]') : null;
+    // post only this card's fields: a name change must not re-geocode the city
+    const patch = {};
+    for (const k of changed) patch[k] = body[k];
+    if (card) { card.dataset.dirty = ''; setSaveState(card, 'saving', tr('Saving…')); }
     try {
-      const r = await api('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      const r = await api('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) });
       const saved = r.settings || {};
       // the server may have resolved the city into coordinates and a time zone
       if (saved.timezone) document.getElementById('set-tz').value = saved.timezone;
@@ -3533,16 +3615,18 @@ async function renderSettings() {
       if (msg) {
         const labelOf = (k) => tr(LABELS[k] || k);
         if (notFound) msg.textContent = tr('Saved, but that city was not found');
-        else if (!changed.length) msg.textContent = tr('Nothing changed');
         else if (changed.length === 1) msg.textContent = `${tr('Saved')} · ${labelOf(changed[0])}`;
         else if (changed.length <= 3) msg.textContent = `${tr('Saved')} · ${changed.map(labelOf).join(', ')}`;
         else msg.textContent = `${tr('Saved')} · ${changed.length} ${tr('settings')}`;
-        msg.dataset.tone = changed.length || notFound ? 'ok' : '';
+        msg.dataset.tone = 'ok';
       }
-      if (btn) {
-        const label = btn.textContent;
-        btn.textContent = tr('Saved');
-        setTimeout(() => { btn.textContent = label; }, 1800);
+      if (card) {
+        setSaveState(card, 'saved', tr('Saved'));
+        setTimeout(() => {
+          if (!card.isConnected) return;
+          setSaveState(card, card.dataset.dirty ? 'dirty' : 'clean', card.dataset.dirty ? tr('Save changes') : tr('Save'));
+          if (!card.dataset.dirty && msg) { msg.textContent = ''; msg.dataset.tone = ''; }
+        }, 1600);
       }
       baseline = { ...baseline, ...body };
       if (['llm_base_url', 'llm_model', 'llm_api_key'].some((k) => changed.includes(k))) {
@@ -3556,8 +3640,7 @@ async function renderSettings() {
       if (body.display_name) state.profileName = body.display_name;
     } catch {
       if (msg) { msg.textContent = tr('Could not save'); msg.dataset.tone = 'bad'; }
-    } finally {
-      if (btn) btn.disabled = false;
+      if (card) { card.dataset.dirty = '1'; setSaveState(card, 'dirty', tr('Save changes')); }
     }
   };
   v.querySelectorAll('[data-save]').forEach((b) => { b.onclick = () => saveSettings(b); });

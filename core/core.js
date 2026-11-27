@@ -5215,6 +5215,23 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
 
+    // ---------- connect a device ----------
+    // what a phone on this network can type. A remote caller gets local:false and the
+    // client hides the card, because these addresses are useless on another network.
+    if (u.pathname === '/api/connect' && req.method === 'GET') {
+      const urls = [];
+      const seen = new Set();
+      const push = (v) => { if (v && !seen.has(v)) { seen.add(v); urls.push(v); } };
+      for (const list of Object.values(os.networkInterfaces())) {
+        for (const i of list || []) {
+          if (i.family === 'IPv4' && !i.internal) push(`http://${i.address}:${PORT}`);
+        }
+      }
+      const host = os.hostname().replace(/\.local$/i, '');
+      if (host) push(`http://${host}.local:${PORT}`);
+      return json(res, 200, { local: localRequest(req), urls, port: PORT });
+    }
+
     // ---------- kids mode ----------
     // The catalog is the playlists marked kids. A track can be in both worlds; the play
     // context decides where the listen is recorded.

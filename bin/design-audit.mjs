@@ -38,6 +38,7 @@ const ROLES = [
   ['menu', '.chip-menu-item'],
   ['tab', '.mode-tab, .view-switch'],
   ['icon', '.icon-btn'],
+  ['field', '.set-card input, .set-card select, .set-card .set-check'],
 ];
 const TEXT = [
   ['section', '.sec-title'],
@@ -46,6 +47,9 @@ const TEXT = [
   ['meta', '.tcard-sub, .pcard-sub'],
   // the mast note is a sentence in the masthead, not a section kicker
   ['kicker', '.prep-kicker, .mast-kicker'],
+  ['sethead', '.set-card h2'],
+  ['setlabel', '.set-card label:not(.set-check)'],
+  ['setnote', '.set-card .set-note'],
 ];
 
 const VIEWS = [

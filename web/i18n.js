@@ -468,6 +468,11 @@
     'Search songs, albums, artists': 'Buscar músicas, álbuns, artistas',
     'Grown-ups': 'Adultos',
     'Open Kids mode': 'Abrir o modo Kids',
+    'Connect a device': 'Conectar um aparelho',
+    'Open one of these on a phone or another computer on the same network. The library and the audio stay on this server; the device is a window to it.':
+      'Abra um destes num celular ou em outro computador na mesma rede. A biblioteca e o áudio ficam neste servidor; o aparelho é uma janela para ele.',
+    'Copy address': 'Copiar endereço',
+    'Copied': 'Copiado',
     'This app': 'Este aplicativo',
     'Point this Mac at another MUSICFY instead of its own library. The window becomes that server\'s app: its playlists, plays and likes, with audio streamed from it. The local library stays where it is.':
       'Aponte este Mac para outro MUSICFY em vez da biblioteca local. A janela vira o app daquele servidor: listas, reproduções e curtidas, com o áudio vindo de lá. A biblioteca local fica onde está.',
@@ -521,6 +526,7 @@
     'Playlists in Kids mode:': 'Listas no modo Kids:',
     'Mark one with “Use in Kids Mode” from its menu, and the Kids entry appears in the sidebar.':
       'Marque uma com “Usar no modo Kids” no menu dela, e a entrada Kids aparece na barra lateral.',
+    'Save changes': 'Salvar mudanças', 'Saving…': 'Salvando…',
     'Save PIN': 'Salvar PIN',
     'Clear PIN': 'Remover PIN',
     'PIN set': 'PIN definido',
