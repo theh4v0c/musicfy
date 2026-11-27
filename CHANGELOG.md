@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.7 — 2026-11-27
+
+- **One empty block, not two.** A stale lazy-fill timer from an earlier render looked the
+  `#discover-home` id up again and appended a second copy into the page that replaced it. The
+  timer now captures its own host and checks it is still in the document, and the render
+  refuses to draw twice.
+- **The mark is the app's own unit.** A dashed empty cover with a broken waveform in accent
+  inside it: artwork and the audio that is missing, in the same stroke language as the rest.
+  The level meter did not read as music.
+- **New copy.** "An empty library, for now." then "MUSICFY plays files you already own. Add a
+  folder with ⌘O, or download one track, and the page has something to say." The browser gets
+  the Settings → Library folder variant.
+- Settings ends with one inconspicuous credit line: `Developed by Roger Lima · WNL`, 10px
+  mono, muted, centred, no border. DESIGN records it as a signature, not a footer bar.
+
 ## 0.3.6 — 2026-11-27
 
 - **The empty Home is a block, not a sentence.** When there is no audio, the gap under the

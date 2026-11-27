@@ -173,6 +173,8 @@ Settings is two columns on a wide screen, at most 1100px wide, with the mode ban
 the top. Cards in one row share the same top and bottom edge; the grid stretches a short
 card to its row instead of letting a masonry column start at a different height. One
 column on a phone. A note directly above a field or checkbox keeps 10px of separation.
+The page ends with one credit line, 10px mono, muted and centred: `Developed by Roger Lima ·
+WNL`. It is a signature, not a footer bar: no border, no links, no second row.
 
 The Library folder card has one primary action, **Scan folder**. The folder itself is a
 select of places this install may scan — the download folder, the configured roots and one
@@ -236,10 +238,10 @@ and the title under it. A rail scrolls sideways; it does not wrap.
 
 An empty page is not a sentence in the gap. `.hollow` is a block: a mark, a one-line title,
 one sentence saying what the content would come from, and where the action lives — `⌘O` in
-the app, Settings → Library folder in a browser. The mark is a level meter at zero (64px,
-rails and ticks in `--fg-soft`, the resting needle in `--acc`): the page has nothing measured
-yet, which is exactly what the rails need. No illustrations of empty boxes, ghosts or sad
-faces.
+the app, Settings → Library folder in a browser. The mark is an empty cover (a dashed square,
+the app's own unit) with a broken waveform in accent inside it (the thing that is missing),
+drawn in the same stroke language as the rest. No illustrations of empty boxes, ghosts, notes
+or sad faces.
 
 The page name lives in the top bar, once. Library and Search start with their toolbar: the
 first track row is the content. Playlists, Settings and A&R start with an inline `.page-sub`

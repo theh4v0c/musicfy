@@ -1359,10 +1359,13 @@ async function renderHome() {
     }
   };
   paintKnown();
+  // capture the host: a stale timer from an earlier render used to look the id up again
+  // and append a second empty block into the page that replaced it
+  const discoverHost = document.getElementById('discover-home');
   const fillRest = () => {
-    if (lazy.dataset.filled) return;
+    if (!lazy.isConnected || lazy.dataset.filled) return;
     lazy.dataset.filled = '1';
-    renderDiscoverInto($('discover-home'));
+    renderDiscoverInto(discoverHost);
   };
   // playback wins the network: the rails wait for a scroll, or for six quiet seconds.
   // On a phone in a car the press of play happens first, and it must not queue behind
@@ -1376,7 +1379,8 @@ async function renderHome() {
 
 // discovery rails: newest, more-from-artists-you-play, and unfiled tracks
 async function renderDiscoverInto(host) {
-  if (!host) return;
+  if (!host || host.dataset.drawn === '1') return;
+  host.dataset.drawn = '1';
   try {
     const d = await api('/api/discover', { nocache: true });
     if (!document.body.contains(host)) return;
@@ -1401,22 +1405,20 @@ async function renderDiscoverInto(host) {
     }
     if (!host.querySelector('.tcard')) {
       // An empty page used to be one grey sentence in the gap under the mast. It is a
-      // block that says what is missing (audio on this disk), what fills it (a folder or a
-      // download) and where the action lives. The mark is a level meter at zero: the page
-      // has nothing measured yet, and that is exactly what the rails need.
+      // block that says what is missing, what fills it and where the action lives. The mark
+      // is an empty cover with a broken waveform in it: the app's own unit (artwork) and the
+      // thing that is absent (audio), drawn in the same stroke language as the rest.
       const e = document.createElement('div');
       e.className = 'hollow';
       e.innerHTML = `<svg class="hollow-mark" viewBox="0 0 64 56" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4">
-          <path d="M20 7v35M44 7v35" opacity=".55"/>
-          <path d="M24 14h16M24 21h16M24 28h16M24 35h16" opacity=".3"/>
-          <path d="M13 42h38" opacity=".65"/>
-          <circle cx="32" cy="42" r="3.6" fill="var(--acc)" stroke="none"/>
+          <rect x="12" y="6" width="40" height="40" rx="7" stroke-dasharray="3 3" opacity=".6"/>
+          <path d="M21 26h9M34 26h9" stroke="var(--acc)" stroke-width="2" stroke-linecap="round"/>
         </svg>
         <div>
-          <b>${tr('Nothing to play yet.')}</b>
+          <b>${tr('An empty library, for now.')}</b>
           <p>${window.musicfyDesktop
-            ? tr('The sections below come from files on this disk, not from a catalogue. Add a folder with ⌘O, or download a track, and they fill in.')
-            : tr('The sections below come from files on this disk, not from a catalogue. Add a folder in Settings → Library folder, or download a track, and they fill in.')}</p>
+            ? tr('MUSICFY plays files you already own. Add a folder with ⌘O, or download one track, and the page has something to say.')
+            : tr('MUSICFY plays files you already own. Add a folder in Settings → Library folder, or download one track, and the page has something to say.')}</p>
         </div>`;
       host.appendChild(e);
     }
@@ -2986,6 +2988,7 @@ async function renderSettings() {
       <button class="btn btn-ghost" id="set-update" type="button" hidden>Update now</button>
       <button class="btn btn-ghost" id="set-restart" type="button" hidden>Restart now</button>
     </div>
+    <p class="set-credit">Developed by Roger Lima · WNL</p>
     </div>`;
   // what the player did last, including while the screen was locked
   try {
