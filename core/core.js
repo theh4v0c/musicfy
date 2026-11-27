@@ -953,9 +953,10 @@ function folderChoices(local) {
   for (const root of roots) add(root);
   const music = path.join(os.homedir(), 'Music');
   if (local) add(music);
-  // one level under each place above: "Music/Albums" is the usual case, a full recursive
-  // tree is not, and it would be a filesystem listing rather than a picker
-  for (const base of [OWNED, ...roots, ...(local ? [music] : [])]) {
+  // one level under each *root*: "Music/Albums" is the usual case. The download folder is
+  // offered whole and not expanded — inside it MUSICFY writes track-*, youtube-* and
+  // playlist-* working directories, which are not collections to scan.
+  for (const base of [...roots, ...(local ? [music] : [])]) {
     let entries = [];
     try { entries = fs.readdirSync(base, { withFileTypes: true }); } catch { continue; }
     let n = 0;
