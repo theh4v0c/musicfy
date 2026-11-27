@@ -5019,29 +5019,67 @@ async function renderArtist(name, push = true) {
   const gaA = $('g-albums');
   if (gaA) gaA.textContent = albums.length ? `· ${albums.length} album${albums.length === 1 ? '' : 's'}` : '';
   if (!list.length) { elA.innerHTML = `<div class="empty">No owned tracks for this artist yet. Search the web and download some.</div>`; return; }
+  // An artist has no artwork of its own in this library, and the old page spent 192px on
+  // an empty square with an initial. Its albums do have art (real, or the generated tile
+  // the album page already serves), so the hero becomes a mosaic of them and the album list
+  // becomes the same cards the Library uses.
+  const covers = albums.slice(0, 4);
+  if (covers.length) {
+    const art = v.querySelector('.plhead-art.ph');
+    if (art) {
+      art.classList.remove('ph');
+      art.classList.add('artist-mosaic');
+      art.dataset.count = String(Math.min(covers.length, 4));
+      art.innerHTML = covers
+        .map((al) => `<img src="/api/cover-album/${encodeURIComponent(al)}?v=${state.artV || 0}" alt="" loading="eager">`)
+        .join('');
+    }
+  }
   if (albums.length) {
-    const chips = document.createElement('div');
-    chips.className = 'artist-albums';
-    const addChip = (al) => {
-      const chip = document.createElement('button');
-      chip.className = 'album-chip';
-      const n = list.filter((t) => t.album === al).length;
-      chip.innerHTML = `<b>${esc(al)}</b><span>${n} track${n === 1 ? '' : 's'}</span>`;
-      chip.onclick = () => renderAlbum(al);
-      chips.appendChild(chip);
+    const head = document.createElement('div');
+    head.className = 'sec-title';
+    head.innerHTML = `${tr('Albums')} <small>${albums.length}</small>`;
+    const grid = document.createElement('div');
+    grid.className = 'pgrid artist-albums';
+    const addCard = (al) => {
+      const onAlbum = list.filter((t) => t.album === al);
+      const year = (onAlbum.find((t) => t.year) || {}).year || '';
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'pcard';
+      card.title = al;
+      const img = document.createElement('img');
+      img.className = 'pcard-art';
+      img.loading = 'lazy';
+      img.alt = '';
+      img.src = `/api/cover-album/${encodeURIComponent(al)}?v=${state.artV || 0}`;
+      img.onerror = () => {
+        const ph = document.createElement('div');
+        ph.className = 'pcard-art ph';
+        ph.textContent = al.charAt(0).toUpperCase();
+        img.replaceWith(ph);
+      };
+      const title = document.createElement('div');
+      title.className = 'pcard-name';
+      title.textContent = al;
+      const sub = document.createElement('div');
+      sub.className = 'pcard-sub';
+      sub.textContent = [year, `${onAlbum.length} ${tr(onAlbum.length === 1 ? 'track' : 'tracks')}`]
+        .filter(Boolean).join(' · ');
+      card.append(img, title, sub);
+      card.onclick = () => renderAlbum(al);
+      grid.appendChild(card);
     };
-    albums.slice(0, 12).forEach(addChip);
+    albums.slice(0, 12).forEach(addCard);
+    v.insertBefore(head, elA);
+    v.insertBefore(grid, elA);
     if (albums.length > 12) {
       const more = document.createElement('button');
-      more.className = 'album-chip more';
-      more.innerHTML = `<b>Show all ${albums.length} albums</b><span>+${albums.length - 12}</span>`;
-      more.onclick = () => {
-        chips.innerHTML = '';
-        albums.forEach(addChip);
-      };
-      chips.appendChild(more);
+      more.className = 'btn btn-ghost show-all';
+      more.textContent = tr(`Show all ${albums.length}`);
+      more.onclick = () => { grid.innerHTML = ''; albums.forEach(addCard); more.remove(); };
+      v.insertBefore(more, elA);
     }
-    v.insertBefore(chips, elA);
   }
   list.forEach((t, i) => { registerRow(t); elA.appendChild(trow(t, i, list)); });
   const gpA = $('g-play'); if (gpA) gpA.onclick = () => playList(list, 0, false, name);

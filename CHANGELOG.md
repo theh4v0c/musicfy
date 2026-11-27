@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.2 — 2026-11-27
+
+- **Artist pages have artwork.** The 192px square with an initial is now a mosaic of up to
+  four of the artist's album covers: one full tile, two side by side, three with a tall left
+  tile, four in a 2×2.
+- **Albums are cards, not text rows.** Each album shows its cover, the name on two lines,
+  and `year · N tracks`; the grid is the same `.pcard` the Library uses. The old chips
+  repeated the album names next to the empty square.
+- The phone hero keeps a 148px square. It used to stretch to the column, which a mosaic made
+  obvious; an album cover on a phone no longer stretches either.
+- The colour is the albums' own: a real cover, or the letter tile the album endpoint already
+  generates. No hue is invented for the artist.
+- DESIGN records the artist hero and the album cards.
+
 ## 0.3.1 — 2026-11-27
 
 - The library folder is a **select**, not a path to type: the download folder, the

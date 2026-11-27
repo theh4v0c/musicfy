@@ -223,6 +223,14 @@ No generated rainbow: a track without artwork gets a neutral surface (`--bg-elev
 Menu rows use `.chip-menu-item` (30px, one label, no inline hint) so the Tools popover cannot
 reflow a row.
 
+An artist page has no artwork of its own. Its hero is a mosaic of up to four of the
+artist's album covers (one full, two side by side, three with a tall left tile, four in a
+2×2) and its albums are `.pcard` cards with the name on two lines and `year · N tracks`
+under it, not a list of text rows. The colour is the albums': a real cover, or the letter
+tile the album endpoint already generates for an album without one. The hero never invents
+a hue of its own. On a phone the hero keeps its 148px square instead of stretching to the
+column.
+
 Navigation follows the device and the mode. The phone bottom bar is Home, Search, A&R,
 Library, Playlists and Settings; Prep is desktop-only in the **Studio** group with A&R, and is
 reachable on a phone from the Home mast (DJ mode) or the command palette.

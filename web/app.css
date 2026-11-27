@@ -743,15 +743,18 @@ main.main { transition: margin-right .18s ease; }
   .cat-art { width: 112px; height: 112px; font-size: 28px; }
   .cat-card b, .cat-card span { max-width: 112px; }
 }
-.artist-albums { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 4px 0 20px; }
-.album-chip { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; padding: 10px 13px;
-  border: 1px solid var(--line); border-radius: var(--r-md); background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,0));
-  color: var(--fg); font-family: inherit; text-align: left; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
-.album-chip:hover { border-color: rgba(255,92,57,.4); background: rgba(255,92,57,.06); }
-.album-chip b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 600; }
-.album-chip span { flex: none; font-size: 10.5px; color: var(--fg-mute); white-space: nowrap; }
-.album-chip.more { color: var(--fg-soft); border-style: dashed; }
-.album-chip.more b { font-weight: 600; }@media (max-width: 700px){ .artist-albums { grid-template-columns: 1fr; } }
+/* artist page: the albums are cards and the hero is their art. The old chips repeated the
+   album names as text next to a 192px empty square. */
+.artist-albums { margin: 0 0 24px; }
+.artist-albums .pcard { text-align: left; }
+.artist-albums .pcard-name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-height: 2.4em; line-height: 1.2; }
+.plhead-art.artist-mosaic { display: grid; gap: 2px; padding: 0; overflow: hidden; background: var(--bg-elev2); }
+.plhead-art.artist-mosaic[data-count="1"] { grid-template-columns: 1fr; }
+.plhead-art.artist-mosaic[data-count="2"] { grid-template-columns: repeat(2, 1fr); }
+.plhead-art.artist-mosaic[data-count="3"] { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); }
+.plhead-art.artist-mosaic[data-count="3"] img:first-child { grid-row: span 2; }
+.plhead-art.artist-mosaic[data-count="4"] { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); }
+.plhead-art.artist-mosaic img { width: 100%; height: 100%; min-height: 0; object-fit: cover; display: block; }
 
 .dl-lib { color: var(--fg); font-weight: 600; }
 .dl-libbar { height: 4px; margin: 0 12px 10px; background: var(--line); border-radius: var(--r-bar); overflow: hidden; }
@@ -1113,7 +1116,7 @@ main.main { transition: margin-right .18s ease; }
   .bottomnav { display: flex; }
   .mini:not([hidden]) { display: flex; }
   .plhead { flex-direction: column; align-items: stretch; gap: 18px; }
-  .plhead > div { width: 100%; min-width: 0; }
+  .plhead > :not(.plhead-art) { width: 100%; min-width: 0; }
   .plhead-name { overflow-wrap: anywhere; }
   .plhead-actions { gap: 8px; }
   .plhead-actions .btn { padding: 0 var(--pad-action); }
