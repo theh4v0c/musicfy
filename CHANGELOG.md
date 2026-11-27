@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.8.5 — 2026-11-27
+
+- **Client mode opens a window instead of deciding whether it can.** The window was created
+  only after a health check passed. Resolving a `.local` name on macOS takes about five
+  seconds (unicast DNS first, then mDNS), so the check timed out on a server that was
+  perfectly reachable and the app showed nothing. The window now opens and loads; only a
+  failed main-frame load raises the "could not reach that library" dialog.
+- **A name with several addresses is asked at once.** `plm.local` answers with the Pi's LAN
+  address and its docker bridges (172.17-172.22), and macOS returns them in a different order
+  per query; dialling the first one was a coin toss. The connect check probes every address
+  it resolves to and takes the first that answers.
+- The "Try again" button closes the failed window before reopening, instead of stacking one.
+
+## 0.8.4 — 2026-11-27
+
+- **Client mode starts.** `boot()` was called at module load, before `let base` was
+  initialised. With a remote library configured, its first line writes `base`, which threw
+  `Cannot access 'base' before initialization`: no window was ever created, and the process
+  stayed alive with nothing on screen. It now runs on `app.whenReady()`, which also
+  guarantees a window can be created, and a boot failure shows the error and quits instead
+  of leaving a headless process.
+
 ## 0.8.3 — 2026-11-27
 
 - **The automatic genre tagger moves forward.** It asked MusicBrainz about the same first 25

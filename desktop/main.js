@@ -16,6 +16,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const https = require('node:https');
 const net = require('node:net');
+const dns = require('node:dns');
 const path = require('node:path');
 const os = require('node:os');
 
@@ -45,7 +46,15 @@ if (!app.isPackaged && process.env.MUSICFY_DEVTOOLS_PORT) {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  boot();
+  // boot() writes `base` when a remote library is configured, and `let base` is declared
+  // below: at this point it is still in its dead zone, so client mode threw
+  // "Cannot access 'base' before initialization" and the app started with no window at all.
+  // whenReady also guarantees a window can be created, and a failure is reported instead of
+  // leaving a process that has no window and never quits.
+  app.whenReady().then(boot).catch((e) => {
+    try { dialog.showErrorBox('MUSICFY', String((e && e.message) || e)); } catch { /* no ui */ }
+    app.quit();
+  });
 }
 
 let win = null;
@@ -81,7 +90,7 @@ function remoteUrl() {
 // the port a MUSICFY server listens on; this app's own engine takes 8790 and up
 const SERVER_PORT = 8710;
 
-function probe(url, ms = 4000) {
+function probeOnce(url, ms = 4000) {
   return new Promise((resolve) => {
     let mod = http;
     try { mod = new URL(url).protocol === 'https:' ? https : http; } catch { return resolve(false); }
@@ -92,6 +101,32 @@ function probe(url, ms = 4000) {
     req.on('timeout', () => { req.destroy(); resolve(false); });
     req.on('error', () => resolve(false));
   });
+}
+
+// A mDNS name carries every address the server has, including its docker bridges
+// (172.17-172.22), which only exist inside it. macOS returns that list in a different order
+// per query, so dialling the first answer is a coin toss that reads as "unreachable". Ask
+// them at once and take the first that answers. Only for http: a certificate belongs to the
+// name, not to an address.
+function probe(url, ms = 4000) {
+  let u; try { u = new URL(url); } catch { return Promise.resolve(false); }
+  if (u.protocol !== 'http:' || net.isIP(u.hostname)) return probeOnce(url, ms);
+  return dns.promises.lookup(u.hostname, { all: true }).then((list) => {
+    if (!list || list.length < 2) return probeOnce(url, ms);
+    return new Promise((resolve) => {
+      let left = list.length;
+      for (const a of list) {
+        const alt = new URL(u.toString());
+        alt.hostname = a.address;
+        const settle = (ok) => {
+          if (ok) { resolve(true); return; }
+          left -= 1;
+          if (left === 0) resolve(false);
+        };
+        probeOnce(alt.toString().replace(/\/+$/, ''), ms).then(settle, () => settle(false));
+      }
+    });
+  }, () => probeOnce(url, ms));
 }
 async function waitRemote(url, ms = 10000) {
   const until = Date.now() + ms;
@@ -305,7 +340,10 @@ function remoteFailed(url) {
     defaultId: 0,
     cancelId: 3,
   }).then(({ response }) => {
-    if (response === 0) boot();
+    if (response === 0) {
+      if (win) { try { win.destroy(); } catch { /* gone */ } win = null; }
+      boot();
+    }
     else if (response === 1) { saveConfig({ remoteUrl: '' }); setTimeout(() => { switchMode('').catch(() => {}); }, 150); }
     else if (response === 2) shell.openExternal(url);
     else app.quit();
@@ -463,8 +501,15 @@ async function boot() {
   const remote = remoteUrl();
   if (remote) {
     base = remote;
-    if (!(await waitRemote(base))) return remoteFailed(base);
+    // Do not gate the window on a health check. Resolving a .local name can take seconds on
+    // macOS (it asks unicast DNS before mDNS), and a probe that was merely slow read as
+    // "unreachable": the app then showed nothing at all. Open the window, and treat only a
+    // failed main-frame load as the error.
     createWindow(false);
+    win.webContents.once('did-fail-load', (_e, _code, _desc, _url, isMainFrame) => {
+      if (!isMainFrame) return;
+      remoteFailed(remote);
+    });
     buildMenu();
     app.setAboutPanelOptions({
       applicationName: 'MUSICFY',
