@@ -1400,9 +1400,24 @@ async function renderDiscoverInto(host) {
       host.appendChild(row);
     }
     if (!host.querySelector('.tcard')) {
+      // An empty page used to be one grey sentence in the gap under the mast. It is a
+      // block that says what is missing (audio on this disk), what fills it (a folder or a
+      // download) and where the action lives. The mark is a level meter at zero: the page
+      // has nothing measured yet, and that is exactly what the rails need.
       const e = document.createElement('div');
-      e.className = 'empty';
-      e.textContent = 'Nothing to surface yet. Add tracks or play a few, and this fills in.';
+      e.className = 'hollow';
+      e.innerHTML = `<svg class="hollow-mark" viewBox="0 0 64 56" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4">
+          <path d="M20 7v35M44 7v35" opacity=".55"/>
+          <path d="M24 14h16M24 21h16M24 28h16M24 35h16" opacity=".3"/>
+          <path d="M13 42h38" opacity=".65"/>
+          <circle cx="32" cy="42" r="3.6" fill="var(--acc)" stroke="none"/>
+        </svg>
+        <div>
+          <b>${tr('Nothing to play yet.')}</b>
+          <p>${window.musicfyDesktop
+            ? tr('The sections below come from files on this disk, not from a catalogue. Add a folder with ⌘O, or download a track, and they fill in.')
+            : tr('The sections below come from files on this disk, not from a catalogue. Add a folder in Settings → Library folder, or download a track, and they fill in.')}</p>
+        </div>`;
       host.appendChild(e);
     }
   } catch {}

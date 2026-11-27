@@ -451,6 +451,11 @@
     'Everything you just told it lives on this computer, in a folder you could delete if you changed your mind. There is no account to cancel.':
       'Tudo o que você acabou de dizer fica neste computador, numa pasta que você poderia apagar se mudasse de ideia. Não existe conta para cancelar.',
     'Repeatable: Settings → You → Run setup again.': 'Dá para repetir: Ajustes → Você → Refazer a configuração.',
+    'Nothing to play yet.': 'Nada para tocar ainda.',
+    'The sections below come from files on this disk, not from a catalogue. Add a folder with ⌘O, or download a track, and they fill in.':
+      'As seções abaixo vêm de arquivos neste disco, não de um catálogo. Adicione uma pasta com ⌘O, ou baixe uma faixa, e elas se preenchem.',
+    'The sections below come from files on this disk, not from a catalogue. Add a folder in Settings → Library folder, or download a track, and they fill in.':
+      'As seções abaixo vêm de arquivos neste disco, não de um catálogo. Adicione uma pasta em Ajustes → Pasta de músicas, ou baixe uma faixa, e elas se preenchem.',
     'Load models': 'Carregar modelos',
     'Loading…': 'Carregando…',
     'Models listed. Pick one from the field, or keep typing.':

@@ -234,6 +234,13 @@ an exception names the exception: the city is geocoded once, and the copy says e
 Cards are 150px wide in a rail on desktop, 128px on a phone, with the artwork square
 and the title under it. A rail scrolls sideways; it does not wrap.
 
+An empty page is not a sentence in the gap. `.hollow` is a block: a mark, a one-line title,
+one sentence saying what the content would come from, and where the action lives — `⌘O` in
+the app, Settings → Library folder in a browser. The mark is a level meter at zero (64px,
+rails and ticks in `--fg-soft`, the resting needle in `--acc`): the page has nothing measured
+yet, which is exactly what the rails need. No illustrations of empty boxes, ghosts or sad
+faces.
+
 The page name lives in the top bar, once. Library and Search start with their toolbar: the
 first track row is the content. Playlists, Settings and A&R start with an inline `.page-sub`
 line, not a hero card. Prep is the only page with a real hero: its card carries the title and

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.6 — 2026-11-27
+
+- **The empty Home is a block, not a sentence.** When there is no audio, the gap under the
+  mast now holds a `.hollow` card: a level meter at zero (two rails, ticks, the needle
+  resting at the bottom in accent), "Nothing to play yet.", and one sentence that says where
+  the sections come from and where the action is.
+- The action is named for the place it lives: **⌘O** in the app, **Settings → Library folder**
+  in a browser. No new button, no duplicated scan path.
+- The old line, "Nothing to surface yet. Add tracks or play a few, and this fills in.", is
+  gone. On a phone the card stacks the mark above the copy.
+- `DESIGN.md` records the empty-state contract and bans empty-box/ghost/sad-face art.
+
 ## 0.3.5 — 2026-11-27
 
 - **The first-run copy was rewritten.** Deadpan instead of pleasant: "Your music. Not a
